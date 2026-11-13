@@ -36,7 +36,7 @@ export default function NewAdministrationCollegePage() {
       });
       const json = await res.json() as { collegeId?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create college", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create college", description: json.error });
         return;
       }
       toast({ variant: "success", title: "College created" });

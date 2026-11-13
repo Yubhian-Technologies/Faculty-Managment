@@ -17,7 +17,7 @@ export default function PrincipalBudgetReportPage() {
     fetch("/api/college/budget-requests")
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget requests" }))
       .finally(() => setIsLoading(false));
   }
 

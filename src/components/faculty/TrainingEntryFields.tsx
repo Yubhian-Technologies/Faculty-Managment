@@ -445,7 +445,7 @@ export function TrainingEntryFields({ item: rawItem, update, ownerFacultyId, own
           </Select>
         </div>
         {item.type === "OTHER" && (
-          <TextInput label="Please specify type" value={item.pleaseSpecifyType} onChange={(v) => update({ pleaseSpecifyType: v })} />
+          <TextInput label="Specify type" value={item.pleaseSpecifyType} onChange={(v) => update({ pleaseSpecifyType: v })} />
         )}
         {item.type === "CERTIFICATION" ? (
           <div className="space-y-2">

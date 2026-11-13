@@ -30,7 +30,7 @@ export async function PATCH(
 
     const locationId = scopedLocationId(session, body.locationId);
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -160,10 +160,10 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[location/shifts/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -182,7 +182,7 @@ export async function DELETE(
     const { searchParams } = new URL(request.url);
     const locationId = scopedLocationId(session, searchParams.get("locationId"));
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -214,9 +214,9 @@ export async function DELETE(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[location/shifts/[id] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

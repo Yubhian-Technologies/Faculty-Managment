@@ -46,7 +46,7 @@ export default function PublicationsImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -66,7 +66,7 @@ export default function PublicationsImportPage() {
         return;
       }
       if (!Object.values(keyMap).includes("ownerName")) {
-        setParseError("Couldn't find an \"SVECW-First Author\" column. Check your file's header row against the template.");
+        setParseError("Unable to find an \"SVECW-First Author\" column. Check your file's header row against the template.");
         return;
       }
       // Unlike the Faculty importer, a Scopus-style export routinely carries
@@ -89,7 +89,7 @@ export default function PublicationsImportPage() {
 
       setRows(dataRows);
     } catch {
-      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Unable to parse the file. Ensure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -112,7 +112,7 @@ export default function PublicationsImportPage() {
         toast({ variant: "destructive", title: `Stopped after ${stoppedAt} of ${rows.length} rows`, description: `${json.created} imported. ${error ?? ""} Fix the problem and import again.` });
       }
       if (json.created > 0 && stoppedAt === null) {
-        toast({ variant: "success", title: `${json.created} publication${json.created !== 1 ? "s" : ""} imported successfully` });
+        toast({ variant: "success", title: `${json.created} publication${json.created !== 1 ? "s" : ""} imported` });
         setRows([]);
       }
     } catch {
@@ -180,7 +180,7 @@ export default function PublicationsImportPage() {
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
           {ignoredHeaders.length > 0 && (

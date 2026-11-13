@@ -53,11 +53,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const db = getAdminDb();
 
     const snap = await REQUESTS_COL(session.collegeId, db).doc(id).get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     const req = { id: snap.id, ...snap.data() } as LeaveRequest;
 
     if (!(await canAccessLeaveProfile(db, session.collegeId, session.role, session.uid, req.uid))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
     }
 
     return NextResponse.json({ request: req });
@@ -65,10 +65,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[leave/applications/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -91,19 +91,19 @@ async function assertCanReviewLeaveProof(
     if (session.role === "HOD") {
       const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
       if (!req.department || !hodDepts.includes(req.department)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
     } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
     } else if (isCollegeAdmin(session)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
     }
   } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
     // Approved at the Principal tier - or by Management, which has no
     // reviewer UI for this either (see leaveCertificateNotify.ts's scope note).
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
   } else if (isCollegeAdmin(session)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
   }
   return null;
 }
@@ -159,7 +159,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const db = getAdminDb();
     const ref = REQUESTS_COL(session.collegeId, db).doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     const req = { id: snap.id, ...snap.data() } as LeaveRequest;
 
     const now = new Date();
@@ -173,7 +173,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // at either point.
     if (body.action === "CANCEL") {
       if (req.uid !== session.uid) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
       if (req.isLateAttendancePenalty) {
         return NextResponse.json({ error: "This is an automatic attendance-penalty deduction and cannot be cancelled" }, { status: 400 });
@@ -261,7 +261,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // entries are left exactly as they are.
     if (body.action === "REVISE_ADJUSTMENT") {
       if (req.uid !== session.uid) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
       if (req.status !== "PENDING_ACCEPTANCE") {
         return NextResponse.json({ error: "This request is no longer awaiting acceptance" }, { status: 400 });
@@ -386,7 +386,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // here never needs to release or re-reserve anything.
     if (body.action === "EDIT") {
       if (req.uid !== session.uid) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
       if (!isLeaveRequestEditable(req)) {
         return NextResponse.json({ error: "This request can no longer be edited - an approver has already acted on it" }, { status: 400 });
@@ -618,10 +618,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (session.role === "HOD") {
         const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
         if (!req.department || !hodDepts.includes(req.department)) {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
         }
       } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
       if (!body.periodSubstitutions?.length) {
         return NextResponse.json({ error: "periodSubstitutions is required" }, { status: 400 });
@@ -761,19 +761,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (session.role === "HOD") {
           const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
           if (!req.department || !hodDepts.includes(req.department)) {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
           }
         } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
         } else if (isCollegeAdmin(session)) {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
         }
       } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
         // Approved at the Principal tier - or by Management, in which case it's
         // reviewed from the management route rather than here.
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       } else if (isCollegeAdmin(session)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
 
       const verified = body.action === "VERIFY_OD_PROOF";
@@ -807,17 +807,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (session.role === "HOD") {
           const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
           if (!req.department || !hodDepts.includes(req.department)) {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
           }
         } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
         } else if (isCollegeAdmin(session)) {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
         }
       } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       } else if (isCollegeAdmin(session)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
 
       const requestedByLabel = session.role === "HOD" ? "Your HOD" : (session.email || session.role);
@@ -925,12 +925,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (session.role === "HOD") {
         const hodDepts = await resolveHodDepartments(db, session.collegeId, session.uid);
         if (!req.department || !hodDepts.includes(req.department)) {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
         }
       } else if (session.role !== "PRINCIPAL" && session.role !== "VICE_PRINCIPAL") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       } else if (isCollegeAdmin(session)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
       const decidedByLabel = session.role === "HOD" ? "HOD" : (session.email || session.role);
 
@@ -1167,12 +1167,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (err instanceof LeaveStateConflictError) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }
     console.error("[leave/applications/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -161,14 +161,14 @@ export default function NewHodSupportingStaffPage() {
         return;
       }
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to add staff member", description: json.error });
+        toast({ variant: "destructive", title: "Unable to add staff member", description: json.error });
         return;
       }
 
       toast({ variant: "success", title: "Supporting Staff added", description: `${record.legalName || "The staff member"} has been added.` });
       router.push("/hod/supporting-staff");
     } catch {
-      toast({ variant: "destructive", title: "Network error", description: "Please try again." });
+      toast({ variant: "destructive", title: "Network error", description: "Try again." });
     } finally {
       setSubmitting(false);
     }

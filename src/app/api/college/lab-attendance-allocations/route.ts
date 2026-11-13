@@ -35,10 +35,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ allocations });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/lab-attendance-allocations GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -54,7 +54,7 @@ export async function PUT(request: Request) {
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const assignmentSnap = await collegeRef.collection("teachingAssignments").doc(assignmentId).get();
-    if (!assignmentSnap.exists) return NextResponse.json({ error: "Teaching assignment not found" }, { status: 404 });
+    if (!assignmentSnap.exists) return NextResponse.json({ error: "Teaching assignment not found. It may have been deleted." }, { status: 404 });
     const assignment = assignmentSnap.data() as TeachingAssignment;
     if (assignment.isPast || !assignment.sectionId || !assignment.facultyId) {
       return NextResponse.json({ error: "Only a current, section-wise lab assignment can be allocated" }, { status: 400 });
@@ -82,7 +82,7 @@ export async function PUT(request: Request) {
     } else {
       const ok = assignment.courseId && assignment.year != null
         && await isTimetableIncharge(db, session.collegeId, session.uid, assignment.courseId, assignment.year);
-      if (!ok) return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+      if (!ok) return NextResponse.json({ error: "You are not the Timetable Incharge for this course and year." }, { status: 403 });
     }
 
     const ref = collegeRef.collection(COLLECTION).doc(assignmentId);
@@ -129,9 +129,9 @@ export async function PUT(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/lab-attendance-allocations PUT]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

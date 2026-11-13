@@ -46,7 +46,7 @@ export default function AdministrationVacanciesPage() {
     fetch(url)
       .then((r) => r.json() as Promise<{ vacancyRequests: LocationVacancy[] }>)
       .then((d) => setVacancies(d.vacancyRequests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 

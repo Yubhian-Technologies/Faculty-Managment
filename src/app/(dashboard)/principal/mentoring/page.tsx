@@ -29,7 +29,7 @@ export default function PrincipalMentoringPage() {
     fetch("/api/college/mentoring/overview")
       .then(async (res) => {
         const body = (await res.json().catch(() => ({}))) as { overview?: MentoringOverview; error?: string };
-        if (!res.ok || !body.overview) throw new Error(body.error || "Could not load the summary");
+        if (!res.ok || !body.overview) throw new Error(body.error || "Unable to load the summary");
         if (!cancelled) setData(body.overview);
       })
       .catch((e: Error) => { if (!cancelled) setError(e.message); });

@@ -93,7 +93,7 @@ export default function RndCoordinatorPage() {
     queryFn: async () => {
       const res = await fetch("/api/college/research-review");
       const json = await res.json() as { departments?: string[]; items?: Item[]; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load");
+      if (!res.ok) throw new Error(json.error ?? "Unable to load");
       return { departments: json.departments ?? [], items: json.items ?? [] };
     },
   });

@@ -30,6 +30,6 @@ export function isModuleEmpty(moduleKey: ProfileModuleKey, faculty: unknown, opt
 /** The sentence under an empty tab's heading. With an Edit link it invites the person to enter the details. */
 export function emptyModuleMessage(noun: string, canEdit: boolean): { title: string; hint: string } {
   return canEdit
-    ? { title: `Please enter the ${noun} details here.`, hint: "Nothing has been entered in this section yet." }
+    ? { title: `Enter the ${noun} details here.`, hint: "Nothing has been entered in this section yet." }
     : { title: `No ${noun} details have been entered yet.`, hint: "They will appear here once they are added." };
 }

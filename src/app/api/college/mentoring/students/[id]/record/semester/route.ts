@@ -18,7 +18,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const body = (await readJsonBody(request)) as { semester?: unknown; remarks?: unknown };
     const semester = typeof body.semester === "number" ? body.semester : Number.NaN;
-    if (!Number.isInteger(semester) || semester < 1 || semester > 12) return NextResponse.json({ error: "Pick the semester" }, { status: 400 });
+    if (!Number.isInteger(semester) || semester < 1 || semester > 12) return NextResponse.json({ error: "Select the semester." }, { status: 400 });
     const remarks = typeof body.remarks === "string" ? body.remarks.trim() : "";
     if (remarks.length > SEMESTER_REMARKS_MAX_LENGTH) {
       return NextResponse.json({ error: `Remarks can be at most ${SEMESTER_REMARKS_MAX_LENGTH} characters` }, { status: 400 });

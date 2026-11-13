@@ -44,7 +44,7 @@ export default function HROffersPage() {
     fetch("/api/location/offers")
       .then((r) => r.json() as Promise<{ offers: LocationOffer[] }>)
       .then((d) => setOffers(d.offers ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load offers" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load offers" }))
       .finally(() => setIsLoading(false));
   }
 

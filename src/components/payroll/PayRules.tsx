@@ -49,7 +49,7 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
       await payrollFetch(url, { method: "PUT", body: JSON.stringify({ settings: s, version: saved.saved ? saved.settings.version : 0 }) });
       toast({ variant: "success", title: "Pay rules saved" });
       load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
 

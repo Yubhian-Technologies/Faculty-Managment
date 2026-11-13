@@ -359,7 +359,7 @@ export function DegreeFields({
               <Input
                 value={domain === "OTHERS" ? "" : domain}
                 onChange={(e) => onChange({ ...v, domain: e.target.value || "OTHERS" })}
-                placeholder="Please specify field of study"
+                placeholder="Specify field of study"
               />
             )}
           </div>
@@ -380,7 +380,7 @@ export function DegreeFields({
               <Input
                 value={v.course === OTHER_QUALIFICATION ? "" : v.course}
                 onChange={(e) => onChange({ ...v, course: e.target.value || OTHER_QUALIFICATION })}
-                placeholder="Please specify"
+                placeholder="Specify"
               />
             )}
           </div>
@@ -405,7 +405,7 @@ export function DegreeFields({
               <Input
                 value={v.course === "Other" ? "" : v.course}
                 onChange={(e) => onChange(withCourse(v, e.target.value || "Other"))}
-                placeholder="Please specify"
+                placeholder="Specify"
               />
             )}
           </div>
@@ -485,7 +485,7 @@ export function DegreeFields({
                   <Input
                     value={v.universityTypeOther ?? ""}
                     onChange={(e) => onChange({ ...v, universityTypeOther: e.target.value })}
-                    placeholder="Please specify university type"
+                    placeholder="Specify university type"
                   />
                 )}
               </div>
@@ -539,7 +539,7 @@ export function DegreeFields({
               {!isRealYear(v.yearOfAward) && (
                 <p role="status" className="flex items-start gap-1.5 text-xs font-medium text-amber-800">
                   <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  Status is Awarded, but the Year of Award is empty - please enter it.
+                  Status is Awarded, but the Year of Award is empty - enter it.
                 </p>
               )}
             </div>
@@ -761,7 +761,7 @@ export function QualificationsFields({
                 <Input
                   value={item.level === "Other" ? "" : item.level}
                   onChange={(e) => update({ level: e.target.value || "Other" })}
-                  placeholder="Please specify"
+                  placeholder="Specify"
                 />
               )}
             </div>

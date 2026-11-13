@@ -212,7 +212,7 @@ export default function DepartmentDetailPage() {
       setCatalogItems(catalog);
       setSubjectAssignments(assignmentLists.flat());
     } catch {
-      toast({ variant: "destructive", title: "Failed to load department" });
+      toast({ variant: "destructive", title: "Unable to load department" });
     } finally {
       setIsLoading(false);
     }
@@ -303,7 +303,7 @@ export default function DepartmentDetailPage() {
         }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to customise course");
+      if (!res.ok) throw new Error(json.error ?? "Unable to customise course");
       toast({
         variant: "success",
         title: `${customisingCourse.name} is now managed by ${department.name}`,
@@ -312,7 +312,7 @@ export default function DepartmentDetailPage() {
       setCustomisingCourse(null);
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to customise course" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to customise course" });
     } finally {
       setIsCustomising(false);
     }
@@ -333,7 +333,7 @@ export default function DepartmentDetailPage() {
         }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to update");
+      if (!res.ok) throw new Error(json.error ?? "Unable to update");
       toast({
         variant: "success",
         title: excluded
@@ -344,7 +344,7 @@ export default function DepartmentDetailPage() {
       setRemovingInherited(null);
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to update" });
     }
   }
 
@@ -353,11 +353,11 @@ export default function DepartmentDetailPage() {
     try {
       const res = await fetch(`/api/college/courses/${deletingCourse.id}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to delete course");
+      if (!res.ok) throw new Error(json.error ?? "Unable to delete course");
       toast({ variant: "success", title: `${deletingCourse.name} removed` });
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete course" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to delete course" });
     } finally {
       setDeletingCourse(null);
     }
@@ -378,7 +378,7 @@ export default function DepartmentDetailPage() {
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        throw new Error(json.error ?? "Failed to save course");
+        throw new Error(json.error ?? "Unable to save course");
       }
       toast({ variant: "success", title: "Course added" });
       setIsAddingCourse(false);
@@ -386,7 +386,7 @@ export default function DepartmentDetailPage() {
       setAddCourseYears([]);
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save course" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save course" });
     } finally {
       setIsSavingCourse(false);
     }
@@ -430,7 +430,7 @@ export default function DepartmentDetailPage() {
         body: JSON.stringify({ neighbourDepartmentId: managerDeptId || null }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to save");
+      if (!res.ok) throw new Error(json.error ?? "Unable to save");
 
       const newManager = managerDeptId ? allDepartments.find((d) => d.id === managerDeptId) ?? null : null;
       toast({
@@ -441,7 +441,7 @@ export default function DepartmentDetailPage() {
       });
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSavingManager(false);
     }

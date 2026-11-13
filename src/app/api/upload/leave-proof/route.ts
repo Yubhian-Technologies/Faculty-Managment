@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const requestId = formData.get("requestId");
 
     if (!file || typeof file === "string") {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      return NextResponse.json({ error: "Select a file to upload." }, { status: 400 });
     }
     if (!requestId || typeof requestId !== "string") {
       return NextResponse.json({ error: "requestId is required" }, { status: 400 });
@@ -78,12 +78,12 @@ export async function POST(request: Request) {
     const fileExt = (file as File).name?.split(".").pop()?.toLowerCase() ?? "";
     const ext = MIME_TO_EXT[file.type] ?? EXT_TO_EXT[fileExt];
     if (!ext) {
-      return NextResponse.json({ error: "Only PDF, PNG, or JPEG files are accepted" }, { status: 400 });
+      return NextResponse.json({ error: "Only PDF, PNG or JPEG files can be uploaded." }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.byteLength > MAX_SIZE) {
-      return NextResponse.json({ error: "File exceeds 10 MB limit" }, { status: 400 });
+      return NextResponse.json({ error: "The file is larger than 10 MB. Upload a smaller file." }, { status: 400 });
     }
 
     const downloadToken = randomUUID();
@@ -103,9 +103,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ url }, { status: 200 });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[upload/leave-proof POST]", err);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to upload the file. Try again." }, { status: 500 });
   }
 }

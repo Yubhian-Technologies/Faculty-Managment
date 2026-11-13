@@ -34,7 +34,7 @@ export default function EditPublicationPage() {
         setOwnerName(p.ownerName);
         setDetails(p.details ?? { ...emptyPublicationDetails(), title: p.title });
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load publication" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load publication" }))
       .finally(() => setLoading(false));
   }, [publicationId, router]);
 
@@ -55,7 +55,7 @@ export default function EditPublicationPage() {
       toast({ variant: "success", title: "Publication updated" });
       router.push("/r-and-d/publications");
     } catch {
-      toast({ variant: "destructive", title: "Failed to update publication" });
+      toast({ variant: "destructive", title: "Unable to update publication" });
     } finally {
       setSaving(false);
     }

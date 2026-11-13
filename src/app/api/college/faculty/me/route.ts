@@ -37,7 +37,7 @@ const RESEARCH_PROFILE_KEYS = ["orcidId", "scopusAuthorId", "researcherId", "goo
 // record. When that link is missing (the record was never created, or was created
 // without this login) there is NO other place their faculty details live, so say
 // so plainly instead of showing a hollow profile or failing silently.
-const UNLINKED_MESSAGE = "Your login is not linked to a faculty record yet, so there are no faculty details to show or edit. Please contact your HOD or HR to link it.";
+const UNLINKED_MESSAGE = "Your login is not linked to a faculty record yet, so there are no faculty details to show or edit. Contact your HOD or HR to link it.";
 
 // Self-service lookup for "My Profile" pages. Two different data shapes can hold
 // "this person's own details" depending on how their account was provisioned:
@@ -107,10 +107,10 @@ export async function GET() {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty/me GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -156,7 +156,7 @@ export async function PATCH(request: Request) {
       body.profilePhotoUrl !== "" &&
       !body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")
     ) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -372,9 +372,9 @@ export async function PATCH(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty/me PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

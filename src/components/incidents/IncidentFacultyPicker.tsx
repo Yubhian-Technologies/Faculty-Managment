@@ -67,7 +67,7 @@ export function IncidentFacultyPicker({ departments, courses, selected, onChange
       const json = await res.json() as { faculty?: FacultyRow[]; error?: string };
       if (seq !== loadSeq.current) return;
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load faculty" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load faculty" });
         return;
       }
       const q = search.trim().toLowerCase();
@@ -83,7 +83,7 @@ export function IncidentFacultyPicker({ departments, courses, selected, onChange
         })
       );
     } catch {
-      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Failed to load faculty" });
+      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Unable to load faculty" });
     } finally {
       if (seq === loadSeq.current) setIsFetching(false);
     }

@@ -25,7 +25,7 @@ export default function AdministrationSettingsPage() {
           setForm({ name: loc.name ?? "", city: loc.city ?? "", state: loc.state ?? "", address: loc.address ?? "" });
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load location" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load location" }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -48,7 +48,7 @@ export default function AdministrationSettingsPage() {
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Location information updated" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save changes" });
+      toast({ variant: "destructive", title: "Unable to save changes" });
     } finally {
       setSaving(false);
     }

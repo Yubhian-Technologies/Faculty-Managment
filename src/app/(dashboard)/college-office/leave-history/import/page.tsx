@@ -63,7 +63,7 @@ export default function LeaveHistoryImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -81,7 +81,7 @@ export default function LeaveHistoryImportPage() {
         return;
       }
       if (!Object.values(keyMap).includes("employeeId") && !Object.values(keyMap).includes("employeeName")) {
-        setParseError("Couldn't find an \"Employee Code\" or \"Employee Name\" column. Check your file's header row against the template.");
+        setParseError("Unable to find an \"Employee Code\" or \"Employee Name\" column. Check your file's header row against the template.");
         return;
       }
 
@@ -101,7 +101,7 @@ export default function LeaveHistoryImportPage() {
 
       setRows(dataRows);
     } catch {
-      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Unable to parse the file. Ensure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -124,7 +124,7 @@ export default function LeaveHistoryImportPage() {
         toast({ variant: "destructive", title: `Stopped after ${stoppedAt} of ${rows.length} rows`, description: `${json.created} imported. ${error ?? ""} Fix the problem and import again.` });
       }
       if (json.created > 0 && stoppedAt === null) {
-        toast({ variant: "success", title: `${json.created} leave record${json.created !== 1 ? "s" : ""} imported successfully` });
+        toast({ variant: "success", title: `${json.created} leave record${json.created !== 1 ? "s" : ""} imported` });
         setRows([]);
       }
     } catch {
@@ -201,7 +201,7 @@ export default function LeaveHistoryImportPage() {
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
           {ignoredHeaders.length > 0 && (

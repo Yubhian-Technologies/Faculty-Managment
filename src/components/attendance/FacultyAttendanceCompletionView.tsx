@@ -123,7 +123,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
       const d = await res.json() as { periods?: PeriodRow[]; error?: string };
       setPeriods(d.periods ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load periods" });
+      toast({ variant: "destructive", title: "Unable to load periods" });
     } finally {
       setIsLoadingPeriods(false);
     }
@@ -144,7 +144,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
         const scoped = hodOwnDepartments ? active.filter((dep) => hodOwnDepartments.includes(dep.name)) : active;
         setDepartments(scoped.sort((a, b) => a.name.localeCompare(b.name)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }));
     // hodOwnDepartments is derived fresh from `user` every render - depend on
     // the user identity fields it's built from instead, so this doesn't
     // re-fetch on every render.
@@ -174,7 +174,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
         const ownOnly = (d.courses ?? []).filter((c) => c.isActive && c.departmentId === selectedDepartmentId);
         setCourses(ownOnly.sort((a, b) => a.name.localeCompare(b.name)));
       } catch {
-        toast({ variant: "destructive", title: "Failed to load courses" });
+        toast({ variant: "destructive", title: "Unable to load courses" });
       } finally {
         setIsLoadingCourses(false);
       }
@@ -199,7 +199,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
         const d = await res.json() as { faculty?: FacultyOption[]; error?: string };
         setFaculty(d.faculty ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load faculty" });
+        toast({ variant: "destructive", title: "Unable to load faculty" });
       } finally {
         setIsLoadingFaculty(false);
       }

@@ -33,7 +33,7 @@ export function MidSubjectSplitsCard({ midCount }: { midCount: number }) {
 
   function load() {
     fetch("/api/college/mid-bank-subject-splits").then((r) => r.json() as Promise<{ splits?: MidBankSubjectSplit[] }>).then((d) => setSplits(d.splits ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the subject exceptions" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the subject exceptions" }));
   }
   useEffect(() => {
     load();
@@ -63,12 +63,12 @@ export function MidSubjectSplitsCard({ midCount }: { midCount: number }) {
         body: JSON.stringify({ subjectId, mids: Object.fromEntries(mids.map((m) => [m, parseUnits(units[m] ?? "")])) }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: "Subject exception saved" });
       setSubjectId(""); setUnits({});
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -77,7 +77,7 @@ export function MidSubjectSplitsCard({ midCount }: { midCount: number }) {
   async function remove() {
     if (!deleting) return;
     const res = await fetch(`/api/college/mid-bank-subject-splits?subjectId=${encodeURIComponent(deleting.subjectId)}`, { method: "DELETE" });
-    if (!res.ok) toast({ variant: "destructive", title: "Failed to delete" });
+    if (!res.ok) toast({ variant: "destructive", title: "Unable to delete" });
     setDeleting(null);
     load();
   }

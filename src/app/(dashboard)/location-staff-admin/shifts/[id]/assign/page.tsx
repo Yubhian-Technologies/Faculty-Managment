@@ -54,7 +54,7 @@ export default function LocationStaffAdminAssignShiftPage() {
         setSelectedStaffIds(relevantStaff.filter((s) => s.shiftId === params.id).map((s) => s.id));
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shift" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shift" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -84,12 +84,12 @@ export default function LocationStaffAdminAssignShiftPage() {
           unassignedStaffIds: unassigned,
         }),
       });
-      if (!res.ok) throw new Error("Failed to update assignments");
+      if (!res.ok) throw new Error("Unable to update assignments");
 
       toast({ title: "Updated", description: `Assigned ${selectedStaffIds.length} staff to ${shift.name}` });
       router.push(`/location-staff-admin/shifts/${shift.id}/staff`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update assignments";
+      const msg = err instanceof Error ? err.message : "Unable to update assignments";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsSaving(false);

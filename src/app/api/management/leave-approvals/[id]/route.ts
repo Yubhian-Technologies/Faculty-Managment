@@ -30,7 +30,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     };
 
     if (!body.collegeId) {
-      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a college." }, { status: 400 });
     }
     const isProofReview = body.action === "VERIFY_OD_PROOF" || body.action === "REJECT_OD_PROOF";
     if (!isProofReview && body.action !== "APPROVE" && body.action !== "REJECT") {
@@ -43,7 +43,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const db = getAdminDb();
     const ref = REQUESTS_COL(body.collegeId, db).doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     const req = { id: snap.id, ...snap.data() } as LeaveRequest;
 
     // ─── On Duty proof, for a Principal's own OD ──────────────────────────────
@@ -108,12 +108,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (err instanceof LeaveStateConflictError) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }
     console.error("[management/leave-approvals/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

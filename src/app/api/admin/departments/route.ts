@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   try {
     await requireSuperAdmin();
     const collegeId = new URL(request.url).searchParams.get("collegeId");
-    if (!collegeId) return NextResponse.json({ error: "collegeId is required" }, { status: 400 });
+    if (!collegeId) return NextResponse.json({ error: "Select a college." }, { status: 400 });
 
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(collegeId).collection("departments").get();
@@ -23,9 +23,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ departments });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[admin/departments GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -10,9 +10,9 @@ export async function GET(request: Request) {
     const session = await verifySession();
     const allowed = ["SUPER_ADMIN", "ADMINISTRATION", "HR_ADMIN"];
     if (!session || !allowed.includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
-    if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
+    if (!session.locationId) return NextResponse.json({ error: "Your account is not linked to a location. Contact the administrator." }, { status: 400 });
 
     const { searchParams } = new URL(request.url);
     const collegeIdFilter = searchParams.get("collegeId");
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[location/offers GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     if (!session || session.role !== "HR_ADMIN") {
       return NextResponse.json({ error: "Only HR Admin can create offer letters" }, { status: 403 });
     }
-    if (!session.locationId) return NextResponse.json({ error: "No location context" }, { status: 400 });
+    if (!session.locationId) return NextResponse.json({ error: "Your account is not linked to a location. Contact the administrator." }, { status: 400 });
 
     const body = (await readJsonBody(request)) as {
       candidateId: string;
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       .doc(candidateId)
       .get();
     if (!candidateSnap.exists) {
-      return NextResponse.json({ error: "Candidate not found" }, { status: 400 });
+      return NextResponse.json({ error: "Candidate not found. The record may have been deleted." }, { status: 400 });
     }
     const candidateData = candidateSnap.data() as { collegeId?: string; collegeName?: string };
     const collegeId = candidateData.collegeId ?? "";
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
         locationId: session.locationId,
         type: "OFFER_LETTER_GENERATED",
         title: "Offer Letter Awaiting Approval",
-        message: `HR Admin has prepared an offer letter for ${candidateName} (${department}). Please review and approve.`,
+        message: `HR Admin has prepared an offer letter for ${candidateName} (${department}). Review and approve.`,
         link: `/administration/offers/${ref.id}`,
         read: false,
         createdAt: now,
@@ -156,6 +156,6 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[location/offers POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

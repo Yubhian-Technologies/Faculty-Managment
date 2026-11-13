@@ -27,7 +27,7 @@ export default function SalaryStructuresPage() {
       );
       setStructures(res.salaryStructures ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load salary structures" });
+      toast({ variant: "destructive", title: "Unable to load salary structures" });
     } finally {
       setIsLoading(false);
     }
@@ -47,7 +47,7 @@ export default function SalaryStructuresPage() {
       toast({ variant: "success", title: "Salary structure deactivated" });
       setStructures((prev) => prev.map((item) => (item.id === s.id ? { ...item, isActive: false } : item)));
     } catch {
-      toast({ variant: "destructive", title: "Failed to deactivate salary structure" });
+      toast({ variant: "destructive", title: "Unable to deactivate salary structure" });
     } finally {
       setDeleting(null);
     }

@@ -33,8 +33,8 @@ export default function SyllabusApprovalsPage() {
 
   useEffect(() => {
     fetch("/api/college/syllabus-approvals")
-      .then(async (r) => { const d = (await r.json()) as { items?: Item[]; error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); setItems(d.items ?? []); })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .then(async (r) => { const d = (await r.json()) as { items?: Item[]; error?: string }; if (!r.ok) throw new Error(d.error ?? "Unable to load"); setItems(d.items ?? []); })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unable to load"));
   }, []);
 
   const count = (k: SubjectSyllabusStatus) => (items ?? []).filter((i) => i.status === k).length;

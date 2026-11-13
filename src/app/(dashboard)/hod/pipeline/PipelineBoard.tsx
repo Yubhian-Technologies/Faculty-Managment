@@ -139,12 +139,12 @@ function PipelineCard({
     try {
       const res = await fetch(`/api/college/vacancy-requests/${vacancy.id}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to delete");
+      if (!res.ok) throw new Error(json.error ?? "Unable to delete");
       toast({ variant: "success", title: "Hiring request deleted" });
       setDeleteConfirmOpen(false);
       onDeleted(vacancy.id);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to delete", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to delete", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsDeleting(false);
     }
@@ -507,7 +507,7 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
         );
         setEntries(built);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring pipeline" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring pipeline" }))
       .finally(() => setIsLoading(false));
   }
 

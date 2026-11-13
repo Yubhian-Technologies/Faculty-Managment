@@ -47,7 +47,7 @@ export default function AdminOffersPage() {
     fetch(url)
       .then((r) => r.json() as Promise<{ offers: LocationOffer[] }>)
       .then((d) => setOffers(d.offers ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 

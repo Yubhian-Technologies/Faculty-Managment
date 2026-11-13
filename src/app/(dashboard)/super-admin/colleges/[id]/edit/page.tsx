@@ -74,7 +74,7 @@ export default function EditCollegePage() {
         setShape(cl?.shape ?? "none");
         setPolygonPoints(cl?.shape === "polygon" ? cl.points : []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load college" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load college" }))
       .finally(() => setLoading(false));
   }, [collegeId, router]);
 
@@ -94,7 +94,7 @@ export default function EditCollegePage() {
         setLocating(false);
       },
       () => {
-        toast({ variant: "destructive", title: "Failed to get current location", description: "Check location permissions and try again" });
+        toast({ variant: "destructive", title: "Unable to get current location", description: "Check location permissions and try again" });
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -145,7 +145,7 @@ export default function EditCollegePage() {
       toast({ variant: "success", title: "College updated" });
       router.push("/super-admin/colleges");
     } catch {
-      toast({ variant: "destructive", title: "Failed to update college" });
+      toast({ variant: "destructive", title: "Unable to update college" });
     } finally {
       setSaving(false);
     }

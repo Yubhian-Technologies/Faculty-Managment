@@ -63,7 +63,7 @@ export default function EditSubDepartmentPage() {
         setHodUid(mine.hodUid ?? "");
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sub-department" });
+      toast({ variant: "destructive", title: "Unable to load sub-department" });
     } finally {
       setIsLoading(false);
     }
@@ -118,12 +118,12 @@ export default function EditSubDepartmentPage() {
         }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to update sub-department");
+      if (!res.ok) throw new Error(json.error ?? "Unable to update sub-department");
 
       toast({ variant: "success", title: "Sub-department updated" });
       router.push(listHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update sub-department" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to update sub-department" });
     } finally {
       setIsSubmitting(false);
     }

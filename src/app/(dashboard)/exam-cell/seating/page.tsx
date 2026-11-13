@@ -54,7 +54,7 @@ export default function ExamSeatingPage() {
         setRooms(active);
         setRoomIds(active.map((x) => x.id));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load seating data" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load seating data" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -76,14 +76,14 @@ export default function ExamSeatingPage() {
         body: JSON.stringify({ sectionIds, roomIds, roomSections }),
       });
       const data = (await res.json()) as { id?: string; unplaced?: number; error?: string };
-      if (!res.ok || !data.id) throw new Error(data.error ?? "Failed to build the plan");
+      if (!res.ok || !data.id) throw new Error(data.error ?? "Unable to build the plan");
       toast({
         variant: data.unplaced ? "default" : "success",
         title: data.unplaced ? `Plan built - ${data.unplaced} student(s) need a seat` : "Plan built - review it next",
       });
       router.push(`/exam-cell/seating/${data.id}`);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to build the plan" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to build the plan" });
     } finally {
       setCreating(false);
     }
@@ -97,10 +97,10 @@ export default function ExamSeatingPage() {
         body: JSON.stringify({ roomIds: layRoomIds, mode: "LAYERED" }),
       });
       const data = (await res.json()) as { id?: string; error?: string };
-      if (!res.ok || !data.id) throw new Error(data.error ?? "Failed to create the plan");
+      if (!res.ok || !data.id) throw new Error(data.error ?? "Unable to create the plan");
       router.push(`/exam-cell/seating/${data.id}`);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to create the plan" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to create the plan" });
     } finally {
       setLayCreating(false);
     }

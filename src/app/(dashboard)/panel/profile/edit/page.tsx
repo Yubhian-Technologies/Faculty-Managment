@@ -107,7 +107,7 @@ export default function EditMyProfileIdentityPage() {
         });
         setExtraPhones(m.additionalPhoneNumbers ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load profile" }))
       .finally(() => setLoading(false));
   }, [router]);
 
@@ -158,12 +158,12 @@ export default function EditMyProfileIdentityPage() {
       });
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
-        throw new Error(data.error ?? "Failed to save changes");
+        throw new Error(data.error ?? "Unable to save changes");
       }
       toast({ variant: "success", title: "Profile updated" });
       router.push("/panel/profile");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save changes" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save changes" });
     } finally {
       setSaving(false);
     }

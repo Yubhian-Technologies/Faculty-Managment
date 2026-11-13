@@ -28,7 +28,7 @@ export default function PrincipalHolidaysPage() {
     fetch("/api/college/holidays")
       .then((r) => r.json() as Promise<{ holidays: Holiday[] }>)
       .then((d) => setHolidays(d.holidays ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load holidays" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load holidays" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -50,11 +50,11 @@ export default function PrincipalHolidaysPage() {
         body: JSON.stringify({ compensatoryEnabled: enabled }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to update");
+      if (!res.ok) throw new Error(data.error ?? "Unable to update");
       toast({ variant: "success", title: enabled ? "Sunday is now a working day" : "Sunday stays a day off" });
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to update" });
     } finally {
       setSavingId(null);
     }

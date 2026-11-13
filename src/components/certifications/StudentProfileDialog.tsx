@@ -55,7 +55,7 @@ export function StudentProfileDialog({ requestId, studentName }: { requestId: st
     try {
       setStudent(await getRequestStudent(requestId));
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load the student's profile" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load the student's profile" });
       setOpen(false);
     } finally {
       setLoading(false);

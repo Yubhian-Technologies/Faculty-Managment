@@ -69,7 +69,7 @@ export default function CandidateProfilePage() {
         setBatches(batchesRes.batches ?? []);
         setAccountRequests((acctRes.requests ?? []).filter((r) => r.candidateId === candidateId));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load candidate profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load candidate profile" }))
       .finally(() => setIsLoading(false));
   }, [candidateId]);
 
@@ -110,7 +110,7 @@ export default function CandidateProfilePage() {
         termsAndConditions: offer.termsAndConditions,
       }, candidate?.name ?? offer.id);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to generate offer letter", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate offer letter", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloading(null);
     }
@@ -171,7 +171,7 @@ export default function CandidateProfilePage() {
         generatedByRole: user?.role ? ROLE_LABELS[user.realRole ?? user.role] : undefined,
       }, candidate.name);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to generate candidate profile", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate candidate profile", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloading(null);
     }
@@ -192,7 +192,7 @@ export default function CandidateProfilePage() {
         termsAndConditions: appt.termsAndConditions,
       }, candidate?.name ?? appt.id);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to generate appointment letter", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate appointment letter", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloading(null);
     }

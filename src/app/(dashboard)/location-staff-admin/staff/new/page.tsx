@@ -39,7 +39,7 @@ export default function NewStaffMemberPage() {
         }),
     ])
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load departments/shifts" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load departments/shifts" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);

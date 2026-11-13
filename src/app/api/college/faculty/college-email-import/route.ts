@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember("COLLEGE_OFFICE");
     const body = (await readJsonBody(request)) as { records?: BulkCollegeEmailRecord[] };
     if (!Array.isArray(body.records) || body.records.length === 0) {
-      return NextResponse.json({ error: "No records provided" }, { status: 400 });
+      return NextResponse.json({ error: "The file has no records to import." }, { status: 400 });
     }
     if (body.records.length > BULK_COLLEGE_EMAIL_MAX_ROWS_PER_CALL) {
       return NextResponse.json({ error: `At most ${BULK_COLLEGE_EMAIL_MAX_ROWS_PER_CALL} rows per request` }, { status: 400 });
@@ -33,9 +33,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty/college-email-import POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

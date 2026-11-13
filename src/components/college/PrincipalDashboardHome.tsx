@@ -206,7 +206,7 @@ function ActionCard({ item }: { item: ActionItem }) {
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{item.label}</span>
             <span className="block text-xs text-muted-foreground">
-              {item.loading ? "Loading..." : item.error ? "Couldn't load" : n > 0 ? `${n} ${item.unit ?? "waiting"}` : <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-600" />Nothing waiting</span>}
+              {item.loading ? "Loading..." : item.error ? "Unable to load" : n > 0 ? `${n} ${item.unit ?? "waiting"}` : <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-600" />Nothing waiting</span>}
             </span>
           </span>
           {!item.loading && !item.error && n > 0 && <span className="text-xl font-bold tabular-nums">{n}</span>}

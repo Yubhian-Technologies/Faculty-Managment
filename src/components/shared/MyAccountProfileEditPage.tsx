@@ -41,7 +41,7 @@ export function MyAccountProfileEditPage({ basePath, fetchEndpoint, patchEndpoin
         setEmail(d.user?.email ?? user.email ?? "");
         setPhone(d.user?.phone ?? "");
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load profile" }))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchEndpoint, user?.uid]);
@@ -63,7 +63,7 @@ export function MyAccountProfileEditPage({ basePath, fetchEndpoint, patchEndpoin
       toast({ variant: "success", title: "Profile updated" });
       router.push(basePath);
     } catch {
-      toast({ variant: "destructive", title: "Failed to save changes" });
+      toast({ variant: "destructive", title: "Unable to save changes" });
     } finally {
       setSaving(false);
     }

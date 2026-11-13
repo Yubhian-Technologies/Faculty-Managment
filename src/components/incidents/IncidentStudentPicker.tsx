@@ -101,13 +101,13 @@ export function IncidentStudentPicker({ departments, courses, years, selected, o
       const json = await res.json() as { students?: StudentListItem[]; total?: number; error?: string };
       if (seq !== loadSeq.current) return;
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load students" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load students" });
         return;
       }
       setResults(json.students ?? []);
       setTotal(json.total ?? 0);
     } catch {
-      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Failed to load students" });
+      if (seq === loadSeq.current) toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       if (seq === loadSeq.current) setIsFetching(false);
     }

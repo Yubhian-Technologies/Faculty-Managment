@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
     const db = getAdminDb();
     const collegeSnap = await db.collection("colleges").doc(collegeId).get();
-    if (!collegeSnap.exists) return NextResponse.json({ error: "College not found" }, { status: 404 });
+    if (!collegeSnap.exists) return NextResponse.json({ error: "College not found. It may have been deleted." }, { status: 404 });
     if ((collegeSnap.data() as { locationId?: string }).locationId !== session.locationId) {
       return NextResponse.json({ error: "College does not belong to your location" }, { status: 403 });
     }
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
         await assignSeat(db, collegeId, seatId, { uid }, actor);
       } catch (e) {
         // The login exists either way; they can be appointed from Role Assignments.
-        seatError = e instanceof SeatError ? e.message : "Couldn't appoint them to the seat";
+        seatError = e instanceof SeatError ? e.message : "Unable to appoint them to the seat";
       }
     }
 
@@ -114,10 +114,10 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_LOCATION_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "auth/email-already-exists") {
-      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+      return NextResponse.json({ error: "An account with this email address already exists." }, { status: 409 });
     }
     const msg = err instanceof Error ? err.message : String(err);
     const authErr = firebaseAuthErrorResponse(err);

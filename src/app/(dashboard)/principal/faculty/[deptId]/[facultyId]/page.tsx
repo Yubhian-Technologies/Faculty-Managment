@@ -53,13 +53,13 @@ function PrincipalFacultyProfileContent() {
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to reset face registration" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to reset face registration" });
         return;
       }
       toast({ title: `${facultyDisplayName(faculty) || "Faculty"} can now register their face again from My Attendance` });
       setConfirmingReRegister(false);
     } catch {
-      toast({ variant: "destructive", title: "Failed to reset face registration" });
+      toast({ variant: "destructive", title: "Unable to reset face registration" });
     } finally {
       setIsResetting(false);
     }

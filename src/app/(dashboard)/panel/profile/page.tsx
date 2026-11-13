@@ -42,7 +42,7 @@ export default function FacultyProfilePage() {
   return (
     <div className="space-y-6">
       <div className="-mx-4 sm:-mx-6 lg:-mx-8 bg-amber-50 border-b border-amber-200 px-4 sm:px-6 lg:px-8 py-2 text-center text-sm text-amber-800 dark:bg-amber-950/40 dark:border-amber-900 dark:text-amber-200">
-        This is a Beta version and may contain bugs. If you encounter any issues, please report them to{" "}
+        This is a Beta version and may contain bugs. If you encounter any issues report them to{" "}
         <a href="mailto:vishnutechhub@srivishnu.edu.in" className="font-medium underline">vishnutechhub@srivishnu.edu.in</a>.
       </div>
       <PageHeader

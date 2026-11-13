@@ -155,7 +155,7 @@ export default function HODTimetableSectionsPage() {
       })
       .catch(() => {
         setInchargeState({ kind: "NONE" });
-        toast({ variant: "destructive", title: "Failed to load Timetable Incharge" });
+        toast({ variant: "destructive", title: "Unable to load Timetable Incharge" });
       });
   }
 
@@ -189,7 +189,7 @@ export default function HODTimetableSectionsPage() {
         if (cancelled) return;
         setSections((sectionsData.sections ?? []).sort((a, b) => a.name.localeCompare(b.name)));
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load sections" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -255,7 +255,7 @@ export default function HODTimetableSectionsPage() {
           if (current) setSelectedCandidateKey(`${current.personType}_${current.id}`);
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty" }));
   }
 
   async function handleAssignIncharge() {
@@ -270,7 +270,7 @@ export default function HODTimetableSectionsPage() {
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to assign Timetable Incharge", description: json.error });
+        toast({ variant: "destructive", title: "Unable to assign Timetable Incharge", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Timetable Incharge assigned" });
@@ -296,7 +296,7 @@ export default function HODTimetableSectionsPage() {
       toast({ variant: "success", title: "Timetable Incharge removed" });
       loadIncharge(activeUnit);
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove Timetable Incharge" });
+      toast({ variant: "destructive", title: "Unable to remove Timetable Incharge" });
     } finally {
       setIsRevoking(false);
       setConfirmRevoke(false);

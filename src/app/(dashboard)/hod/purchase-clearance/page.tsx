@@ -74,7 +74,7 @@ export default function HODPurchaseClearancePage() {
           }));
         setRows([...clearanceRows, ...indentRows].sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load purchase clearance requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load purchase clearance requests" }))
       .finally(() => setIsLoading(false));
   }
 

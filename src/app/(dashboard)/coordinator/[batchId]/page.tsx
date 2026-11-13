@@ -67,7 +67,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
         setBatch(b);
         setCandidates(cands);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load session" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load session" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -115,7 +115,7 @@ export default function CoordinatorQRPage({ params }: { params: Promise<{ batchI
       setBatch((prev) => prev ? { ...prev, demoComplete: true } : prev);
       setDemoCompleteDialog(false);
     } catch {
-      toast({ variant: "destructive", title: "Failed to mark complete" });
+      toast({ variant: "destructive", title: "Unable to mark complete" });
     } finally {
       setIsMarkingComplete(false);
     }

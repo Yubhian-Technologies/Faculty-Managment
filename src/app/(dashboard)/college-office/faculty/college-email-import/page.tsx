@@ -65,7 +65,7 @@ export default function BulkCollegeEmailImportPage() {
       a.href = url; a.download = "faculty_college_email_template.xlsx"; a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast({ variant: "destructive", title: "Couldn't build the Excel template. Please try again." });
+      toast({ variant: "destructive", title: "Unable to build the Excel template. Try again." });
     }
   }
 
@@ -76,7 +76,7 @@ export default function BulkCollegeEmailImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -106,7 +106,7 @@ export default function BulkCollegeEmailImportPage() {
       setRows(ok);
       setRejected(bad);
     } catch {
-      setParseError(isExcel ? "Failed to read the Excel file. Make sure it is a valid .xlsx file." : "Failed to read the file. Make sure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to read the Excel file. Make sure it is a valid .xlsx file." : "Unable to read the file. Make sure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }

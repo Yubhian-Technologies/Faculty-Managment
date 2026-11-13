@@ -83,13 +83,13 @@ export async function resolveReportRoster(
     const deptName = await resolveUserDepartment(db, collegeId, session.uid);
     if (!deptName) return { error: "No department assigned", status: 400 };
     const deptSnap = await collegeRef.collection("departments").where("name", "==", deptName).limit(1).get();
-    if (deptSnap.empty) return { error: "Department not found", status: 404 };
+    if (deptSnap.empty) return { error: "Department not found. It may have been deleted.", status: 404 };
     department = { id: deptSnap.docs[0].id, ...deptSnap.docs[0].data() } as Department;
   } else {
     const departmentId = searchParams.get("departmentId");
     if (!departmentId) return { error: "departmentId is required", status: 400 };
     const deptSnap = await collegeRef.collection("departments").doc(departmentId).get();
-    if (!deptSnap.exists) return { error: "Department not found", status: 404 };
+    if (!deptSnap.exists) return { error: "Department not found. It may have been deleted.", status: 404 };
     department = { id: deptSnap.id, ...deptSnap.data() } as Department;
   }
 

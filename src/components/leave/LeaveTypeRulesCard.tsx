@@ -46,7 +46,7 @@ export function LeaveTypeRulesCard() {
         setOverrides(settings.leaveTypeRuleOverrides ?? {});
         setWindows(settings.leaveBlackoutWindows ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave policy" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave policy" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -72,11 +72,11 @@ export function LeaveTypeRulesCard() {
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to save");
+        throw new Error(j.error ?? "Unable to save");
       }
       toast({ variant: "success", title: "Leave policy saved" });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }

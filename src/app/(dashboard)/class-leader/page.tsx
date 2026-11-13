@@ -86,7 +86,7 @@ export default function ClassLeaderDashboardPage() {
         setDepartments(d.departments ?? []);
         setResolvedSemester(d.resolvedSemester ?? null);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load section data" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load section data" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -235,7 +235,7 @@ export default function ClassLeaderDashboardPage() {
           <CardContent className="py-12 text-center space-y-3">
             <h3 className="font-semibold text-base">No Section Linked</h3>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Your login is not currently bound to an academic section. Please ask your College Office or Department HOD to link your class section.
+              Your login is not currently bound to an academic section. Ask your College Office or Department HOD to link your class section.
             </p>
           </CardContent>
         </Card>

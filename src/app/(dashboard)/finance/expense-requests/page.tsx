@@ -27,7 +27,7 @@ export default function FinanceExpenseRequestsPage() {
       collegeFetch("/api/college/finance-expense-requests").then((r) => r.json() as Promise<{ requests: Row[] }>).then((d) => d.requests ?? []),
       collegeFetch("/api/college/finance-budgets?status=ACTIVE").then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>).then((d) => d.budgets ?? []),
     ]).then(([r, b]) => { setRequests(r); setBudgets(b); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load expense requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load expense requests" }))
       .finally(() => setIsLoading(false));
   }
 

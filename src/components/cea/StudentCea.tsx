@@ -13,7 +13,7 @@ export function StudentCea() {
   const [d, setD] = useState<Subject[] | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    fetch("/api/college/student/me/cea").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Couldn't load"); setD(j.subjects); }).catch((e: Error) => setError(e.message));
+    fetch("/api/college/student/me/cea").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Unable to load"); setD(j.subjects); }).catch((e: Error) => setError(e.message));
   }, []);
   return (
     <div className="max-w-4xl space-y-6">

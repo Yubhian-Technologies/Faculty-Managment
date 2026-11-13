@@ -27,22 +27,22 @@ export async function GET(
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const snap = await collegeRef.collection("internalExamMarks").doc(id).get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     const batch = { id: snap.id, ...snap.data() } as InternalExamMarksBatch & { id: string };
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (batch.status !== "SUBMITTED" || !editableDepartmentNames(scope).includes(batch.department)) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
+        return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
       }
     }
     const resolved = await resolveExamConfigForBatch(db, collegeRef, batch);
     return NextResponse.json({ batch, configuration: resolved?.config ?? null });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/internal-exam-marks/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -64,7 +64,7 @@ export async function PATCH(
     const ref = collegeRef.collection("internalExamMarks").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const existing = snap.data() as InternalExamMarksBatch;
@@ -82,7 +82,7 @@ export async function PATCH(
       }
     } else {
       if (existing.facultyId !== session.uid) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
       if (existing.status === "SUBMITTED") {
         return NextResponse.json({ error: "Marks have already been submitted and cannot be edited" }, { status: 409 });
@@ -184,7 +184,7 @@ export async function PATCH(
     } else if (!isPrincipalTier && body.submit) {
       if (enteredCount < existing.totalStudents || existing.totalStudents === 0) {
         return NextResponse.json(
-          { error: "Please enter marks for all students before submitting" },
+          { error: "Enter marks for all students before submitting" },
           { status: 400 }
         );
       }
@@ -223,9 +223,9 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/internal-exam-marks/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

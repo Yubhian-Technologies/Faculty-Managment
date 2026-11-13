@@ -8,7 +8,7 @@ export async function payCertificateFeeOnline(requestId: string): Promise<void> 
     body: JSON.stringify({ purpose: { kind: "CERTIFICATE", requestId } }),
   });
   const json = (await res.json().catch(() => ({}))) as { action?: string; fields?: Record<string, string>; error?: string };
-  if (!res.ok || !json.action || !json.fields) throw new Error(json.error ?? "Couldn't start the payment");
+  if (!res.ok || !json.action || !json.fields) throw new Error(json.error ?? "Unable to start the payment");
   const form = document.createElement("form");
   form.method = "POST";
   form.action = json.action;
@@ -40,7 +40,7 @@ export async function printFeeReceipt(url: string): Promise<void> {
   try {
     const res = await fetch(url);
     const d = (await res.json()) as { payment?: import("@/types").Payment; college?: { name: string; place?: string; logoUrl?: string }; error?: string };
-    if (!res.ok || !d.payment || !d.college) throw new Error(d.error ?? "Couldn't load the receipt");
+    if (!res.ok || !d.payment || !d.college) throw new Error(d.error ?? "Unable to load the receipt");
     const { getFeeReceiptHTML } = await import("@/lib/pdf/feeReceiptTemplate");
     win.document.open();
     win.document.write(getFeeReceiptHTML({ payment: d.payment, college: d.college }));

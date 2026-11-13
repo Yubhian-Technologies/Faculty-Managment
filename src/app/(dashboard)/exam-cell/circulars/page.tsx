@@ -29,10 +29,10 @@ export default function ExamCellCircularsPage() {
     try {
       const res = await fetch("/api/college/exam-circulars");
       const data = (await res.json()) as { circulars?: ExamCircular[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load");
       setCirculars(data.circulars ?? []);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load circulars" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load circulars" });
     } finally {
       setIsLoading(false);
     }
@@ -45,7 +45,7 @@ export default function ExamCellCircularsPage() {
     const res = await fetch(`/api/college/exam-circulars/${deleteTarget.id}`, { method: "DELETE" });
     const data = (await res.json()) as { error?: string };
     if (!res.ok) {
-      toast({ variant: "destructive", title: data.error ?? "Failed to delete" });
+      toast({ variant: "destructive", title: data.error ?? "Unable to delete" });
       return;
     }
     toast({ variant: "success", title: "Circular removed" });
@@ -255,12 +255,12 @@ function EditTitleDialog({
         body: JSON.stringify({ title: title.trim() }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: "Circular updated" });
       onClose();
       await onDone();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setBusy(false);
     }
@@ -323,7 +323,7 @@ function NoticeFormDialog({
         const data = (await res.json()) as { courses?: Course[] };
         setCourses(data.courses ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load courses" });
+        toast({ variant: "destructive", title: "Unable to load courses" });
       }
     })();
   }, [open]);
@@ -376,13 +376,13 @@ function NoticeFormDialog({
         body: JSON.stringify(payload),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: circular ? "Circular updated" : "Circular shared" });
       if (!circular) reset();
       onClose();
       await onDone();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setBusy(false);
     }

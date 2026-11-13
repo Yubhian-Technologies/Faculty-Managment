@@ -194,7 +194,7 @@ export function SectionsPanel() {
       setSections(json.sections ?? []);
       setApplied(next);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sections" });
+      toast({ variant: "destructive", title: "Unable to load sections" });
     } finally {
       setIsLoading(false);
     }

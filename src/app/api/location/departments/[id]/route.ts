@@ -19,21 +19,21 @@ export async function GET(
         session.role
       )
     ) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") || session.locationId;
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
 
     const db = getAdminDb();
     const deptRef = db.collection("locations").doc(locationId).collection("locationDepts").doc(id);
     const deptSnap = await deptRef.get();
     if (!deptSnap.exists) {
-      return NextResponse.json({ error: "Department not found" }, { status: 404 });
+      return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 404 });
     }
 
     const deptData = { id: deptSnap.id, ...deptSnap.data() };
@@ -97,7 +97,7 @@ export async function GET(
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[location/departments/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -111,7 +111,7 @@ export async function PATCH(
   try {
     const session = await verifySession();
     if (!session || !["SUPER_ADMIN", "ADMINISTRATION", "LOCATION_STAFF_ADMIN"].includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const { id } = await params;
@@ -131,17 +131,17 @@ export async function PATCH(
     const locationId = body.locationId || session.locationId;
 
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const db = getAdminDb();
     const deptRef = db.collection("locations").doc(locationId).collection("locationDepts").doc(id);
     const deptSnap = await deptRef.get();
     if (!deptSnap.exists) {
-      return NextResponse.json({ error: "Department not found" }, { status: 404 });
+      return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 404 });
     }
 
     const now = new Date();
@@ -263,10 +263,10 @@ export async function PATCH(
       err && typeof err === "object" && "code" in err &&
       (err as { code: string }).code === "auth/weak-password"
     ) {
-      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+      return NextResponse.json({ error: "The password must be at least 6 characters." }, { status: 400 });
     }
     console.error("[location/departments/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -282,24 +282,24 @@ export async function DELETE(
   try {
     const session = await verifySession();
     if (!session || !["SUPER_ADMIN", "ADMINISTRATION", "LOCATION_STAFF_ADMIN"].includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") || session.locationId || "";
     if (!locationId) {
-      return NextResponse.json({ error: "locationId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a location." }, { status: 400 });
     }
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const db = getAdminDb();
     const deptRef = db.collection("locations").doc(locationId).collection("locationDepts").doc(id);
     const deptSnap = await deptRef.get();
     if (!deptSnap.exists) {
-      return NextResponse.json({ error: "Department not found" }, { status: 404 });
+      return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 404 });
     }
 
     // Clean up references in locationUsers and staff if a head was assigned
@@ -348,6 +348,6 @@ export async function DELETE(
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[location/departments/[id] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

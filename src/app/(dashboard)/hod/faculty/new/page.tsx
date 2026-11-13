@@ -505,7 +505,7 @@ export default function NewFacultyPage() {
       if (!res.ok) {
         toast({
           variant: "destructive",
-          title: isLinkMode ? "Failed to complete profile" : "Failed to add faculty",
+          title: isLinkMode ? "Unable to complete profile" : "Unable to add faculty",
           description: json.error,
         });
         return;
@@ -531,7 +531,7 @@ export default function NewFacultyPage() {
       });
       router.push(listPath);
     } catch {
-      toast({ variant: "destructive", title: "Network error", description: "Please try again." });
+      toast({ variant: "destructive", title: "Network error", description: "Try again." });
     } finally {
       setSubmitting(false);
     }

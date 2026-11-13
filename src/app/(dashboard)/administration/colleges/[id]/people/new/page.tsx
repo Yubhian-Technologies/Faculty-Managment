@@ -36,7 +36,7 @@ export default function NewCollegePersonPage() {
       });
       const json = await res.json() as { uid?: string; error?: string; seatError?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create", description: json.error });
         return;
       }
       toast({

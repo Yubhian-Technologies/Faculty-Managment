@@ -32,7 +32,7 @@ export function BatchStart({ onStarted }: { onStarted: () => void }) {
   useEffect(() => {
     if (!open || data) return;
     loadBatchOptions().then((d) => { setData(d); setTypeId(d.types.find((t) => t.isActive)?.id ?? ""); })
-      .catch((e) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load classes" }));
+      .catch((e) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load classes" }));
   }, [open, data]);
 
   const groups = useMemo(() => (data?.groups ?? []).filter((g) => g.status === status), [data, status]);
@@ -55,7 +55,7 @@ export function BatchStart({ onStarted }: { onStarted: () => void }) {
       setData(d);
       setTypeId(d.types.find((t) => t.isActive)?.id ?? "");
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't switch it" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to switch it" });
     } finally { setBusy(false); }
   }
 
@@ -69,7 +69,7 @@ export function BatchStart({ onStarted }: { onStarted: () => void }) {
         setOpen(false); setPicked(new Set()); setCheck(null); onStarted();
       }
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't start" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to start" });
     } finally { setBusy(false); }
   }
 

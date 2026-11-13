@@ -34,7 +34,7 @@ export default function RAndDCitationMetricsPage() {
       const data = await res.json() as { requests: CitationMetricsRow[] };
       setRequests(data.requests ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load citation metrics" });
+      toast({ variant: "destructive", title: "Unable to load citation metrics" });
     } finally {
       setIsLoading(false);
     }
@@ -57,7 +57,7 @@ export default function RAndDCitationMetricsPage() {
       toast({ variant: "success", title: "Citation metrics approved" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to approve" });
+      toast({ variant: "destructive", title: "Unable to approve" });
     } finally {
       setApproving(null);
     }
@@ -78,7 +78,7 @@ export default function RAndDCitationMetricsPage() {
       setRejectReason("");
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to reject" });
+      toast({ variant: "destructive", title: "Unable to reject" });
     } finally {
       setRejecting(false);
     }

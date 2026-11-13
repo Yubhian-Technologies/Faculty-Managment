@@ -61,7 +61,7 @@ export default function CollegeDepartmentBrowsePage() {
         if (d.error) { toast({ variant: "destructive", title: d.error }); return; }
         setFaculty(d.faculty ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty" }))
       .finally(() => setLoadingFaculty(false));
 
     fetch(`/api/location/college-browse/students?${qs}`)
@@ -70,7 +70,7 @@ export default function CollegeDepartmentBrowsePage() {
         if (d.error) { toast({ variant: "destructive", title: d.error }); return; }
         setStudents(d.students ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load students" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load students" }))
       .finally(() => setLoadingStudents(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collegeId, departmentName]);

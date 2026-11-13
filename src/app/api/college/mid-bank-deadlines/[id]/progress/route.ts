@@ -41,7 +41,7 @@ export async function GET(_request: Request, { params }: Params) {
       loadMidSettings(db, session.collegeId),
       loadAssignments(db, session.collegeId, id),
     ]);
-    if (!d) return NextResponse.json({ error: "Deadline not found" }, { status: 404 });
+    if (!d) return NextResponse.json({ error: "Deadline not found. It may have been deleted." }, { status: 404 });
     const rows = await rowsP;
     // Withdrawn sets (the HOD removed their setter) don't count towards progress.
     const allBanks = bankSnap.docs.map((b) => ({ id: b.id, ...(b.data() as Omit<MidQuestionBank, "id">) })).filter((b) => !b.withdrawn);

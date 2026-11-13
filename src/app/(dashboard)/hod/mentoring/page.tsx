@@ -24,7 +24,7 @@ const VIEWS: { key: View; label: string }[] = [
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || "Could not load this");
+  if (!res.ok) throw new Error(data.error || "Unable to load this");
   return data;
 }
 
@@ -122,7 +122,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
       setStudents(d.students);
     } catch (e) {
       setStudents([]);
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load students" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load students" });
     }
   }, []);
 
@@ -184,7 +184,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
   async function post(body: unknown) {
     const res = await fetch("/api/college/mentoring/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = (await res.json().catch(() => ({}))) as { assigned?: string[]; skipped?: { id: string; reason: string }[]; error?: string };
-    if (!res.ok) throw new Error(d.error || "Couldn't save the change");
+    if (!res.ok) throw new Error(d.error || "Unable to save the change");
     return d;
   }
 
@@ -204,7 +204,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
       loadMentors(sectionId);
       await loadStudents(sectionId);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't assign the students" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to assign the students" });
     } finally {
       setAssigning(false);
     }
@@ -219,7 +219,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
       await loadStudents(sectionId);
       onChanged();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not remove the mentor" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to remove the mentor" });
     } finally {
       setRemoving(false);
     }
@@ -368,7 +368,7 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
   useEffect(() => {
     getJson<{ sections: AssignSection[] }>("/api/college/mentoring/sections?for=view")
       .then((d) => setSections(d.sections))
-      .catch((e: Error) => toast({ variant: "destructive", title: `Could not load your classes: ${e.message}` }))
+      .catch((e: Error) => toast({ variant: "destructive", title: `Unable to load your classes: ${e.message}` }))
       .finally(() => setSectionsLoaded(true));
   }, []);
 

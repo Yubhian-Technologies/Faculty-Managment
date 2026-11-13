@@ -42,7 +42,7 @@ export default function NewDeptVacancyPage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to submit", description: json.error });
+        toast({ variant: "destructive", title: "Unable to submit", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Request submitted to HR Admin" });

@@ -13,7 +13,7 @@ export default function PanelMentoringPage() {
     fetch("/api/college/mentoring/my-mentees")
       .then(async (r) => {
         const d = (await r.json().catch(() => ({}))) as { students?: MenteeSummary[]; error?: string };
-        if (!r.ok) throw new Error(d.error || "Could not load your mentees");
+        if (!r.ok) throw new Error(d.error || "Unable to load your mentees");
         setStudents(d.students ?? []);
       })
       .catch((e: Error) => setError(e.message));

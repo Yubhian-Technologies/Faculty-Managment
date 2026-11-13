@@ -33,13 +33,13 @@ export function TeachingNowFilter({ scopeLabel = "in the college" }: { scopeLabe
       if (!res.ok || d.error) {
         // A non-working day is an answer, not a failure.
         if (res.status === 400) { setClasses(null); setAsOf(null); setMessage(d.error ?? ""); return; }
-        throw new Error(d.error ?? "Failed to load");
+        throw new Error(d.error ?? "Unable to load");
       }
       setClasses(d.classes ?? []);
       setAsOf(d.asOf ?? null);
     } catch (err) {
       setClasses(null);
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load classes" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load classes" });
     } finally {
       setIsLoading(false);
     }

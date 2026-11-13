@@ -24,9 +24,9 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/wrong-password": "Current password is incorrect.",
   "auth/invalid-credential": "Current password is incorrect.",
   "auth/weak-password": "New password is too weak - use at least 8 characters.",
-  "auth/requires-recent-login": "Please log out and log back in, then try again.",
-  "auth/too-many-requests": "Too many attempts. Please try again later.",
-  "auth/network-request-failed": "Network error. Please check your connection.",
+  "auth/requires-recent-login": "Log out and log back in, then try again.",
+  "auth/too-many-requests": "Too many attempts. Try again later.",
+  "auth/network-request-failed": "Network error. Check your connection.",
 };
 
 // Uncontrolled by default (renders its own "Change Password" button). Pass
@@ -63,7 +63,7 @@ export function ChangePasswordDialog({
   const onSubmit = async (data: ChangePasswordFormData) => {
     const currentUser = auth.currentUser;
     if (!currentUser?.email) {
-      toast({ variant: "destructive", title: "No active session", description: "Please log in again." });
+      toast({ variant: "destructive", title: "No active session", description: "Log in again." });
       return;
     }
     try {
@@ -79,8 +79,8 @@ export function ChangePasswordDialog({
       const code = (err as { code?: string }).code ?? "";
       toast({
         variant: "destructive",
-        title: "Failed to change password",
-        description: FIREBASE_ERROR_MESSAGES[code] ?? "Please try again.",
+        title: "Unable to change password",
+        description: FIREBASE_ERROR_MESSAGES[code] ?? "Try again.",
       });
     }
   };

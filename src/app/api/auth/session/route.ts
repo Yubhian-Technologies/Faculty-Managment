@@ -199,7 +199,7 @@ export async function POST(request: Request) {
     // email): a Firebase token issued before that moment must not mint a new session. The client signs out on this code.
     const validAfter = (profile as { sessionsValidAfter?: unknown } | null)?.sessionsValidAfter;
     if (typeof validAfter === "number" && decoded.iat < validAfter) {
-      const revoked = NextResponse.json({ error: "Your session was ended - please sign in again", code: "SESSION_REVOKED" }, { status: 401 });
+      const revoked = NextResponse.json({ error: "Your session was ended - sign in again", code: "SESSION_REVOKED" }, { status: 401 });
       revoked.cookies.delete({ name: "fms-session", path: "/" });
       return revoked;
     }

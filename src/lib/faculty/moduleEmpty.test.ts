@@ -52,12 +52,12 @@ describe("isModuleEmpty", () => {
 
 describe("emptyModuleMessage", () => {
   it("invites someone who can edit to enter the details", () => {
-    expect(emptyModuleMessage("academic", true).title).toBe("Please enter the academic details here.");
+    expect(emptyModuleMessage("academic", true).title).toBe("Enter the academic details here.");
   });
   it("only states the fact to someone who cannot edit", () => {
     const m = emptyModuleMessage("compensation", false);
     expect(m.title).toBe("No compensation details have been entered yet.");
-    expect(m.title).not.toMatch(/please/i);
+    expect(m.title).not.toMatch(/^Enter/);
   });
   it("every tab has a noun for the sentence", () => {
     for (const k of Object.keys(PROFILE_MODULES) as ProfileModuleKey[]) expect(PROFILE_MODULES[k].emptyNoun.length, k).toBeGreaterThan(2);

@@ -110,10 +110,10 @@ export async function GET() {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/departments GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -428,7 +428,7 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (err instanceof Error && err.message.startsWith("BRANCH_CLAIMED:")) {
       return NextResponse.json({ error: err.message.slice("BRANCH_CLAIMED:".length) }, { status: 409 });
@@ -436,7 +436,7 @@ export async function POST(request: Request) {
     const keyConflict = departmentKeyConflictMessage(err);
     if (keyConflict) return NextResponse.json({ error: keyConflict }, { status: 409 });
     console.error("[college/departments POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -454,7 +454,7 @@ export async function DELETE(request: Request) {
     const deptRef = db.collection("colleges").doc(collegeId).collection("departments").doc(deptId);
     const deptSnap = await deptRef.get();
     if (!deptSnap.exists) {
-      return NextResponse.json({ error: "Department not found" }, { status: 404 });
+      return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 404 });
     }
     const dept = deptSnap.data() as { name: string; code?: string; hodUid?: string; parentDepartmentId?: string; managedDepartments?: string[] };
 
@@ -629,10 +629,10 @@ export async function DELETE(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/departments DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -719,7 +719,7 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: "Only Principal/VP/Super Admin can retry a department rename sync" }, { status: 403 });
       }
       const snap = await deptRef.get();
-      if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
       const data = snap.data() as { name?: string; cascadeOldName?: string };
       if (!data.cascadeOldName || !data.name || data.cascadeOldName === data.name) {
         return NextResponse.json({ ok: true, cascade: { status: "DONE" as const } });
@@ -795,7 +795,7 @@ export async function PATCH(request: Request) {
     // for their own sub-departments (checked above).
     if (requestedHodUid !== undefined) {
       const deptForSeat = await deptRef.get();
-      if (!deptForSeat.exists) return NextResponse.json({ error: "Department not found" }, { status: 404 });
+      if (!deptForSeat.exists) return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 404 });
       if (session.role !== "HOD" && !canAssignSeat(session)) {
         return NextResponse.json({ error: "You can't assign this seat" }, { status: 403 });
       }
@@ -1267,7 +1267,7 @@ export async function PATCH(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (err instanceof Error && err.message.startsWith("BRANCH_CLAIMED:")) {
       return NextResponse.json({ error: err.message.slice("BRANCH_CLAIMED:".length) }, { status: 409 });
@@ -1275,6 +1275,6 @@ export async function PATCH(request: Request) {
     const keyConflict = departmentKeyConflictMessage(err);
     if (keyConflict) return NextResponse.json({ error: keyConflict }, { status: 409 });
     console.error("[college/departments PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

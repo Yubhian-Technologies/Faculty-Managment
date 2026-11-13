@@ -26,7 +26,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "from and to must be dates (YYYY-MM-DD)" }, { status: 400 });
     }
     if (from && to && from > to) {
-      return NextResponse.json({ error: "From date must be before the To date" }, { status: 400 });
+      return NextResponse.json({ error: "The From date must be before the To date." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -62,9 +62,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ subjects, rows });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/topics-covered GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

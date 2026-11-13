@@ -118,7 +118,7 @@ export function LocationStaffForm({
 
     if (reportAtLocationId === "__none__") newErrors.reportAtLocationId = "Select the gate this staff member must report to";
 
-    if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Please select Payee Type";
+    if (!payeeType || payeeType === "__none__") newErrors.payeeType = "Select Payee Type";
 
     if (payeeType === "Account Payee") {
       if (!accountNumber.trim()) newErrors.accountNumber = "Account Number is required for Account Payee";
@@ -128,8 +128,8 @@ export function LocationStaffForm({
       else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode.trim())) newErrors.ifscCode = "Invalid IFSC code format";
     }
 
-    if (!role) newErrors.role = "Please select a role / designation";
-    else if (role === "OTHER" && !customRole.trim()) newErrors.role = "Please specify the custom role title";
+    if (!role) newErrors.role = "Select a role / designation";
+    else if (role === "OTHER" && !customRole.trim()) newErrors.role = "Specify the custom role title";
 
     if (spouseGuardianPhone.trim() && !/^[6-9]\d{9}$/.test(spouseGuardianPhone.trim())) {
       newErrors.spouseGuardianPhone = "Spouse/guardian phone must be a valid 10-digit number";
@@ -151,7 +151,7 @@ export function LocationStaffForm({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Photo upload failed");
       setPhotoUrl(data.url);
-      toast({ title: "Photo saved successfully" });
+      toast({ title: "Photo saved" });
     } catch (err: unknown) {
       toast({
         variant: "destructive",
@@ -178,7 +178,7 @@ export function LocationStaffForm({
       accountNumber: true, branchName: true, ifscCode: true, reportAtLocationId: true,
     });
     if (!validate()) {
-      toast({ variant: "destructive", title: "Validation Error", description: "Please fix the highlighted errors before submitting." });
+      toast({ variant: "destructive", title: "Validation Error", description: "Fix the highlighted errors before submitting." });
       return;
     }
 
@@ -219,8 +219,8 @@ export function LocationStaffForm({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to add staff member");
-      toast({ title: "Staff Member Registered", description: `Successfully added ${name}.` });
+      if (!res.ok) throw new Error(data.error || "Unable to add staff member");
+      toast({ title: "Staff Member Registered", description: `Added ${name}.` });
       onSuccess(data as LocationStaffMember);
     } catch (err: unknown) {
       toast({ variant: "destructive", title: "Registration failed", description: err instanceof Error ? err.message : "Registration failed" });

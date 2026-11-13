@@ -59,13 +59,13 @@ export default function NewCollegePage() {
       });
       const json = await res.json() as { collegeId?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create college", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create college", description: json.error });
         return;
       }
       toast({ variant: "success", title: "College created", description: `ID: ${json.collegeId}` });
       router.push("/super-admin/colleges");
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }

@@ -164,7 +164,7 @@ function PrincipalFacultyContent() {
 
       const res = await fetch(`/api/college/faculty?${params.toString()}`, { signal: ctrl.signal });
       const data = await res.json() as { faculty?: FacultyRow[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load faculty");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load faculty");
 
       setFaculty(data.faculty ?? []);
       setHasLoaded(true);
@@ -174,8 +174,8 @@ function PrincipalFacultyContent() {
       if ((err as Error)?.name === "AbortError") return;
       toast({
         variant: "destructive",
-        title: "Failed to load faculty",
-        description: err instanceof Error ? err.message : "Network error - please try again",
+        title: "Unable to load faculty",
+        description: err instanceof Error ? err.message : "Network error - try again",
       });
     } finally {
       setIsLoading(false);
@@ -230,7 +230,7 @@ function PrincipalFacultyContent() {
       const res = await fetch(`/api/college/faculty/${deleteTarget.id}`, { method: "DELETE" });
       const json = await res.json().catch(() => ({})) as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to delete faculty record", description: json.error });
+        toast({ variant: "destructive", title: "Unable to delete faculty record", description: json.error });
         return;
       }
       toast({ variant: "success", title: `${facultyDisplayName(deleteTarget)} removed from faculty register` });
@@ -244,7 +244,7 @@ function PrincipalFacultyContent() {
       });
       setFaculty((prev) => prev.filter((f) => f.id !== deletedId));
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete faculty record", description: "Network error - please try again." });
+      toast({ variant: "destructive", title: "Unable to delete faculty record", description: "Network error - try again." });
     } finally {
       setIsDeleting(false);
     }
@@ -256,7 +256,7 @@ function PrincipalFacultyContent() {
     try {
       await downloadFacultyResume(row, collegeName, sections);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to generate resume" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to generate resume" });
     } finally {
       setDownloadingResumeId(null);
       setResumeTarget(null);

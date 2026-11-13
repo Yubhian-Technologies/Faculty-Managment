@@ -634,7 +634,7 @@ function FieldInputBody({ field, values, onChange, departments, courseNames, cou
           <Input
             value={value === "OTHER" ? "" : value}
             onChange={(e) => onChange(field.key, e.target.value || "OTHER")}
-            placeholder="Please specify"
+            placeholder="Specify"
           />
         )}
       </div>
@@ -673,7 +673,7 @@ function FieldInputBody({ field, values, onChange, departments, courseNames, cou
           <Input
             value={value === "OTHER" ? "" : value}
             onChange={(e) => onChange(field.key, e.target.value || "OTHER")}
-            placeholder="Please specify"
+            placeholder="Specify"
           />
         )}
       </div>

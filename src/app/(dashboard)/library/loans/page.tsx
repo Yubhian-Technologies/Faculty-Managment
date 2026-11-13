@@ -46,7 +46,7 @@ export default function LibraryLoansPage() {
       setBooks(booksJson.books ?? []);
       setStudents(studentsJson.students ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load loans" });
+      toast({ variant: "destructive", title: "Unable to load loans" });
     } finally {
       setIsLoading(false);
     }
@@ -72,7 +72,7 @@ export default function LibraryLoansPage() {
       });
       const json = (await res.json()) as { ok?: boolean; error?: string; code?: string };
       if (!res.ok || !json.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to record loan" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to record loan" });
         return;
       }
       toast({ variant: "success", title: "Book issued" });
@@ -81,7 +81,7 @@ export default function LibraryLoansPage() {
       setSelectedBookId("");
       void loadAll();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsSaving(false);
     }
@@ -92,7 +92,7 @@ export default function LibraryLoansPage() {
       const res = await fetch(`/api/college/library/loans/${loan.id}/return`, { method: "PATCH" });
       const json = (await res.json()) as { ok?: boolean; error?: string; fineAmount?: number };
       if (!res.ok || !json.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to return book" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to return book" });
         return;
       }
       toast({
@@ -102,7 +102,7 @@ export default function LibraryLoansPage() {
       });
       void loadAll();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     }
   }
 
@@ -111,13 +111,13 @@ export default function LibraryLoansPage() {
       const res = await fetch(`/api/college/library/loans/${loan.id}/renew`, { method: "PATCH" });
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to renew loan" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to renew loan" });
         return;
       }
       toast({ variant: "success", title: "Loan renewed" });
       void loadAll();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     }
   }
 

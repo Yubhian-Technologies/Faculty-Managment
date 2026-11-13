@@ -69,7 +69,7 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
         const deptJson = await deptRes.json() as { departments?: Department[] };
         setDepartments(deptJson.departments ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load departments" });
+        toast({ variant: "destructive", title: "Unable to load departments" });
       } finally {
         setIsLoadingOptions(false);
       }
@@ -87,10 +87,10 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
       try {
         const res = await fetch(`/api/college/faculty-schedule?departmentId=${encodeURIComponent(departmentId)}`);
         const json = await res.json() as { faculty?: { id: string; name: string }[]; error?: string };
-        if (!res.ok) throw new Error(json.error ?? "Failed to load faculty");
+        if (!res.ok) throw new Error(json.error ?? "Unable to load faculty");
         setFacultyOptions(json.faculty ?? []);
       } catch (err) {
-        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load faculty" });
+        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load faculty" });
         setFacultyOptions([]);
       } finally {
         setIsLoadingFaculty(false);
@@ -106,10 +106,10 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
       try {
         const res = await fetch(`/api/college/faculty-schedule?${ownOnly ? "me=1" : `facultyId=${encodeURIComponent(facultyId)}`}`);
         const json = await res.json() as { facultyName?: string; slots?: ScheduleSlot[]; periods?: PeriodTiming[]; error?: string };
-        if (!res.ok) throw new Error(json.error ?? "Failed to load schedule");
+        if (!res.ok) throw new Error(json.error ?? "Unable to load schedule");
         setSchedule({ facultyName: json.facultyName ?? "", slots: json.slots ?? [], periods: json.periods ?? [] });
       } catch (err) {
-        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load schedule" });
+        toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load schedule" });
         setSchedule(null);
       } finally {
         setIsLoadingSchedule(false);

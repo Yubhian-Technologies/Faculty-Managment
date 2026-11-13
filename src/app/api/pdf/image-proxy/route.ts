@@ -14,7 +14,7 @@ const ALLOWED_HOSTS = new Set(["firebasestorage.googleapis.com"]);
 
 export async function GET(request: Request) {
   const session = await verifySession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
   const target = searchParams.get("url");

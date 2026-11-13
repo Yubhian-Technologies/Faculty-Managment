@@ -15,7 +15,7 @@ const content = (moduleKey: ProfileModuleKey, faculty: unknown, extra: Record<st
 describe("EmptyModuleState", () => {
   it("asks for the details and offers an Edit button that goes to the edit page", () => {
     const html = renderToStaticMarkup(createElement(EmptyModuleState, { moduleKey: "qualification", editHref: "/hod/faculty/f1/qualification/edit" }));
-    expect(html).toContain("Please enter the academic details here.");
+    expect(html).toContain("Enter the academic details here.");
     expect(html).toContain('href="/hod/faculty/f1/qualification/edit"');
     expect(html).toContain("Edit");
   });
@@ -24,7 +24,7 @@ describe("EmptyModuleState", () => {
     const html = renderToStaticMarkup(createElement(EmptyModuleState, { moduleKey: "financial" }));
     expect(html).toContain("No compensation details have been entered yet.");
     expect(html).not.toContain("<a ");
-    expect(html).not.toMatch(/please enter/i);
+    expect(html).not.toMatch(/Enter the academic/);
   });
 });
 
@@ -36,7 +36,7 @@ describe("a tab with nothing entered", () => {
       const html = content(tab, empty, { editHref: `/x/${tab}/edit`, ratificationHistory: true });
       expect(html, tab).toContain('data-testid="empty-module-state"');
       expect(html, tab).toContain(`href="/x/${tab}/edit"`);
-      expect(html, tab).toContain("Please enter the");
+      expect(html, tab).toContain("Enter the");
     }
   });
 
@@ -53,7 +53,7 @@ describe("a tab with nothing entered", () => {
   it("a view-only page (no edit link) shows the plain sentence with no button", () => {
     const html = content("others", empty);
     expect(html).toContain("No additional information details have been entered yet.");
-    expect(html).not.toContain("Please enter");
+    expect(html).not.toContain("Enter the ");
   });
 });
 

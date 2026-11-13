@@ -36,7 +36,7 @@ export function ActionQueueView({ scope }: { scope: "active" | "past" }) {
     fetch("/api/college/hiring-batches")
       .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
       .then((d) => setBatches(d.batches ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring batches" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring batches" }))
       .finally(() => setIsLoading(false));
   }
 

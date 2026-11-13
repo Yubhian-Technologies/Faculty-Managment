@@ -30,7 +30,7 @@ export default function SemesterResultsPage() {
     fetch("/api/college/exam-results/batches")
       .then((r) => r.json() as Promise<{ batches?: ExamResultBatch[] }>)
       .then((d) => setBatches(d.batches ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load results" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load results" }))
       .finally(() => setIsLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);

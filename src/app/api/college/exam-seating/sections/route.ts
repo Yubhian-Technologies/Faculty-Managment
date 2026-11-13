@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     if (sectionId) {
       const db = getAdminDb();
       const one = await db.collection("colleges").doc(session.collegeId).collection("sections").doc(sectionId).get();
-      if (!one.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      if (!one.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
       const students = await loadSectionStudents(db, session.collegeId, { id: one.id, ...one.data() } as Section);
       return NextResponse.json({ students });
     }
@@ -47,9 +47,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ sections });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[exam-seating/sections GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

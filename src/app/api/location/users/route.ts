@@ -14,15 +14,15 @@ const SINGLETON_ROLES: UserRole[] = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_
 export async function GET(request: Request) {
   try {
     const session = await verifySession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") ?? session.locationId;
 
-    if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
+    if (!locationId) return NextResponse.json({ error: "Select a location." }, { status: 400 });
 
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
 
     const db = getAdminDb();
@@ -41,17 +41,17 @@ export async function GET(request: Request) {
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[location/users GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const session = await verifySession();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
 
     const isAdmin = session.role === "SUPER_ADMIN" || session.role === "ADMINISTRATION";
-    if (!isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!isAdmin) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
 
     const body = (await readJsonBody(request)) as {
       name: string;
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     } = body;
 
     if (!name || !mobile || !password || !role || !locationId) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "Fill in all required fields." }, { status: 400 });
     }
     if (!/^[6-9]\d{9}$/.test(mobile.trim())) {
       return NextResponse.json({ error: "Valid 10-digit mobile number required" }, { status: 400 });
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Enter a valid email - it is the sign-in for this account" }, { status: 400 });
     }
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
     }
 
     // Administration can only create location-scoped non-admin roles
@@ -179,16 +179,16 @@ export async function POST(request: Request) {
       err && typeof err === "object" && "code" in err &&
       (err as { code: string }).code === "auth/email-already-exists"
     ) {
-      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+      return NextResponse.json({ error: "An account with this email address already exists." }, { status: 409 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     // Firebase refused to create the sign-in (e.g. INVALID_EMAIL, OPERATION_NOT_ALLOWED): say so instead of a bare 500.
     if (err && typeof err === "object" && (err as { code?: string }).code === "auth/create-failed") {
       console.error("[location/users POST] Firebase sign-up refused:", (err as Error).message);
-      return NextResponse.json({ error: `Couldn't create the sign-in (${(err as Error).message})` }, { status: 400 });
+      return NextResponse.json({ error: `Unable to create the sign-in (${(err as Error).message})` }, { status: 400 });
     }
     console.error("[location/users POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

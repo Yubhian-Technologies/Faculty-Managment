@@ -75,11 +75,11 @@ export async function POST(request: Request) {
     let deptName = "";
     if (body.departmentId) {
       const deptSnap = await collegeRef.collection("departments").doc(body.departmentId).get();
-      if (!deptSnap.exists) return NextResponse.json({ error: "Department not found" }, { status: 400 });
+      if (!deptSnap.exists) return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 400 });
       deptName = (deptSnap.data() as { name?: string }).name ?? "";
     } else if (body.department?.trim()) {
       const deptSnap = await collegeRef.collection("departments").where("name", "==", body.department.trim()).limit(1).get();
-      if (deptSnap.empty) return NextResponse.json({ error: "Department not found" }, { status: 400 });
+      if (deptSnap.empty) return NextResponse.json({ error: "Department not found. It may have been deleted." }, { status: 400 });
       deptName = (deptSnap.docs[0].data() as { name?: string }).name ?? body.department.trim();
     } else {
       return NextResponse.json({ error: "department or departmentId is required" }, { status: 400 });
@@ -392,9 +392,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/students/distribute POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

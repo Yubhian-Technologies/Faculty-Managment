@@ -18,7 +18,7 @@ export async function GET(_request: Request, { params }: Params) {
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(collegeId);
     const collegeSnap = await collegeRef.get();
-    if (!collegeSnap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!collegeSnap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
 
     const snap = await collegeRef.collection("vacancyRequests").where("status", "==", "APPROVED").get();
     // Only what the page shows - never the requester or internal notes.
@@ -29,7 +29,7 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ college: { id: collegeSnap.id, name: collegeSnap.get("name") ?? "" }, openings });
   } catch (err) {
     console.error("[public/careers GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: Params) {
   const { collegeId } = await params;
   const limited = rateLimit(`careers-apply:${clientIp(request)}`, 20, 3600000);
   if (!limited.ok) {
-    return NextResponse.json({ error: "Too many requests - please try again later" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+    return NextResponse.json({ error: "Too many requests. Wait a moment and try again." }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
   }
   try {
     const body = (await readJsonBody(request)) as { vacancyRequestId?: string; resumeUrl?: string } & Record<string, unknown>;
@@ -98,6 +98,6 @@ export async function POST(request: Request, { params }: Params) {
     const bad = badBodyResponse(err);
     if (bad) return bad;
     console.error("[public/careers POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

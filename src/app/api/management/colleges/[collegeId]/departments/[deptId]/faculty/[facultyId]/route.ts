@@ -17,7 +17,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
     const snap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
 
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const faculty = { id: snap.id, ...migrateFacultyDoc(snap.data() ?? {}) } as { userUid?: string };
@@ -34,9 +34,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
     });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[management/departments/faculty/[facultyId] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -42,7 +42,7 @@ export default function AdminInterviewsPage() {
     fetch(url)
       .then((r) => r.json() as Promise<{ interviews: LocationInterview[] }>)
       .then((d) => setInterviews(d.interviews ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 

@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "HOD", "PANEL_MEMBER", "COLLEGE_OFFICE", "COLLEGE_STAFF", "DEAN", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "LIBRARY", "EXAM_CELL", "WEBMASTER", "COLLEGE_ACCOUNTS");
     const formData = await request.formData();
     const file = formData.get("file");
-    if (!file || typeof file === "string") return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    if (!file || typeof file === "string") return NextResponse.json({ error: "Select a file to upload." }, { status: 400 });
     if (file.type && !ALLOWED_TYPES.includes(file.type) && file.type !== "application/octet-stream") {
       if (!file.type.startsWith("image/") && !file.type.includes("pdf") && !file.type.includes("word")) {
         return NextResponse.json({ error: "Only PDF, DOC, images allowed" }, { status: 400 });
@@ -40,8 +40,8 @@ export async function POST(request: Request) {
     const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodedPath}?alt=media&token=${downloadToken}`;
     return NextResponse.json({ url, fileName: (file as File).name }, { status: 200 });
   } catch (err) {
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[upload/circular POST]", err);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to upload the file. Try again." }, { status: 500 });
   }
 }

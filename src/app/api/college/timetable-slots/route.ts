@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const sectionId = searchParams.get("sectionId");
     if (!sectionId) {
-      return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a section." }, { status: 400 });
     }
     // Optional - the Timetable editor's own semester picker, or Timetable
     // History browsing a semester other than whichever is live today.
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
-    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
     const section = sectionSnap.data() as { courseId: string; year: number };
     // A master subject is filed under whichever department's Course doc created it, but is meant
     // to be shared by every sibling department on the same Course Catalog entry (see
@@ -158,10 +158,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/timetable-slots GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -198,7 +198,7 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const assignmentSnap = await collegeRef.collection("teachingAssignments").doc(assignmentId).get();
-    if (!assignmentSnap.exists) return NextResponse.json({ error: "Teaching assignment not found" }, { status: 404 });
+    if (!assignmentSnap.exists) return NextResponse.json({ error: "Teaching assignment not found. It may have been deleted." }, { status: 404 });
     const assignmentData = assignmentSnap.data() as {
       facultyId: string; facultyName: string; courseId?: string; year?: number;
       sectionId?: string; subjectId: string; subjectName: string; department: string;
@@ -231,7 +231,7 @@ export async function POST(request: Request) {
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const ok = await isTimetableIncharge(db, session.collegeId, session.uid, assignment.courseId, assignment.year);
       if (!ok) {
-        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course and year." }, { status: 403 });
       }
     }
 
@@ -306,9 +306,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/timetable-slots POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

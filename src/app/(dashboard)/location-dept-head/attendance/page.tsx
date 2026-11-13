@@ -110,7 +110,7 @@ export default function LocationDeptAttendancePage() {
       })
       .catch(() => {
         if (!isCancelled) {
-          toast({ variant: "destructive", title: "Failed to load attendance" });
+          toast({ variant: "destructive", title: "Unable to load attendance" });
         }
       })
       .finally(() => {
@@ -168,7 +168,7 @@ export default function LocationDeptAttendancePage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to check in");
+      if (!res.ok) throw new Error(data.error || "Unable to check in");
 
       if (data.record?.isLate) {
         toast({
@@ -182,7 +182,7 @@ export default function LocationDeptAttendancePage() {
       setCheckInPromptId(null);
       reload();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to check in";
+      const msg = err instanceof Error ? err.message : "Unable to check in";
       toast({ variant: "destructive", title: "Check-in failed", description: msg });
     } finally {
       setActionLoadingId(null);
@@ -203,12 +203,12 @@ export default function LocationDeptAttendancePage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to check out");
+      if (!res.ok) throw new Error(data.error || "Unable to check out");
 
       toast({ title: "Checked out", description: `Time recorded: ${data.record.checkOutTime}` });
       reload();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to check out";
+      const msg = err instanceof Error ? err.message : "Unable to check out";
       toast({ variant: "destructive", title: "Check-out failed", description: msg });
     } finally {
       setActionLoadingId(null);
@@ -230,7 +230,7 @@ export default function LocationDeptAttendancePage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to set status");
+      if (!res.ok) throw new Error(data.error || "Unable to set status");
 
       toast({ title: "Status updated", description: `Marked as ${status}` });
       reload();

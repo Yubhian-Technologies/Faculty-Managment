@@ -90,7 +90,7 @@ export function approve<P>(
 /** Rejects at the current stage. A reason is required so the requester learns why. */
 export function reject<P>(req: ApprovalRequest<P>, actor: Actor, at: string, remark: string): ApprovalRequest<P> {
   const stage = requirePending(req);
-  if (!remark?.trim()) throw new ApprovalError("REMARK_REQUIRED", "Please give a reason for rejecting");
+  if (!remark?.trim()) throw new ApprovalError("REMARK_REQUIRED", "Give a reason for rejecting");
   return {
     ...req, ...stamp(req, at), status: "REJECTED", pendingKey: null, escalateAt: null, decidedAt: at,
     history: [...req.history, event("REJECT", actor, at, stage, remark)],
@@ -106,7 +106,7 @@ export function cancel<P>(req: ApprovalRequest<P>, actor: Actor, at: string, rem
 /** Takes back an already-APPROVED request (its effects are undone by the kind). */
 export function revoke<P>(req: ApprovalRequest<P>, actor: Actor, at: string, remark: string): ApprovalRequest<P> {
   if (req.status !== "APPROVED") throw new ApprovalError("NOT_APPROVED", "Only an approved request can be revoked", 409);
-  if (!remark?.trim()) throw new ApprovalError("REMARK_REQUIRED", "Please give a reason for revoking");
+  if (!remark?.trim()) throw new ApprovalError("REMARK_REQUIRED", "Give a reason for revoking");
   return { ...req, ...stamp(req, at), status: "REVOKED", pendingKey: null, history: [...req.history, event("REVOKE", actor, at, req.chain[req.chain.length - 1], remark)] };
 }
 

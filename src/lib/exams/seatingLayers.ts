@@ -86,7 +86,7 @@ export function moveStudentLayered(
 ): { rooms: SeatingRoomAllocation[] } | { error: string } {
   const source = rooms.find((r) => r.students.some((s) => s.id === studentId));
   const student = source?.students.find((s) => s.id === studentId);
-  if (!source || !student) return { error: "Student not found" };
+  if (!source || !student) return { error: "Student not found. The record may have been deleted." };
   if (source.roomId === targetRoomId) return { rooms };
   const target = rooms.find((r) => r.roomId === targetRoomId);
   if (!target) return { error: "Room not found" };

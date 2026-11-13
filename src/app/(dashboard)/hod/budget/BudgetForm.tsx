@@ -98,14 +98,14 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to submit budget request");
+        throw new Error(err.error ?? "Unable to submit budget request");
       }
 
       toast({ variant: "success", title: editingRequest ? "Budget request resubmitted" : "Budget request submitted" });
       resetForm();
       onSaved();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }

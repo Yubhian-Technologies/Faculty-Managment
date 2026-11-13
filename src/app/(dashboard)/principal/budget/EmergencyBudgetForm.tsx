@@ -94,13 +94,13 @@ export function EmergencyBudgetForm({ editingRequest, onCancel, onSaved }: Emerg
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to submit emergency budget request");
+        throw new Error(err.error ?? "Unable to submit emergency budget request");
       }
 
       toast({ variant: "success", title: editingRequest ? "Emergency request resubmitted" : "Emergency request submitted to Management" });
       onSaved();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }

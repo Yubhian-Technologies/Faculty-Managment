@@ -36,7 +36,7 @@ export default function NewEmailRequestPage() {
         setFaculty(facultyRes.faculty ?? []);
         setExistingRequests(requestsRes.requests ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load faculty" });
+        toast({ variant: "destructive", title: "Unable to load faculty" });
       } finally {
         setIsLoading(false);
       }
@@ -74,12 +74,12 @@ export default function NewEmailRequestPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to submit request");
+        throw new Error(err.error ?? "Unable to submit request");
       }
       toast({ variant: "success", title: "Request sent to Webmaster" });
       router.push("/college-office/email-requests");
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit request", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit request", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }

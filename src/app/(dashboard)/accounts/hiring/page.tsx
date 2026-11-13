@@ -99,7 +99,7 @@ export default function AccountsHiringPage() {
         // A REJECTED offer shouldn't block a fresh one being sent.
         setExistingLetterIds(new Set((lRes.letters ?? []).filter((l) => l.status !== "REJECTED").map((l) => l.candidateId)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -183,7 +183,7 @@ export default function AccountsHiringPage() {
         }),
       });
       const data = await res.json() as { error?: string; ccEmails?: string[] };
-      if (!res.ok) throw new Error(data.error ?? "Failed to send offer");
+      if (!res.ok) throw new Error(data.error ?? "Unable to send offer");
 
       const letterFields = {
         candidateName: selected?.name ?? "",
@@ -209,7 +209,7 @@ export default function AccountsHiringPage() {
 
 Greetings from ${institution}.
 
-We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${formatDate(new Date(joiningDate))}. Please find your offer letter attached.
+We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${formatDate(new Date(joiningDate))}. Find your offer letter attached.
 ${coordinatorBlock}
 Congratulations, and welcome aboard!
 
@@ -229,7 +229,7 @@ ${institution}`;
       setSelected(null);
     } catch (err) {
       mailWindow?.close();
-      toast({ variant: "destructive", title: "Failed to send offer", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to send offer", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }

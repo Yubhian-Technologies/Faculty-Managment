@@ -51,7 +51,7 @@ export function MidPaperTemplateCard() {
     fetch("/api/college/mid-paper-templates")
       .then((r) => r.json() as Promise<{ templates?: MidPaperTemplate[]; regulationsByCourse?: Record<string, string[]> }>)
       .then((d) => { setTemplates(d.templates ?? []); setRegulationsByCourse(d.regulationsByCourse ?? {}); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the question paper templates" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the question paper templates" }));
   }
   useEffect(() => {
     load();
@@ -82,12 +82,12 @@ export function MidPaperTemplateCard() {
         body: JSON.stringify({ courseKey, courseName: group.name, regulation: regulation || "ALL", sequences, units, instruction, maxMarks: maxMarks || null, regdBoxes: regdBoxes || DEFAULT_REGD_BOXES }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: `Question paper template saved for ${group.name}${regulation ? ` (${regulation})` : ""}` });
       reset();
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -96,7 +96,7 @@ export function MidPaperTemplateCard() {
   async function remove() {
     if (!deleting) return;
     const res = await fetch(`/api/college/mid-paper-templates?id=${encodeURIComponent(deleting.id)}`, { method: "DELETE" });
-    if (!res.ok) toast({ variant: "destructive", title: "Failed to delete" });
+    if (!res.ok) toast({ variant: "destructive", title: "Unable to delete" });
     setDeleting(null);
     load();
   }

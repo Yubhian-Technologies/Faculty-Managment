@@ -58,7 +58,7 @@ export function AssignPanel({ overview, onChanged, initialSlot }: { overview: Ov
     fetch(`/api/college/invigilation/schedules/${schedule.id}/candidates?${qs}`, { cache: "no-store" })
       .then((r) => r.json() as Promise<{ candidates?: CandidateRow[]; error?: string }>)
       .then((d) => { if (!cancelled) { if (d.error) throw new Error(d.error); setRows(d.candidates ?? []); } })
-      .catch((e) => { if (!cancelled) { setRows([]); toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load faculty" }); } })
+      .catch((e) => { if (!cancelled) { setRows([]); toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load faculty" }); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [schedule.id, slotKey, replacing, reloadKey]);
@@ -85,14 +85,14 @@ export function AssignPanel({ overview, onChanged, initialSlot }: { overview: Ov
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = (await res.json()) as { saved?: number; results?: { facultyId: string; ok: boolean; error?: string }[]; error?: string };
       const failed = data.results?.filter((x) => !x.ok) ?? [];
-      if (!res.ok && !data.saved) throw new Error(failed[0]?.error ?? data.error ?? "Could not save");
+      if (!res.ok && !data.saved) throw new Error(failed[0]?.error ?? data.error ?? "Unable to save");
       if (data.saved !== undefined) toast({ variant: failed.length ? "destructive" : "success", title: `${data.saved} assigned${failed.length ? `, ${failed.length} refused: ${failed[0].error}` : ""}` });
       else toast({ variant: "success", title: "Saved" });
       setPicked([]); setReason(""); setReasonOpen(false); setReplacing(null);
       setReloadKey((k) => k + 1);
       onChanged();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setBusy(false);
     }

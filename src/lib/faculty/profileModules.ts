@@ -22,7 +22,7 @@ export interface ProfileModuleDef {
   icon: LucideIcon;
   // The line shown under the tab's heading, saying what belongs in it. Absent = no line.
   description?: string;
-  // What to call the tab's details in a sentence ("Please enter the academic details here"). Display text only.
+  // What to call the tab's details in a sentence ("Enter the academic details here"). Display text only.
   emptyNoun: string;
 }
 

@@ -66,7 +66,7 @@ export default function LibraryBooksImportPage() {
       setRows(parsed);
       setFileName(file.name);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to read file" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to read file" });
     } finally {
       setIsParsing(false);
     }
@@ -91,7 +91,7 @@ export default function LibraryBooksImportPage() {
         toast({ variant: "success", title: `${json.created} book${json.created === 1 ? "" : "s"} added to the catalog` });
       }
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsImporting(false);
     }

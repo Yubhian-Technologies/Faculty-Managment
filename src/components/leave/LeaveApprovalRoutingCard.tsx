@@ -61,7 +61,7 @@ export function LeaveApprovalRoutingCard() {
         for (const role of ROUTABLE_REQUESTER_ROLES) full[role] = saved[role] ?? defaultApproverStage(role);
         setRouting(full);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave routing" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave routing" }))
       .finally(() => setIsLoading(false));
     loadHistory();
   }, []);
@@ -76,7 +76,7 @@ export function LeaveApprovalRoutingCard() {
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to save");
+        throw new Error(j.error ?? "Unable to save");
       }
       toast({ variant: "success", title: "Leave approval routing saved" });
       // Refreshed right away, not just on next page load, so whoever's
@@ -84,7 +84,7 @@ export function LeaveApprovalRoutingCard() {
       // in the history immediately.
       loadHistory();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }

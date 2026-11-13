@@ -9,7 +9,7 @@ import { toast } from "@/hooks/useToast";
 const POLL_MS = 60_000;
 
 /** Ends this browser's session: server cookie, Firebase sign-in and the local store. */
-export async function endSessionNow(message = "Your session was ended - please sign in again."): Promise<void> {
+export async function endSessionNow(message = "Your session was ended - sign in again."): Promise<void> {
   toast({ variant: "destructive", title: message });
   try { await fetch("/api/auth/session", { method: "DELETE" }); } catch { /* best effort */ }
   try { await signOut(auth); } catch { /* best effort */ }
@@ -31,7 +31,7 @@ export function useSessionRevocationWatch(enabled: boolean): void {
         const body = (await res.json().catch(() => ({}))) as { code?: string };
         if (body.code === "SESSION_REVOKED" && !stopped) {
           stopped = true;
-          await endSessionNow("Your login details were changed - please sign in again.");
+          await endSessionNow("Your login details were changed - sign in again.");
         }
       } catch { /* offline / transient - try again next time */ }
     }

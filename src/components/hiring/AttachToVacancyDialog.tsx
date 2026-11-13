@@ -67,7 +67,7 @@ export function AttachToVacancyDialog({
         setVacancies(allVacancies.filter((v) => v.requiredCount > 0 && !completedVacancyIds.has(v.id)));
         setActiveApplication(applications.find((a) => a.status !== "REJECTED") ?? null);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring requests" }))
       .finally(() => setIsLoading(false));
   }, [open, candidateId]);
 
@@ -86,7 +86,7 @@ export function AttachToVacancyDialog({
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to attach", description: json.error });
+        toast({ variant: "destructive", title: "Unable to attach", description: json.error });
         return;
       }
       toast({ variant: "success", title: `${candidateName} attached to the hiring request` });

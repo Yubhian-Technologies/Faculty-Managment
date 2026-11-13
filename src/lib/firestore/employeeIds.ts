@@ -101,7 +101,7 @@ export async function nextEmployeeId(db: Firestore, collegeId: string): Promise<
     const candidate = formatEmployeeId(claimed);
     if (!(await employeeIdTaken(db, collegeId, candidate)).taken) return candidate;
   }
-  throw new Error("Could not allocate an employee ID - too many are already in use");
+  throw new Error("Unable to allocate an employee ID - too many are already in use");
 }
 
 /**

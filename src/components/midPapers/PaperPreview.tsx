@@ -43,7 +43,7 @@ export function PaperPreviewButton({ detail, initialSet = 1, size = "sm" }: { de
         const data = paperSetData(detail, set);
         if (!off) { setHtml(joinPaperHtmls(paperSetHtmls({ ...data, exam: { academicYear: info.academicYear, ...data.exam }, college, formula }))); setError(""); }
       })
-      .catch(() => { if (!off) setError("Couldn't build the preview"); });
+      .catch(() => { if (!off) setError("Unable to build the preview"); });
     return () => { off = true; };
   }, [open, set, detail]);
 

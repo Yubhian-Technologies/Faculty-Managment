@@ -88,7 +88,7 @@ function MidSettings() {
           setPrintPo(data.settings.printPo === true);
         }
       } catch {
-        toast({ variant: "destructive", title: "Failed to load settings" });
+        toast({ variant: "destructive", title: "Unable to load settings" });
       } finally {
         setIsLoading(false);
       }
@@ -109,11 +109,11 @@ function MidSettings() {
         body: JSON.stringify({ midCount: count, midPreparation: preparation, midAssignment: assignment, outcomes, printPo }),
       });
       const data = (await res.json()) as { settings?: ExamMidSettings; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       setSettings(data.settings ?? null);
       toast({ variant: "success", title: "Settings saved" });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }

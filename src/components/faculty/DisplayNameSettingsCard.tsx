@@ -29,7 +29,7 @@ export function DisplayNameSettingsCard() {
       .then((d) => { setPlaces(d.places ?? []); setSurfaces(d.surfaces ?? {}); setFilled(typeof d.filled === "number" ? d.filled : null); })
       .catch((err) => {
         if ((err as Error)?.name === "AbortError") return;
-        toast({ variant: "destructive", title: "Failed to load display name settings" });
+        toast({ variant: "destructive", title: "Unable to load display name settings" });
       })
       .finally(() => setIsLoading(false));
     return () => ctrl.abort();
@@ -62,7 +62,7 @@ export function DisplayNameSettingsCard() {
       toast({ variant: "success", title: "Saved", description: on ? "Display names will be used there." : "The usual name will be used there." });
     } catch (err) {
       setSurfaces(before);
-      toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error && err.message ? err.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }

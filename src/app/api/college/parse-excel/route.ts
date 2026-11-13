@@ -44,9 +44,9 @@ export async function POST(request: Request) {
     return NextResponse.json(readSheet(sheet));
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/parse-excel POST]", err);
-    return NextResponse.json({ error: "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." }, { status: 400 });
+    return NextResponse.json({ error: "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." }, { status: 400 });
   }
 }

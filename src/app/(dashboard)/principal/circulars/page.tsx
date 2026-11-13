@@ -37,14 +37,14 @@ export default function PrincipalCircularsPage() {
   async function saveSettings() {
     const opts = messageFromOptions;
     const res = await fetch("/api/college/circular-settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageFromOptions: opts }) });
-    if (!res.ok) toast({ variant: "destructive", title: "Failed to save settings" });
+    if (!res.ok) toast({ variant: "destructive", title: "Unable to save settings" });
     else toast({ variant: "success", title: "Settings saved" });
   }
   async function savePerms() {
     const uids = allowedUids.split(",").map((s) => s.trim()).filter(Boolean);
     const roles = allowedRoles.split(",").map((s) => s.trim()).filter(Boolean);
     const res = await fetch("/api/college/circular-permissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allowedUids: uids, allowedRoles: roles }) });
-    if (!res.ok) toast({ variant: "destructive", title: "Failed to save permissions" });
+    if (!res.ok) toast({ variant: "destructive", title: "Unable to save permissions" });
     else toast({ variant: "success", title: "Permissions saved" });
   }
 

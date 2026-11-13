@@ -61,7 +61,7 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
           )
         );
       } catch {
-        toast({ variant: "destructive", title: "Failed to load section" });
+        toast({ variant: "destructive", title: "Unable to load section" });
       } finally {
         setIsLoading(false);
       }

@@ -73,7 +73,7 @@ export default function EditCoursePage() {
           setCatalogId(course.catalogId);
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load course" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load course" }))
       .finally(() => setLoading(false));
   }, [id, courseId, router]);
 
@@ -86,7 +86,7 @@ export default function EditCoursePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!catalogId) {
-      toast({ variant: "destructive", title: "Please select a course" });
+      toast({ variant: "destructive", title: "Select a course" });
       return;
     }
     // Switching to a shorter programme can leave years selected that no longer
@@ -106,7 +106,7 @@ export default function EditCoursePage() {
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        throw new Error(json.error ?? "Failed to save course");
+        throw new Error(json.error ?? "Unable to save course");
       }
       // Years live on the DEPARTMENT, keyed by the catalog programme, so this is
       // a second write - and it is keyed by whichever catalog course is now
@@ -126,7 +126,7 @@ export default function EditCoursePage() {
       toast({ variant: "success", title: "Course updated" });
       router.push(`/principal/departments/${id}`);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save course" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save course" });
     } finally {
       setIsSaving(false);
     }

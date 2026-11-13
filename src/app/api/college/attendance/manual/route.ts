@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Times must be in HH:MM (24h) format" }, { status: 400 });
     }
     if (!reason) {
-      return NextResponse.json({ error: "A reason is required" }, { status: 400 });
+      return NextResponse.json({ error: "Enter a reason." }, { status: 400 });
     }
 
     const { date: docDate, docSuffix } = parseDocDate(date);
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
 
     const targetSnap = await collegeRef.collection("users").doc(facultyId).get();
     if (!targetSnap.exists) {
-      return NextResponse.json({ error: "Person not found" }, { status: 404 });
+      return NextResponse.json({ error: "Person not found. The record may have been deleted." }, { status: 404 });
     }
     const target = targetSnap.data() as { name?: string; department?: string; role?: string };
 
@@ -245,9 +245,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/attendance/manual POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

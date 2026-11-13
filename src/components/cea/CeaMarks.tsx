@@ -26,7 +26,7 @@ export function CeaMarks() {
   const [error, setError] = useState("");
   const [open, setOpen] = useState<{ assignmentId: string; unit: number } | null>(null);
   const load = useCallback(() => {
-    fetch("/api/college/cea/marks").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Couldn't load"); setList(j.assignments); setError(""); }).catch((e: Error) => setError(e.message));
+    fetch("/api/college/cea/marks").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Unable to load"); setList(j.assignments); setError(""); }).catch((e: Error) => setError(e.message));
   }, []);
   useEffect(load, [load]);
 
@@ -68,7 +68,7 @@ function SheetView({ assignmentId, unit, onBack }: { assignmentId: string; unit:
   };
   useEffect(() => {
     fetch("/api/college/cea/marks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assignmentId, unit }) })
-      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Couldn't open"); take(j.sheet); setQs(j.questionSheet ?? null); })
+      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Unable to open"); take(j.sheet); setQs(j.questionSheet ?? null); })
       .catch((e: Error) => setError(e.message));
   }, [assignmentId, unit]);
 
@@ -91,10 +91,10 @@ function SheetView({ assignmentId, unit, onBack }: { assignmentId: string; unit:
       });
       const r = await fetch(`/api/college/cea/marks/${encodeURIComponent(sheet.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rev: sheet.rev, action, ...(action === "REOPEN" ? {} : { entries, heldOn: heldOn || undefined }) }) });
       const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "Couldn't save");
+      if (!r.ok) throw new Error(j.error ?? "Unable to save");
       take(j.sheet);
       toast({ variant: "success", title: action === "SUBMIT" ? "Submitted - added to internal marks" : action === "REOPEN" ? "Reopened" : "Saved" });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
 

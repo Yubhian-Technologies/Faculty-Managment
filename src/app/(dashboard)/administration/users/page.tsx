@@ -30,7 +30,7 @@ export default function AdministrationUsersPage() {
     fetch("/api/location/users")
       .then((r) => r.json() as Promise<{ users: FMSUser[] }>)
       .then((d) => setUsers(d.users ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load users" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load users" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -63,7 +63,7 @@ export default function AdministrationUsersPage() {
       toast({ variant: "success", title: "Staff member deleted" });
       setUsers((prev) => prev.filter((u) => u.uid !== user.uid));
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete staff member" });
+      toast({ variant: "destructive", title: "Unable to delete staff member" });
     } finally {
       setActionUid(null);
       setConfirmUser(null);

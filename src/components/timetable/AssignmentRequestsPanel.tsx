@@ -128,7 +128,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
         setFacultyByDept(Object.fromEntries(entries.filter((e): e is readonly [string, FacultyMember[]] => e[1] !== null)));
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load assignment requests" });
+      toast({ variant: "destructive", title: "Unable to load assignment requests" });
     } finally {
       setIsLoading(false);
     }
@@ -169,13 +169,13 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
         body: JSON.stringify({ action: "allocate", facultyId }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to allocate");
+      if (!res.ok) throw new Error(json.error ?? "Unable to allocate");
       toast({ variant: "success", title: "Faculty allocated", description: "Mark their busy periods, add another faculty if needed, then Notify department & close." });
       setPickedFaculty((p) => ({ ...p, [reqId]: "" }));
       setAddingAnotherId(null);
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to allocate" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to allocate" });
     } finally {
       setBusyId(null);
     }
@@ -196,12 +196,12 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
         body: JSON.stringify({ action: "reallocate", fromFacultyId, facultyId }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to change faculty");
+      if (!res.ok) throw new Error(json.error ?? "Unable to change faculty");
       toast({ variant: "success", title: "Faculty changed - timetable slots updated" });
       setChangingKey(null);
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to change faculty" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to change faculty" });
     } finally {
       setBusyId(null);
     }
@@ -219,7 +219,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
       toast({ variant: "success", title: "Request declined" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to decline" });
+      toast({ variant: "destructive", title: "Unable to decline" });
     } finally {
       setBusyId(null);
     }
@@ -268,14 +268,14 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
         body: JSON.stringify({ action: "set_busy_periods", facultyId: a.facultyId, busyPeriods: next }),
       });
       const json = await res.json() as { error?: string; busyPeriods?: { day: DayOfWeek; period: number; year?: number }[]; conflicts?: string[] };
-      if (!res.ok) throw new Error(json.error ?? "Failed to update busy periods");
+      if (!res.ok) throw new Error(json.error ?? "Unable to update busy periods");
       if (json.conflicts?.length) {
         toast({ variant: "destructive", title: `Clashes with ${r.requestingDepartment}'s timetable: ${json.conflicts.join(", ")}`, description: "They have been notified to move it." });
       }
       if (json.busyPeriods) setBusyDraftByRequest((prev) => ({ ...prev, [key]: json.busyPeriods! }));
     } catch (err) {
       setBusyDraftByRequest((prev) => ({ ...prev, [key]: previous }));
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to update busy periods" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to update busy periods" });
     } finally {
       setBusySavingId(null);
     }
@@ -301,12 +301,12 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
         body: JSON.stringify({ action: "notify_timetable_updated" }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to notify");
+      if (!res.ok) throw new Error(json.error ?? "Unable to notify");
       toast({ variant: "success", title: "Requesting department notified - closed" });
       setBusyBuilderOpenId(null);
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to notify" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to notify" });
     } finally {
       setNotifyingId(null);
     }
@@ -322,12 +322,12 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
         body: JSON.stringify({ action: "reopen_busy_periods" }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to reopen");
+      if (!res.ok) throw new Error(json.error ?? "Unable to reopen");
       // Drop any cached drafts for this request so each builder re-reads what was saved.
       setBusyDraftByRequest((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${r.id}::`))));
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to reopen" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to reopen" });
     } finally {
       setNotifyingId(null);
     }

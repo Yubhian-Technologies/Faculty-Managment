@@ -260,8 +260,8 @@ export async function loginUidsOf(db: Db, collegeId: string, facultyIds: string[
 
 export function guardError(err: unknown, tag: string) {
   if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return Response.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
   }
   console.error(tag, err);
-  return Response.json({ error: "Internal error" }, { status: 500 });
+  return Response.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
 }

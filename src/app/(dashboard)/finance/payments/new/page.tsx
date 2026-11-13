@@ -44,7 +44,7 @@ export default function NewPaymentPage() {
       toast({ variant: "success", title: "Payment created" });
       router.push("/finance/payments");
     } catch {
-      toast({ variant: "destructive", title: "Failed to create payment" });
+      toast({ variant: "destructive", title: "Unable to create payment" });
     } finally {
       setSaving(false);
     }

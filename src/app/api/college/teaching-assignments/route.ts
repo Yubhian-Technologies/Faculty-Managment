@@ -359,10 +359,10 @@ export async function GET(request: Request) {
       err instanceof Error &&
       (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")
     ) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/teaching-assignments GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -418,9 +418,9 @@ export async function POST(request: Request) {
         collegeRef.collection("sections").doc(sectionId).get(),
         collegeRef.collection("subjects").doc(subjectId).get(),
       ]);
-      if (!courseSnap.exists) return NextResponse.json({ error: "Course not found" }, { status: 404 });
-      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found" }, { status: 404 });
-      if (!subjectSnap.exists) return NextResponse.json({ error: "Subject not found" }, { status: 404 });
+      if (!courseSnap.exists) return NextResponse.json({ error: "Course not found. It may have been deleted." }, { status: 404 });
+      if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
+      if (!subjectSnap.exists) return NextResponse.json({ error: "Subject not found. It may have been deleted." }, { status: 404 });
 
       const course = courseSnap.data() as { name: string; departmentId: string; catalogId?: string };
       const section = sectionSnap.data() as { name: string; year: number; department: string };
@@ -429,7 +429,7 @@ export async function POST(request: Request) {
       // Server-computed, never trusting whatever `facultyName` the client sent -
       // legalName only (facultyDisplayName()).
       const facultyMemberSnap = await collegeRef.collection("facultyMembers").doc(facultyId).get();
-      if (!facultyMemberSnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+      if (!facultyMemberSnap.exists) return NextResponse.json({ error: "Faculty record not found. It may have been deleted." }, { status: 404 });
       const resolvedFacultyName = facultyDisplayName(facultyMemberSnap.data() as { legalName?: string });
       // Defense-in-depth: every picker already filters to available faculty
       // client-side, but a facultyId is still trusted input - re-check here
@@ -478,7 +478,7 @@ export async function POST(request: Request) {
         // otherwise be scoped to via their own department.
         const ok = await isTimetableIncharge(db, session.collegeId, session.uid, courseId, section.year);
         if (!ok) {
-          return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+          return NextResponse.json({ error: "You are not the Timetable Incharge for this course and year." }, { status: 403 });
         }
       }
 
@@ -698,7 +698,7 @@ export async function POST(request: Request) {
       // by isTimetableIncharge there. Reject explicitly here rather than
       // falling through the HOD-only check below unchecked.
       if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 403 });
       }
       const [facultySnap, subjectSnap] = await Promise.all([
         collegeRef.collection("facultyMembers").doc(body.facultyId).get(),
@@ -706,10 +706,10 @@ export async function POST(request: Request) {
       ]);
 
       if (!facultySnap.exists) {
-        return NextResponse.json({ error: "Faculty not found" }, { status: 400 });
+        return NextResponse.json({ error: "Faculty record not found. It may have been deleted." }, { status: 400 });
       }
       if (!subjectSnap.exists) {
-        return NextResponse.json({ error: "Subject not found" }, { status: 400 });
+        return NextResponse.json({ error: "Subject not found. It may have been deleted." }, { status: 400 });
       }
 
       const faculty = facultySnap.data() as { legalName?: string; department?: string };
@@ -805,10 +805,10 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/teaching-assignments POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -827,7 +827,7 @@ export async function DELETE(request: Request) {
 
     if (session.role === "HOD") {
       const assignmentSnap = await ref.get();
-      if (!assignmentSnap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (!assignmentSnap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
       const assignmentData = assignmentSnap.data() as { department?: string; year?: number; courseId?: string; facultyId?: string };
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       const deptsSnap = await collegeRef.collection("departments").get();
@@ -858,12 +858,12 @@ export async function DELETE(request: Request) {
       }
     } else if (session.role === "PANEL_MEMBER" || session.role === "COLLEGE_STAFF") {
       const assignmentSnap = await ref.get();
-      if (!assignmentSnap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (!assignmentSnap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
       const assignment = assignmentSnap.data() as { courseId?: string; year?: number };
       const ok = assignment.courseId && assignment.year != null
         && await isTimetableIncharge(db, session.collegeId, session.uid, assignment.courseId, assignment.year);
       if (!ok) {
-        return NextResponse.json({ error: "You are not the Timetable Incharge for this course & year" }, { status: 403 });
+        return NextResponse.json({ error: "You are not the Timetable Incharge for this course and year." }, { status: 403 });
       }
     }
 
@@ -887,9 +887,9 @@ export async function DELETE(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/teaching-assignments DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

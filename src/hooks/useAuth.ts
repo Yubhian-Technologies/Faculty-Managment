@@ -63,7 +63,7 @@ export function useAuth() {
             });
             // Signed out everywhere (api/auth/session answers 401 SESSION_REVOKED): end this browser's session too.
             if (res.status === 401 && (await res.clone().json().catch(() => ({})) as { code?: string }).code === "SESSION_REVOKED") {
-              await endSessionNow("Your login details were changed - please sign in again.");
+              await endSessionNow("Your login details were changed - sign in again.");
               return;
             }
             if (res.ok) {
@@ -101,7 +101,7 @@ export function useAuth() {
             });
             // Signed out everywhere (api/auth/session answers 401 SESSION_REVOKED): end this browser's session too.
             if (res.status === 401 && (await res.clone().json().catch(() => ({})) as { code?: string }).code === "SESSION_REVOKED") {
-              await endSessionNow("Your login details were changed - please sign in again.");
+              await endSessionNow("Your login details were changed - sign in again.");
               return;
             }
             if (res.ok) {

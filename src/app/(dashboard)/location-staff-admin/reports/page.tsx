@@ -111,7 +111,7 @@ export default function LocationReportsPage() {
       }
       setLoadedTab(tab);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load report" });
+      toast({ variant: "destructive", title: "Unable to load report" });
     } finally {
       setIsLoading(false);
     }

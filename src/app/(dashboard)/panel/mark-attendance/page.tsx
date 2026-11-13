@@ -297,7 +297,7 @@ export default function MarkAttendancePage() {
     try {
       const query = viewDateRef.current ? `?date=${encodeURIComponent(viewDateRef.current)}` : "";
       const res = await fetch(`/api/college/student-attendance/today-periods${query}`);
-      if (!res.ok) throw new Error("Failed to load periods");
+      if (!res.ok) throw new Error("Unable to load periods");
       const json = (await res.json()) as TodayPeriodsResponse & { noClassReason?: string };
       setNoClassReason(json.noClassReason ?? null);
       const fetched = json.periods ?? [];
@@ -412,7 +412,7 @@ export default function MarkAttendancePage() {
       );
 
       if (Object.keys(fetchedSessions).length === 0) {
-        setLoadError("Failed to load attendance sessions");
+        setLoadError("Unable to load attendance sessions");
         return;
       }
 
@@ -450,7 +450,7 @@ export default function MarkAttendancePage() {
 
       setDraft(initialDraft);
     } catch {
-      setLoadError("Failed to load students");
+      setLoadError("Unable to load students");
     } finally {
       setIsLoadingStudents(false);
     }
@@ -604,7 +604,7 @@ export default function MarkAttendancePage() {
           });
           if (!res.ok) {
             const json = (await res.json().catch(() => ({}))) as { error?: string };
-            failedPeriods.push(`Period ${p.periodNumber}: ${json.error ?? "Failed to submit"}`);
+            failedPeriods.push(`Period ${p.periodNumber}: ${json.error ?? "Unable to submit"}`);
           }
         } catch (err) {
           if (err instanceof TypeError) {

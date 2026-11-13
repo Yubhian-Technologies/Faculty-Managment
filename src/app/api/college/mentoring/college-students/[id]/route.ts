@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).collection("students").doc(id).get();
-    if (!snap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
     const student = { ...(snap.data() as StudentRecord), id: snap.id };
 
     if (part === "summary") return NextResponse.json({ student: toMenteeSummary(student) });

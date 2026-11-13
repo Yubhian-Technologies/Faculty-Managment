@@ -52,12 +52,12 @@ export function MarkOfferAcceptedDialog({
         body: JSON.stringify({ status: "ACCEPTED", confirmedDateOfJoining: date }),
       });
       const data = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to update");
+      if (!res.ok) throw new Error(data.error ?? "Unable to update");
       toast({ variant: "success", title: "Offer marked accepted" });
       onOpenChange(false);
       onAccepted();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to mark accepted", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to mark accepted", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }

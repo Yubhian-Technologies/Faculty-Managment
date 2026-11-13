@@ -56,7 +56,7 @@ export function StudentLifecycleActions({
             && (!student.courseId || !s.courseId || s.courseId === student.courseId || s.courseName === student.course),
         ).sort((a, b) => a.department.localeCompare(b.department) || a.name.localeCompare(b.name)));
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Couldn't load sections" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load sections" });
       }
     })();
     return () => { cancelled = true; };
@@ -87,7 +87,7 @@ export function StudentLifecycleActions({
       });
       const json = (await res.json()) as { error?: string; warning?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Couldn't update the student" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to update the student" });
         return;
       }
       toast({

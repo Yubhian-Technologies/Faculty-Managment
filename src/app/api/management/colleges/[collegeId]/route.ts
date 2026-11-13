@@ -13,15 +13,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ col
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(collegeId).get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "College not found" }, { status: 404 });
+      return NextResponse.json({ error: "College not found. It may have been deleted." }, { status: 404 });
     }
 
     return NextResponse.json({ college: { ...snap.data(), id: snap.id } });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[management/colleges/[collegeId] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

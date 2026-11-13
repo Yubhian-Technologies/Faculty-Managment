@@ -32,7 +32,7 @@ export function HonorificsCatalogCard() {
     return fetch("/api/college/honorifics")
       .then((r) => r.json() as Promise<{ items: HonorificCatalogItem[] }>)
       .then((d) => setItems(d.items ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load honorifics" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load honorifics" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -57,13 +57,13 @@ export function HonorificsCatalogCard() {
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to add honorific");
+        throw new Error(j.error ?? "Unable to add honorific");
       }
       setNewName("");
       toast({ variant: "success", title: "Honorific added" });
       void load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to add honorific" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to add honorific" });
     } finally {
       setIsAdding(false);
     }
@@ -86,13 +86,13 @@ export function HonorificsCatalogCard() {
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to update honorific");
+        throw new Error(j.error ?? "Unable to update honorific");
       }
       setEditingId(null);
       toast({ variant: "success", title: "Honorific updated" });
       void load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to update honorific" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to update honorific" });
     } finally {
       setBusyId(null);
     }
@@ -109,7 +109,7 @@ export function HonorificsCatalogCard() {
       if (!res.ok) throw new Error();
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update status" });
+      toast({ variant: "destructive", title: "Unable to update status" });
     } finally {
       setBusyId(null);
     }
@@ -122,13 +122,13 @@ export function HonorificsCatalogCard() {
       const res = await fetch(`/api/college/honorifics/${deleteTarget.id}`, { method: "DELETE" });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to delete honorific");
+        throw new Error(j.error ?? "Unable to delete honorific");
       }
       toast({ variant: "success", title: "Honorific removed" });
       setDeleteTarget(null);
       void load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to delete honorific" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to delete honorific" });
     } finally {
       setIsDeleting(false);
     }

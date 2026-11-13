@@ -49,7 +49,7 @@ export function CollegeLogoSettingsCard({ className = "" }: { className?: string
       toast({
         variant: "destructive",
         title: "Unsupported file type",
-        description: "Please select a PNG, JPEG, WEBP, or SVG image file.",
+        description: "Select a PNG, JPEG, WEBP, or SVG image file.",
       });
       return;
     }
@@ -93,7 +93,7 @@ export function CollegeLogoSettingsCard({ className = "" }: { className?: string
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to upload logo");
+        throw new Error(data.error || "Unable to upload logo");
       }
 
       toast({
@@ -127,7 +127,7 @@ export function CollegeLogoSettingsCard({ className = "" }: { className?: string
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to reset logo");
+        throw new Error(data.error || "Unable to reset logo");
       }
 
       toast({

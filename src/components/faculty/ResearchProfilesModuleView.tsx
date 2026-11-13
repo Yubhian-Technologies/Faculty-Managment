@@ -72,13 +72,13 @@ function RequestFormFields({
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to submit", description: json.error });
+        toast({ variant: "destructive", title: "Unable to submit", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Submitted for verification" });
       onSaved();
     } catch {
-      toast({ variant: "destructive", title: "Network error. Please try again." });
+      toast({ variant: "destructive", title: "Network error. Try again." });
     } finally {
       setSaving(false);
     }

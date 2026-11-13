@@ -54,7 +54,7 @@ export default function ShortlistPage() {
       setRows(built);
       setChecked(Object.fromEntries(built.map((r) => [r.applicationId, r.isShortlisted])));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load candidates" });
+      toast({ variant: "destructive", title: "Unable to load candidates" });
     } finally {
       setIsLoading(false);
     }

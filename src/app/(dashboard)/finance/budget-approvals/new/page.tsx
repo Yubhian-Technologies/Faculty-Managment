@@ -38,7 +38,7 @@ export default function NewBudgetRequestPage() {
       toast({ variant: "success", title: "Budget request logged" });
       router.push("/finance/budget-approvals");
     } catch {
-      toast({ variant: "destructive", title: "Failed to log request" });
+      toast({ variant: "destructive", title: "Unable to log request" });
     } finally {
       setSaving(false);
     }

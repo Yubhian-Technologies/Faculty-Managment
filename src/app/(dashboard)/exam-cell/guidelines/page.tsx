@@ -26,10 +26,10 @@ export default function ExamCellGuidelinesPage() {
     try {
       const res = await fetch("/api/college/exam-guidelines");
       const data = (await res.json()) as { guidelines?: ExamGuideline[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load");
       setGuidelines(data.guidelines ?? []);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load guidelines" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load guidelines" });
     } finally {
       setIsLoading(false);
     }
@@ -42,7 +42,7 @@ export default function ExamCellGuidelinesPage() {
     const res = await fetch(`/api/college/exam-guidelines/${deleteTarget.id}`, { method: "DELETE" });
     const data = (await res.json()) as { error?: string };
     if (!res.ok) {
-      toast({ variant: "destructive", title: data.error ?? "Failed to delete" });
+      toast({ variant: "destructive", title: data.error ?? "Unable to delete" });
       return;
     }
     toast({ variant: "success", title: "Guideline document removed" });
@@ -230,12 +230,12 @@ function EditDialog({
         body: JSON.stringify({ title: title.trim(), points }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: "Guideline updated" });
       onClose();
       await onDone();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setBusy(false);
     }

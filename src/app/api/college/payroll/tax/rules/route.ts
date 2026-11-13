@@ -12,7 +12,7 @@ import type { PayrollTaxRules } from "@/types/payroll";
 // Income-tax rules of a financial year (?fy=2026-27), per college, Accounts only. Until Accounts save
 // (confirm) them, no TDS is worked out for that year - the defaults shown are the FY 2026-27 values.
 
-const badFy = (err: unknown) => err instanceof Error && err.message === "BAD_FY" ? NextResponse.json({ error: "Financial year must look like 2026-27" }, { status: 400 }) : null;
+const badFy = (err: unknown) => err instanceof Error && err.message === "BAD_FY" ? NextResponse.json({ error: "Enter the financial year as YYYY-YY, for example 2026-27." }, { status: 400 }) : null;
 
 export async function GET(request: Request) {
   try {

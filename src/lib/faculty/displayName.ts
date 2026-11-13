@@ -19,6 +19,6 @@ export function resolveDisplayName(input: { displaySurname?: unknown; displayNam
   const name = typeof input.displayName === "string" ? input.displayName.trim().replace(/\s+/g, " ").toUpperCase() : "";
   if (!surname) return { ok: false, error: "Surname (short form) is required" };
   if (surname.length > DISPLAY_SURNAME_MAX) return { ok: false, error: `Surname (short form) can have at most ${DISPLAY_SURNAME_MAX} characters` };
-  if (!name) return { ok: false, error: "Name is required" };
+  if (!name) return { ok: false, error: "Name is required." };
   return { ok: true, displaySurname: surname, displayName: name };
 }

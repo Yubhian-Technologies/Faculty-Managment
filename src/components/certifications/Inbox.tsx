@@ -92,7 +92,7 @@ function LineRow({ request, line, busy, run }: {
           <Button size="sm" variant="outline" disabled={busy} onClick={() => need("Say what the student must correct") && run({ action: "RETURN", branchKey: line.key, remarks: remarks.trim() }, "Sent back to the student")}>Send back</Button>
         )}
         {check !== "DUES" && (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => need("Please add a reason for rejecting") && run({ action: "REJECT", branchKey: line.key, remarks: remarks.trim() }, "Rejected")}>Reject</Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => need("Add a reason for rejecting") && run({ action: "REJECT", branchKey: line.key, remarks: remarks.trim() }, "Rejected")}>Reject</Button>
         )}
       </div>
       {dues && (
@@ -133,7 +133,7 @@ function InboxCard({ request, onDecided, selected, onSelect }: { request: InboxR
 
   async function actSequential(action: "APPROVE" | "REJECT" | "RETURN") {
     if (action !== "APPROVE" && !remarks.trim()) {
-      toast({ variant: "destructive", title: action === "RETURN" ? "Say what the student must correct" : "Please add a reason for rejecting" });
+      toast({ variant: "destructive", title: action === "RETURN" ? "Say what the student must correct" : "Add a reason for rejecting" });
       return;
     }
     setBusy(true);
@@ -215,7 +215,7 @@ export function Inbox() {
       setRequests(await listRequests("inbox"));
       setSelected(new Set());
     } catch (e) {
-      toast({ variant: "destructive", title: errText(e, "Couldn't load your inbox") });
+      toast({ variant: "destructive", title: errText(e, "Unable to load your inbox") });
     } finally {
       setLoading(false);
     }
@@ -251,7 +251,7 @@ export function Inbox() {
       });
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: errText(e, "Couldn't clear them") });
+      toast({ variant: "destructive", title: errText(e, "Unable to clear them") });
     } finally {
       setBulkBusy(false);
     }

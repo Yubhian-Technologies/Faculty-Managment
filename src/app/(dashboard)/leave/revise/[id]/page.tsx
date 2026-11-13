@@ -42,7 +42,7 @@ export default function ReviseAdjustmentPage() {
     fetch(`/api/leave/applications/${id}`)
       .then((r) => r.json() as Promise<{ request?: LeaveRequest }>)
       .then((d) => setRequest(d.request ?? null))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave request" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave request" }))
       .finally(() => setIsLoading(false));
   }, [id]);
 
@@ -105,13 +105,13 @@ export default function ReviseAdjustmentPage() {
         }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to revise");
+      if (!res.ok) throw new Error(data.error ?? "Unable to revise");
       toast({ variant: "success", title: "Sent for acceptance" });
       const r = await fetch(`/api/leave/applications/${id}`);
       const d = (await r.json()) as { request?: LeaveRequest };
       setRequest(d.request ?? null);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to revise" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to revise" });
     } finally {
       setBusyUid(null);
     }

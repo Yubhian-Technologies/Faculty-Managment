@@ -37,7 +37,7 @@ function ExamBlock({ exam, specify, score, year, onExam, onSpecify, onScore, onY
           </SelectContent>
         </Select>
       </div>
-      {exam === "OTHER" && <TextInput label="Please specify exam" value={specify} onChange={onSpecify} />}
+      {exam === "OTHER" && <TextInput label="Specify exam" value={specify} onChange={onSpecify} />}
       <TextInput label="Exam Score" value={score} onChange={onScore} />
       {/* NumInput reports 0 for a cleared box - that means "no year", never the year 0. */}
       <NumInput label="Qualified Year" value={year} onChange={(v) => onYear(v ? v : undefined)} />

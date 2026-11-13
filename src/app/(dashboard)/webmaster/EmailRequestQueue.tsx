@@ -40,7 +40,7 @@ export function EmailRequestQueue({ status = "PENDING", limit, emptyTitle, empty
     fetch(`/api/college/email-requests?status=${status}`)
       .then((r) => r.json() as Promise<{ requests: Row[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load email requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load email requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -68,7 +68,7 @@ export function EmailRequestQueue({ status = "PENDING", limit, emptyTitle, empty
       setAvailability(data.available ? "available" : "taken");
     } catch {
       setAvailability("unchecked");
-      toast({ variant: "destructive", title: "Could not check availability" });
+      toast({ variant: "destructive", title: "Unable to check availability" });
     }
   }
 
@@ -85,12 +85,12 @@ export function EmailRequestQueue({ status = "PENDING", limit, emptyTitle, empty
         body: JSON.stringify({ action: "FULFILL", assignedEmail: assignedEmail.trim(), webmasterNotes: webmasterNotes.trim() || undefined }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to create email");
+      if (!res.ok) throw new Error(data.error ?? "Unable to create email");
       toast({ variant: "success", title: "Official email created", description: "The requesting office has been notified." });
       setExpandedId(null);
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to create email", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to create email", description: err instanceof Error ? err.message : undefined });
     } finally {
       setActingId(null);
     }

@@ -59,7 +59,7 @@ export default function AdministrationCollegesPage() {
         }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: "Couldn't save", description: json.error }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: "Unable to save", description: json.error }); return; }
       toast({ variant: "success", title: "Saved" });
       setEditing(null);
       loadAll();
@@ -76,7 +76,7 @@ export default function AdministrationCollegesPage() {
     try {
       const res = await fetch(`/api/administration/college-people/${deleting.person.uid}?collegeId=${deleting.collegeId}`, { method: "DELETE" });
       const json = (await res.json()) as { error?: string; mode?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: "Couldn't remove", description: json.error }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: "Unable to remove", description: json.error }); return; }
       toast({
         variant: "success",
         title: json.mode === "deactivated" ? "Access removed" : "Deleted",
@@ -97,13 +97,13 @@ export default function AdministrationCollegesPage() {
     fetch("/api/admin/colleges")
       .then((r) => r.json() as Promise<{ colleges: College[] }>)
       .then((d) => setColleges(d.colleges ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load colleges" }))
       .finally(() => setIsLoading(false));
 
     fetch("/api/administration/principals")
       .then((r) => r.json() as Promise<{ principalsByCollege: Record<string, PrincipalRow[]> }>)
       .then((d) => setPrincipalMap(d.principalsByCollege ?? {}))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load principals" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load principals" }))
       .finally(() => setPrincipalsLoaded(true));
   }
 

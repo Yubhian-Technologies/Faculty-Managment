@@ -83,7 +83,7 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
         setRequests(data.requests ?? []);
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load leave profile" });
+      toast({ variant: "destructive", title: "Unable to load leave profile" });
     } finally {
       setIsLoading(false);
     }

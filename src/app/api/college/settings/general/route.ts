@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     const session = await requireRole("SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "HOD");
     const collegeId = resolveCollegeId(request, session.role, session.collegeId);
     if (!collegeId) {
-      return NextResponse.json({ error: "collegeId is required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a college." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -38,10 +38,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/settings/general GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -52,7 +52,7 @@ export async function PUT(request: Request) {
 
     const collegeId = session.role === "SUPER_ADMIN" ? body.collegeId : session.collegeId;
     if (!collegeId) {
-      return NextResponse.json({ error: "collegeId is required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a college." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -292,9 +292,9 @@ export async function PUT(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/settings/general PUT]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

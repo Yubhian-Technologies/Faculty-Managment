@@ -36,7 +36,7 @@ export default function FinancePaymentsPage() {
     collegeFetch("/api/college/finance-payments")
       .then((r) => r.json() as Promise<{ payments: Row[] }>)
       .then((d) => setPayments(d.payments ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load payments" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load payments" }))
       .finally(() => setIsLoading(false));
   }
 

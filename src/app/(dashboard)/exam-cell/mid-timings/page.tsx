@@ -48,11 +48,11 @@ export default function ExamCellMidTimingsPage() {
       ]);
       const schedData = (await schedRes.json()) as { schedules?: ExamMidSchedule[]; error?: string };
       const settingsData = (await settingsRes.json()) as { settings?: ExamMidSettings };
-      if (!schedRes.ok) throw new Error(schedData.error ?? "Failed to load");
+      if (!schedRes.ok) throw new Error(schedData.error ?? "Unable to load");
       setSchedules(schedData.schedules ?? []);
       setMidCount(settingsData.settings?.midCount ?? 0);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load mid timings" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load mid timings" });
     } finally {
       setIsLoading(false);
     }
@@ -65,7 +65,7 @@ export default function ExamCellMidTimingsPage() {
     const res = await fetch(`/api/college/exam-mid-schedules/${deleteTarget.id}`, { method: "DELETE" });
     const data = (await res.json()) as { error?: string };
     if (!res.ok) {
-      toast({ variant: "destructive", title: data.error ?? "Failed to delete" });
+      toast({ variant: "destructive", title: data.error ?? "Unable to delete" });
       return;
     }
     toast({ variant: "success", title: "Schedule removed" });
@@ -201,7 +201,7 @@ function MidScheduleFormDialog({
         const data = (await res.json()) as { courses?: Course[] };
         setCourses(data.courses ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load courses" });
+        toast({ variant: "destructive", title: "Unable to load courses" });
       }
     })();
   }, []);
@@ -254,13 +254,13 @@ function MidScheduleFormDialog({
         body: JSON.stringify(payload),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: schedule ? "Timing updated" : "Timing published" });
       if (!schedule) reset();
       onClose();
       await onDone();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setBusy(false);
     }

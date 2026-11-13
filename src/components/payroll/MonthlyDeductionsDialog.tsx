@@ -63,7 +63,7 @@ export function MonthlyDeductionsDialog({ collegeId, run, lines, onClose, onDone
       const next = { name: f.name, headers, rows };
       setFile(next);
       await send("preview", next);
-    } catch (err) { toast({ variant: "destructive", title: err instanceof Error ? err.message : "Couldn't read the file" }); }
+    } catch (err) { toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to read the file" }); }
   }
 
   async function send(mode: "preview" | "apply", body: FileRows | null = file) {
@@ -76,7 +76,7 @@ export function MonthlyDeductionsDialog({ collegeId, run, lines, onClose, onDone
     } catch (err) {
       const data = (err as { data?: DeductionPlan & { applied: number } }).data;
       if (data?.rows) setPlan(data);
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Couldn't import" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to import" });
     } finally { setBusy(false); }
   }
 

@@ -39,7 +39,7 @@ export default function GeneralAdminVacancyPage() {
     fetch("/api/admin/general-admin-vacancies")
       .then((r) => r.json() as Promise<{ vacancyRequests: GeneralAdminVacancy[] }>)
       .then((d) => setVacancies(d.vacancyRequests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load vacancy requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load vacancy requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -64,14 +64,14 @@ export default function GeneralAdminVacancyPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to submit request");
+        throw new Error(err.error ?? "Unable to submit request");
       }
       toast({ variant: "success", title: "Vacancy request submitted to Super Admin" });
       setPosition(""); setRequiredCount(""); setAvailableCount(""); setJustification("");
       setShowForm(false);
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
     }

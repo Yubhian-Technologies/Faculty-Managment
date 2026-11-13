@@ -24,7 +24,7 @@ export function StudentPicker({ selected, onChange, max }: { selected: PickerStu
   const [results, setResults] = useState<PickerStudent[]>([]);
 
   useEffect(() => {
-    lookupSections().then(setSections).catch(() => toast({ variant: "destructive", title: "Couldn't load sections" }));
+    lookupSections().then(setSections).catch(() => toast({ variant: "destructive", title: "Unable to load sections" }));
   }, []);
 
   const chosen = useMemo(() => new Map(selected.map((s) => [s.id, s])), [selected]);
@@ -33,7 +33,7 @@ export function StudentPicker({ selected, onChange, max }: { selected: PickerStu
     setSectionId(id);
     setLoading(true);
     try { setRoster(await lookupRoster(id)); }
-    catch { toast({ variant: "destructive", title: "Couldn't load that section's students" }); setRoster([]); }
+    catch { toast({ variant: "destructive", title: "Unable to load that section's students" }); setRoster([]); }
     finally { setLoading(false); }
   }
 

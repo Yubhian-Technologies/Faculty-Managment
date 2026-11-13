@@ -80,7 +80,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
       const json = await res.json() as GraduatesResponse;
       if (seq !== requestSeq.current) return; // a newer search/filter superseded this one
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load graduated students" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load graduated students" });
         return;
       }
       const rows = json.students ?? [];
@@ -92,7 +92,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
       setFacets(json.facets ?? { courses: [], batches: [] });
       setPage(1);
     } catch {
-      if (seq === requestSeq.current) toast({ variant: "destructive", title: "Failed to load graduated students" });
+      if (seq === requestSeq.current) toast({ variant: "destructive", title: "Unable to load graduated students" });
     } finally {
       if (seq === requestSeq.current) {
         setIsFetching(false);
@@ -118,12 +118,12 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
         const json = await res.json() as GraduatesResponse;
         if (seq !== requestSeq.current) return;
         if (!res.ok) {
-          toast({ variant: "destructive", title: json.error ?? "Failed to load graduated students" });
+          toast({ variant: "destructive", title: json.error ?? "Unable to load graduated students" });
           return;
         }
         for (const r of json.students ?? []) rowCache.current.set(r.id, r);
       } catch {
-        if (seq === requestSeq.current) toast({ variant: "destructive", title: "Failed to load graduated students" });
+        if (seq === requestSeq.current) toast({ variant: "destructive", title: "Unable to load graduated students" });
         return;
       } finally {
         if (seq === requestSeq.current) setIsFetching(false);

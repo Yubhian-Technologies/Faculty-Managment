@@ -12,12 +12,12 @@ export async function authorizedSection(
 ): Promise<{ section: Section } | { error: NextResponse }> {
   const db = getAdminDb();
   const snap = await db.collection("colleges").doc(session.collegeId).collection("sections").doc(sectionId).get();
-  if (!snap.exists) return { error: NextResponse.json({ error: "Section not found" }, { status: 404 }) };
+  if (!snap.exists) return { error: NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 }) };
   const section = { id: snap.id, ...snap.data() } as Section;
   if (session.role === "HOD") {
     const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
     if (!canHodEditDepartment(scope, section.department)) {
-      return { error: NextResponse.json({ error: "This section isn't in your department" }, { status: 403 }) };
+      return { error: NextResponse.json({ error: "This section is not in your department." }, { status: 403 }) };
     }
   } else {
     // A faculty login: only the section they are in charge of. Section.facultyInchargeUid

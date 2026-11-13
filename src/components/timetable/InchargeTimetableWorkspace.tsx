@@ -88,7 +88,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
       }
     } catch {
       setSections([]);
-      toast({ variant: "destructive", title: "Failed to load sections" });
+      toast({ variant: "destructive", title: "Unable to load sections" });
     } finally {
       setIsLoadingSections(false);
     }
@@ -114,7 +114,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
         const seen = new Set<string>();
         setAllSections(lists.flat().filter((sec) => !!sec.id && !seen.has(sec.id) && !!seen.add(sec.id)));
       } catch {
-        toast({ variant: "destructive", title: "Failed to load your Timetable responsibilities" });
+        toast({ variant: "destructive", title: "Unable to load your Timetable responsibilities" });
       } finally {
         setIsLoading(false);
       }

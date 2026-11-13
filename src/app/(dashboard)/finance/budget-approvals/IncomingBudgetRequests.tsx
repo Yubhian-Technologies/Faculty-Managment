@@ -51,7 +51,7 @@ export function IncomingBudgetRequests() {
         );
         setRequests(sorted);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load incoming budget requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load incoming budget requests" }))
       .finally(() => setIsLoading(false));
   }
 

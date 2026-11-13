@@ -65,7 +65,7 @@ export function PayrollLineDialog({ collegeId, run, line, actor, editable, onClo
     try {
       const { payslip: p } = await payrollFetch<{ payslip: PayslipData }>(`/api/college/payroll/runs/${run.month}/payslip/${encodeURIComponent(line.employeeKey)}${collegeQs(collegeId)}`);
       await downloadPayslip(p);
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't build the payslip" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to build the payslip" }); }
   }
 
   async function save() {
@@ -76,7 +76,7 @@ export function PayrollLineDialog({ collegeId, run, line, actor, editable, onClo
       await payrollFetch(`/api/college/payroll/runs/${run.month}/lines/${encodeURIComponent(line.employeeKey)}${collegeQs(collegeId)}`, { method: "PATCH", body: JSON.stringify({ rev: run.rev, edit }) });
       toast({ variant: "success", title: "Line updated" });
       onSaved();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
 

@@ -109,12 +109,12 @@ export function StudentAttendanceReport() {
       const data = (await res.json()) as StudentReportData & { error?: string };
       if (id !== requestId.current) return;
       if (!res.ok) {
-        toast({ variant: "destructive", title: data.error ?? "Failed to load attendance" });
+        toast({ variant: "destructive", title: data.error ?? "Unable to load attendance" });
         return;
       }
       setReport(data);
     } catch {
-      if (id === requestId.current) toast({ variant: "destructive", title: "Failed to load attendance" });
+      if (id === requestId.current) toast({ variant: "destructive", title: "Unable to load attendance" });
     } finally {
       if (id === requestId.current) setIsLoading(false);
     }

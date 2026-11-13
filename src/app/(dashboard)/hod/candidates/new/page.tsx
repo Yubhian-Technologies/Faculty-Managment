@@ -173,7 +173,7 @@ export default function NewCandidatePage() {
 
   const onSubmit = async (data: FormData) => {
     if (!resumeFile && !resumeUrl) {
-      toast({ variant: "destructive", title: "Resume required", description: "Please upload the candidate's resume (PDF)" });
+      toast({ variant: "destructive", title: "Resume required", description: "Upload the candidate's resume (PDF)" });
       return;
     }
 
@@ -182,7 +182,7 @@ export default function NewCandidatePage() {
       try {
         finalResumeUrl = await uploadResume();
       } catch {
-        toast({ variant: "destructive", title: "Resume upload failed", description: "Please try again" });
+        toast({ variant: "destructive", title: "Resume upload failed", description: "Try again" });
         return;
       }
     }
@@ -198,7 +198,7 @@ export default function NewCandidatePage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok || !json.id) {
-        toast({ variant: "destructive", title: "Failed to add candidate", description: json.error });
+        toast({ variant: "destructive", title: "Unable to add candidate", description: json.error });
         return;
       }
 

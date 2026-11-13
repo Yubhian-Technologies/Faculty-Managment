@@ -135,7 +135,7 @@ export default function NewBatchPage() {
           return merged;
         });
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load data" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load data" }));
   }, [user?.uid, myDepartments]);
 
   // Only the HOD themself must always stay in selectedPanel - Principal/VP/
@@ -195,7 +195,7 @@ export default function NewBatchPage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create batch", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create batch", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Interview panel proposal submitted to Principal" });

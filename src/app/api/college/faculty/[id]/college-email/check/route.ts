@@ -15,12 +15,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const session = await requireCollegeMember("COLLEGE_OFFICE");
     const { id } = await params;
     const limit = checkRateLimit(`college-email-check:${session.uid}`, 60, 60_000);
-    if (!limit.allowed) return NextResponse.json({ error: "Too many checks - please wait a moment" }, { status: 429 });
+    if (!limit.allowed) return NextResponse.json({ error: "Too many checks - wait a moment" }, { status: 429 });
 
     const db = getAdminDb();
     const auth = await getAdminAuth();
     const snap = await db.collection("colleges").doc(session.collegeId).collection("facultyMembers").doc(id).get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     const f = snap.data() as { employeeId?: string; collegeEmail?: string; userUid?: string; legalName?: string };
     const recordEmail = normalizeCollegeEmail(f.collegeEmail);
     let loginEmail: string | null = null;
@@ -42,9 +42,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ employeeId: f.employeeId ?? "", recordEmail, loginEmail, inSync, hasLogin: !!f.userUid, available, reason });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty/[id]/college-email/check GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

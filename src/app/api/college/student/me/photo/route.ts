@@ -16,12 +16,12 @@ export async function PATCH(request: Request) {
     const session = await requireCollegeMember("STUDENT");
     const body = (await readJsonBody(request)) as { photoUrl?: unknown };
     const photoUrl = body.photoUrl;
-    if (typeof photoUrl !== "string") return NextResponse.json({ error: "photoUrl is required" }, { status: 400 });
+    if (typeof photoUrl !== "string") return NextResponse.json({ error: "Upload a photo." }, { status: 400 });
     // "" clears the photo - anything else must be a real upload of this student's own.
     if (photoUrl !== "") {
-      if (!photoUrl.startsWith("https://firebasestorage.googleapis.com/")) return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      if (!photoUrl.startsWith("https://firebasestorage.googleapis.com/")) return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
       if (!photoUrl.includes(encodeURIComponent(`profile-photos/${session.uid}_`))) {
-        return NextResponse.json({ error: "Photo does not belong to this user" }, { status: 403 });
+        return NextResponse.json({ error: "This photo belongs to another user." }, { status: 403 });
       }
     }
 
@@ -29,7 +29,7 @@ export async function PATCH(request: Request) {
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const studentSnap = await collegeRef.collection("students").where("uid", "==", session.uid).limit(2).get();
     if (studentSnap.size !== 1) {
-      return NextResponse.json({ error: "Your login is not linked to a student record yet. Please contact your College Office." }, { status: 404 });
+      return NextResponse.json({ error: "Your login is not linked to a student record yet. Contact your College Office." }, { status: 404 });
     }
     const studentDoc = studentSnap.docs[0];
     const student = studentDoc.data() as StudentRecord;
@@ -53,9 +53,9 @@ export async function PATCH(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/student/me/photo PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -37,7 +37,7 @@ export default function ProcessPaymentPage() {
         }
         setPayment(found);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load payment" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load payment" }))
       .finally(() => setLoading(false));
   }, [paymentId, router]);
 

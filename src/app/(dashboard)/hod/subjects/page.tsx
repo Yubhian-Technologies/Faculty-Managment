@@ -103,7 +103,7 @@ export default function HODSubjectsPage() {
       setCourses((coursesData.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
       setDepartments(deptsData.departments ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load courses" });
+      toast({ variant: "destructive", title: "Unable to load courses" });
     } finally {
       setIsLoading(false);
     }
@@ -361,7 +361,7 @@ export default function HODSubjectsPage() {
       setSubjects(subjectsData.subjects ?? []);
       setAssignments(Array.from(merged.values()));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load subjects" });
+      toast({ variant: "destructive", title: "Unable to load subjects" });
     } finally {
       setIsLoadingAssignments(false);
     }
@@ -389,7 +389,7 @@ export default function HODSubjectsPage() {
           setTimingsFor(`${ids.join("|")}|${y}`);
         }
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load semesters" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load semesters" });
       }
     })();
     return () => { cancelled = true; };

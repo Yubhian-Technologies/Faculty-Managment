@@ -397,7 +397,7 @@ async function renderHtmlToPdfDocument(html: string, existingPdf?: jsPDF, opts: 
 
   try {
     const doc = iframe.contentDocument;
-    if (!doc) throw new Error("Could not prepare the document for PDF rendering.");
+    if (!doc) throw new Error("Unable to prepare the document for PDF rendering.");
     doc.open();
     doc.write(html);
     doc.close();

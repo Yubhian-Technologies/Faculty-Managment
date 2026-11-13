@@ -46,7 +46,7 @@ export default function DepartmentOfficePage() {
       // filter is needed - see the HOD branch of /api/college/users GET.
       const res = await fetch("/api/college/users?role=DEPARTMENT_OFFICE");
       const data = await res.json() as { users?: FMSUser[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load");
       return (data.users ?? []).find((u) => u.isActive !== false) ?? null;
     },
   });
@@ -59,7 +59,7 @@ export default function DepartmentOfficePage() {
     queryFn: async () => {
       const res = await fetch("/api/college/users?role=PANEL_MEMBER");
       const data = await res.json() as { users?: FMSUser[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load");
       // A RESIGNED/RETIRED person (flagged by the API in read-only-access colleges) can no longer be given the post.
       return (data.users ?? []).filter((u) => u.isActive !== false && !u.facultyExited);
     },
@@ -111,7 +111,7 @@ export default function DepartmentOfficePage() {
         body: JSON.stringify({ uid: pickedUid }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to appoint");
+      if (!res.ok) throw new Error(json.error ?? "Unable to appoint");
       toast({
         variant: "success",
         title: `${picked?.name ?? "They"} is now Department Office`,
@@ -121,7 +121,7 @@ export default function DepartmentOfficePage() {
       setPickedUid("");
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to appoint" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to appoint" });
     } finally {
       setIsCreating(false);
     }
@@ -142,7 +142,7 @@ export default function DepartmentOfficePage() {
         body: JSON.stringify({ uid: holder.uid }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to remove");
+      if (!res.ok) throw new Error(json.error ?? "Unable to remove");
       toast({
         variant: "success",
         title: `${holder.name} is no longer Department Office`,
@@ -151,7 +151,7 @@ export default function DepartmentOfficePage() {
       setRemoving(false);
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to remove" });
     } finally {
       setIsRemoving(false);
     }

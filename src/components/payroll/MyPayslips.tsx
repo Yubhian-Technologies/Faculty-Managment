@@ -30,7 +30,7 @@ export function MyPayslips() {
     try {
       const { payslip } = await payrollFetch<{ payslip: PayslipData }>(`/api/college/payroll/my/${month}`);
       await downloadPayslip(payslip);
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't download" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to download" }); }
     finally { setBusy(""); }
   }
 

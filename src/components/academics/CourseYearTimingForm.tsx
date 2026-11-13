@@ -160,7 +160,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
             : EMPTY_TIMING_FORM
         );
       } catch {
-        toast({ variant: "destructive", title: "Failed to load timings" });
+        toast({ variant: "destructive", title: "Unable to load timings" });
       } finally {
         setLoading(false);
       }
@@ -262,12 +262,12 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        throw new Error(json.error ?? "Failed to save timings");
+        throw new Error(json.error ?? "Unable to save timings");
       }
       toast({ variant: "success", title: `Timings saved for Year ${year}` });
       onSaved();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save timings" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save timings" });
     } finally {
       setIsSaving(false);
     }
@@ -369,7 +369,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
                 </div>
                 {exceedsAvailableTime && (
                   <p className="mt-1.5 pl-6 font-medium text-destructive">
-                    Exceeds the college day by {formatDuration(totalRequiredMinutes - (availableMinutes ?? 0))}. Please adjust periods or breaks.
+                    Exceeds the college day by {formatDuration(totalRequiredMinutes - (availableMinutes ?? 0))}. Adjust periods or breaks.
                   </p>
                 )}
                 {availableMinutes !== null && availableMinutes <= 0 && (

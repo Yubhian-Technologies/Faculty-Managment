@@ -513,7 +513,7 @@ export function RequestList({
   async function confirm() {
     if (!pending) return;
     if (pending.needsRemark && !remark.trim()) {
-      toast({ variant: "destructive", title: "Please add a reason" });
+      toast({ variant: "destructive", title: "Add a reason" });
       return;
     }
     setBusy(true);

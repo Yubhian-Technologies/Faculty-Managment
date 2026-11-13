@@ -260,7 +260,7 @@ export function InstitutionalTimetableTable({
       toast({ title: "Timetable downloaded", description: `Saved as ${filename}` });
     } catch (err) {
       console.error(err);
-      toast({ title: "Download failed", description: "Failed to generate timetable PDF", variant: "destructive" });
+      toast({ title: "Download failed", description: "Unable to generate timetable PDF", variant: "destructive" });
     } finally {
       setIsExportingPdf(false);
     }
@@ -282,7 +282,7 @@ export function InstitutionalTimetableTable({
       toast({ title: "Timetable exported", description: `Saved as ${filename}` });
     } catch (err) {
       console.error(err);
-      toast({ title: "Export failed", description: "Failed to export timetable spreadsheet", variant: "destructive" });
+      toast({ title: "Export failed", description: "Unable to export timetable spreadsheet", variant: "destructive" });
     } finally {
       setIsExportingXlsx(false);
     }
@@ -292,7 +292,7 @@ export function InstitutionalTimetableTable({
     const html = buildSectionTimetablePdfHtml(exportMeta);
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
-      toast({ title: "Popup blocked", description: "Please allow popups to print the timetable", variant: "destructive" });
+      toast({ title: "Popup blocked", description: "Allow popups to print the timetable", variant: "destructive" });
       return;
     }
     printWindow.document.open();

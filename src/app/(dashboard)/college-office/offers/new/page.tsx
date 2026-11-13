@@ -77,7 +77,7 @@ export default function NewCollegeOfficeOfferLetterPage() {
         setExistingLetterCandidateIds(new Set(lettersRes.filter((l) => l.status !== "REJECTED").map((l) => l.candidateId)));
         setBatches(batchRes);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }));
   }
 
   useEffect(() => { void loadBatchesAndLetters(); }, []);
@@ -214,7 +214,7 @@ export default function NewCollegeOfficeOfferLetterPage() {
         }),
       });
       const data = await res.json() as { id?: string; error?: string; ccEmails?: string[] };
-      if (!res.ok) throw new Error(data.error ?? "Failed to send offer");
+      if (!res.ok) throw new Error(data.error ?? "Unable to send offer");
 
       const batch = batches.find((b) => b.id === batchId);
       const letterFields = {
@@ -242,7 +242,7 @@ export default function NewCollegeOfficeOfferLetterPage() {
 
 Greetings from ${institution}.
 
-We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${new Date(joiningDate).toLocaleDateString("en-IN")}. Please find your offer letter attached.
+We are pleased to offer you the position of ${designation} in the ${department} department, effective from ${new Date(joiningDate).toLocaleDateString("en-IN")}. Find your offer letter attached.
 ${acceptanceUrl ? `\nPlease review the Terms & Conditions and confirm your acceptance and date of joining here:\n${acceptanceUrl}\n` : ""}
 Congratulations, and welcome aboard!
 
@@ -262,7 +262,7 @@ ${institution}`;
       });
     } catch (err) {
       mailWindow?.close();
-      toast({ variant: "destructive", title: "Failed to send offer", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to send offer", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }

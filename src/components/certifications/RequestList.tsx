@@ -29,7 +29,7 @@ export function RequestList({ request, onCancelled }: { request: CertificateRequ
       setConfirmOpen(false);
       onCancelled?.();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't cancel" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to cancel" });
     } finally {
       setCancelling(false);
     }

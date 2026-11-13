@@ -134,7 +134,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
           setSaveState(res.status >= 500 ? "failed" : "idle");
           if (data.errors) setFieldErrors(data.errors);
           if (action === "complete") setAttention((s) => new Set(s).add(sent.qid));
-          toast({ variant: "destructive", title: data.error ?? "Could not save" });
+          toast({ variant: "destructive", title: data.error ?? "Unable to save" });
           return false;
         }
         // Saved.

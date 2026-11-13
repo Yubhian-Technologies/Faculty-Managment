@@ -129,7 +129,7 @@ export default function FacultyCredentialsPage() {
           setSelected(new Set(list.filter((c) => preselectIds.has(c.applicationId)).map((c) => c.applicationId)));
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load candidates" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load candidates" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -230,11 +230,11 @@ export default function FacultyCredentialsPage() {
         body: JSON.stringify({ action: "REVEAL_CREDENTIALS" }),
       });
       const data = await res.json() as { email?: string; password?: string; error?: string };
-      if (!res.ok || !data.password) throw new Error(data.error ?? "Failed to reveal credentials");
+      if (!res.ok || !data.password) throw new Error(data.error ?? "Unable to reveal credentials");
       setRevealed({ name: request.candidateName, email: data.email ?? request.assignedEmail ?? "", password: data.password });
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to reveal credentials", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to reveal credentials", description: err instanceof Error ? err.message : undefined });
     } finally {
       setRevealBusyId(null);
     }

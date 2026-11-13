@@ -50,7 +50,7 @@ export default function HodFacultyModulePage() {
         setFaculty(f);
         setTeachingAssignments(assignments);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty record" }))
       .finally(() => setIsLoading(false));
   }, [facultyId, moduleKey, moduleDef, router, listHref]);
 

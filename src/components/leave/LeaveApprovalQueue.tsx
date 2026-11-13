@@ -101,10 +101,10 @@ export function LeaveApprovalQueue() {
     try {
       const res = await fetch("/api/leave/applications?scope=approvals");
       const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load approvals");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load approvals");
       setRequests(data.requests ?? []);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load approvals" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load approvals" });
     } finally {
       setIsLoading(false);
     }
@@ -117,7 +117,7 @@ export function LeaveApprovalQueue() {
     try {
       const res = await fetch("/api/leave/applications?scope=od-proofs");
       const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load proof submissions");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load proof submissions");
       setOdProofs(data.requests ?? []);
     } catch {
       // Deliberately quiet: the pending-approvals queue above is the primary
@@ -130,7 +130,7 @@ export function LeaveApprovalQueue() {
     try {
       const res = await fetch("/api/leave/applications?scope=od-missing-proof");
       const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load missing-proof list");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load missing-proof list");
       setOdMissingProofs(data.requests ?? []);
     } catch {
       // Deliberately quiet - same reasoning as loadOdProofs above.
@@ -142,7 +142,7 @@ export function LeaveApprovalQueue() {
     try {
       const res = await fetch("/api/leave/applications?scope=leave-certificates");
       const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load certificate submissions");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load certificate submissions");
       setCertificates(data.requests ?? []);
     } catch {
       // Deliberately quiet - same reasoning as loadOdProofs above.
@@ -154,7 +154,7 @@ export function LeaveApprovalQueue() {
     try {
       const res = await fetch("/api/leave/applications?scope=scl-missing-certificate");
       const data = (await res.json()) as { requests?: LeaveRequest[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load missing-certificate list");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load missing-certificate list");
       setMissingCertificates(data.requests ?? []);
     } catch {
       // Deliberately quiet - same reasoning as loadOdProofs above.
@@ -171,11 +171,11 @@ export function LeaveApprovalQueue() {
         body: JSON.stringify({ action: "REQUEST_CERTIFICATE" }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to send the request");
+      if (!res.ok) throw new Error(json.error ?? "Unable to send the request");
       toast({ variant: "success", title: `${request.employeeName} has been notified` });
       setCertificateRequestedIds((prev) => new Set(prev).add(request.id));
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to send the request" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to send the request" });
     } finally {
       setCertificateRequestingId(null);
     }
@@ -198,7 +198,7 @@ export function LeaveApprovalQueue() {
         }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to record the decision");
+      if (!res.ok) throw new Error(json.error ?? "Unable to record the decision");
       toast({
         variant: "success",
         title: verify ? "Certificate verified" : "Certificate rejected",
@@ -208,7 +208,7 @@ export function LeaveApprovalQueue() {
       });
       setCertificates((prev) => prev.filter((r) => r.id !== request.id));
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to record the decision" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to record the decision" });
     } finally {
       setCertificateActingId(null);
     }
@@ -223,11 +223,11 @@ export function LeaveApprovalQueue() {
         body: JSON.stringify({ action: "REQUEST_OD_PROOF" }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to send the request");
+      if (!res.ok) throw new Error(json.error ?? "Unable to send the request");
       toast({ variant: "success", title: `${request.employeeName} has been notified` });
       setOdRequestedIds((prev) => new Set(prev).add(request.id));
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to send the request" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to send the request" });
     } finally {
       setOdRequestingId(null);
     }
@@ -250,7 +250,7 @@ export function LeaveApprovalQueue() {
         }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to record the decision");
+      if (!res.ok) throw new Error(json.error ?? "Unable to record the decision");
       toast({
         variant: "success",
         title: verify ? "Proof verified" : "Proof rejected",
@@ -260,7 +260,7 @@ export function LeaveApprovalQueue() {
       });
       setOdProofs((prev) => prev.filter((r) => r.id !== request.id));
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to record the decision" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to record the decision" });
     } finally {
       setOdProofActingId(null);
     }
@@ -406,7 +406,7 @@ export function LeaveApprovalQueue() {
           }),
         });
         const proposeData = (await proposeRes.json()) as { error?: string; changed?: boolean };
-        if (!proposeRes.ok) throw new Error(proposeData.error ?? "Failed to update coverage");
+        if (!proposeRes.ok) throw new Error(proposeData.error ?? "Unable to update coverage");
         // Naming someone new is its own step: they have to accept before this
         // can go to the Principal. Stop here rather than attempting the
         // forward, which the server would reject anyway ("still awaiting

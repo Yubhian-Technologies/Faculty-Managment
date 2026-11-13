@@ -72,7 +72,7 @@ export async function GET(request: Request) {
     }
 
     if (matches.empty) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     if (matches.size > 1) {
       console.error("[public/faculty-public GET] ambiguous employeeId across colleges:", employeeId);
@@ -245,6 +245,6 @@ export async function GET(request: Request) {
     });
   } catch (err) {
     console.error("[public/faculty-public GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

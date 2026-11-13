@@ -84,7 +84,7 @@ export default function StudentDashboardPage() {
     fetch("/api/college/student/me/today")
       .then((r) => r.json() as Promise<TodayResponse>)
       .then(setData)
-      .catch(() => toast({ variant: "destructive", title: "Failed to load dashboard" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load dashboard" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -104,7 +104,7 @@ export default function StudentDashboardPage() {
       ) : !student ? (
         <Card className="border border-dashed">
           <CardContent className="p-6 text-center text-sm text-muted-foreground">
-            {data?.message ?? "Your login is not linked to a student record yet. Please contact your College Office."}
+            {data?.message ?? "Your login is not linked to a student record yet. Contact your College Office."}
           </CardContent>
         </Card>
       ) : (

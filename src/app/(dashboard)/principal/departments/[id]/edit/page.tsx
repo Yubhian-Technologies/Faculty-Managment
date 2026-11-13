@@ -96,7 +96,7 @@ export default function EditDepartmentPage() {
         );
         reset({ name: dept.name, code: dept.code });
       } catch {
-        toast({ variant: "destructive", title: "Failed to load department" });
+        toast({ variant: "destructive", title: "Unable to load department" });
       } finally {
         setLoading(false);
       }
@@ -152,7 +152,7 @@ export default function EditDepartmentPage() {
       toast({ variant: "success", title: "Department updated" });
       router.push("/principal/courses?tab=departments");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSubmitting(false);
     }
@@ -167,7 +167,7 @@ export default function EditDepartmentPage() {
       setExistingSectionsWarning(null);
       router.push("/principal/courses?tab=departments");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSubmitting(false);
     }

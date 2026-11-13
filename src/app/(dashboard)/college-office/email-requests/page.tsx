@@ -33,7 +33,7 @@ export default function EmailRequestsPage() {
     fetch("/api/college/email-requests")
       .then((r) => r.json() as Promise<{ requests: Row[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load email requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load email requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -52,13 +52,13 @@ export default function EmailRequestsPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to cancel");
+        throw new Error(err.error ?? "Unable to cancel");
       }
       toast({ variant: "success", title: "Request cancelled" });
       setCancelTarget(null);
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to cancel", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to cancel", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsCancelling(false);
     }

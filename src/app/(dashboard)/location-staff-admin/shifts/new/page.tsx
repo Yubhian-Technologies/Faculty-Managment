@@ -68,7 +68,7 @@ export default function LocationStaffAdminNewShiftPage() {
       toast({
         variant: "destructive",
         title: "Department required",
-        description: "Please select at least one department or enable 'Campus-Wide'.",
+        description: "Select at least one department or enable 'Campus-Wide'.",
       });
       return;
     }
@@ -100,7 +100,7 @@ export default function LocationStaffAdminNewShiftPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create shift");
+      if (!res.ok) throw new Error(data.error || "Unable to create shift");
 
       toast({
         title: "Shift Created",
@@ -116,7 +116,7 @@ export default function LocationStaffAdminNewShiftPage() {
           : "/location-staff-admin/departments"
       );
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to create shift";
+      const msg = err instanceof Error ? err.message : "Unable to create shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsSubmitting(false);

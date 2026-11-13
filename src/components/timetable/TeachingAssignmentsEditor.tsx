@@ -133,10 +133,10 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
           fetch(`/api/college/faculty?department=${encodeURIComponent(deptName)}&availableOnly=true`)
             .then((r) => r.json() as Promise<{ faculty: FacultyMember[] }>)
             .then((d) => setFaculty((d.faculty ?? []).map((f) => ({ ...f, name: facultyDisplayName(f) }))))
-            .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }));
+            .catch(() => toast({ variant: "destructive", title: "Unable to load faculty" }));
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load teaching assignments" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load teaching assignments" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -389,7 +389,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
         });
         const json = await res.json() as { error?: string };
         if (!res.ok) {
-          toast({ variant: "destructive", title: `Failed to assign ${fac?.name ?? "faculty"}`, description: json.error });
+          toast({ variant: "destructive", title: `Unable to assign ${fac?.name ?? "faculty"}`, description: json.error });
           break;
         }
         done++;
@@ -423,7 +423,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
       });
       const json = await res.json() as { error?: string; created?: { departmentName: string }[]; skipped?: { departmentName: string }[] };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to send request", description: json.error });
+        toast({ variant: "destructive", title: "Unable to send request", description: json.error });
         return;
       }
       const sent = json.created?.length ?? 0;
@@ -459,14 +459,14 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
       const res = await fetch(`/api/college/timetable/reset?sectionId=${encodeURIComponent(sectionId)}${semesterQuery}`, { method: "DELETE" });
       const json = await res.json().catch(() => ({})) as { error?: string; removedAssignments?: number };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to delete assignments", description: json.error });
+        toast({ variant: "destructive", title: "Unable to delete assignments", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Section cleared", description: `${json.removedAssignments ?? 0} assignment(s) and their timetable removed.` });
       setResetTarget(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete assignments" });
+      toast({ variant: "destructive", title: "Unable to delete assignments" });
     } finally {
       setResetting(false);
     }
@@ -478,14 +478,14 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
       const res = await fetch(`/api/college/teaching-assignments?id=${id}`, { method: "DELETE" });
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to remove assignment", description: json.error });
+        toast({ variant: "destructive", title: "Unable to remove assignment", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Assignment removed" });
       setRemoveTarget(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove assignment" });
+      toast({ variant: "destructive", title: "Unable to remove assignment" });
     } finally {
       setRemoving(false);
     }

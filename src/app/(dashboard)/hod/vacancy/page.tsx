@@ -30,7 +30,7 @@ export default function HODVacancyPage() {
       fetch("/api/college/vacancy-requests")
         .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
         .then((d) => setVacancies(d.vacancyRequests ?? []))
-        .catch(() => toast({ variant: "destructive", title: "Failed to load vacancies" })),
+        .catch(() => toast({ variant: "destructive", title: "Unable to load vacancies" })),
       fetch("/api/college/faculty-requirement")
         .then((r) => r.json() as Promise<FacultyRequirementResult>)
         .then((d) => setRequirement(d))
@@ -45,12 +45,12 @@ export default function HODVacancyPage() {
     try {
       const res = await fetch(`/api/college/vacancy-requests/${v.id}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to delete");
+      if (!res.ok) throw new Error(json.error ?? "Unable to delete");
       toast({ variant: "success", title: "Hiring request deleted" });
       setVacancies((prev) => prev.filter((r) => r.id !== v.id));
       setDeleteTarget(null);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to delete", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to delete", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDeletingId(null);
     }

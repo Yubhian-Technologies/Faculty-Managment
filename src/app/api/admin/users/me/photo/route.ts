@@ -17,14 +17,14 @@ export async function PATCH(request: Request) {
     const photoUrl = body.photoUrl;
 
     if (photoUrl === undefined) {
-      return NextResponse.json({ error: "photoUrl is required" }, { status: 400 });
+      return NextResponse.json({ error: "Upload a photo." }, { status: 400 });
     }
     if (photoUrl !== "") {
       if (!photoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
-        return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+        return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
       }
       if (!photoUrl.includes(encodeURIComponent(`profile-photos/${session.uid}_`))) {
-        return NextResponse.json({ error: "Photo does not belong to this user" }, { status: 403 });
+        return NextResponse.json({ error: "This photo belongs to another user." }, { status: 403 });
       }
     }
 
@@ -32,7 +32,7 @@ export async function PATCH(request: Request) {
     const userRef = db.collection("systemUsers").doc(session.uid);
     const userSnap = await userRef.get();
     if (!userSnap.exists) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({ error: "User not found. The account may have been deleted." }, { status: 404 });
     }
 
     await userRef.update({ profilePhotoUrl: photoUrl });
@@ -42,9 +42,9 @@ export async function PATCH(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[admin/users/me/photo PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

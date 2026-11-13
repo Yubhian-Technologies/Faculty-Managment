@@ -63,7 +63,7 @@ export default function HODCandidateDetailPage() {
         setCandidate(candidateRes.candidate);
         setApplications(applicationsRes);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load candidate" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load candidate" }))
       .finally(() => setIsLoading(false));
   }, [candidateId, router]);
 

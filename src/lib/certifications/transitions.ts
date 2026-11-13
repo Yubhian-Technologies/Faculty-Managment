@@ -413,7 +413,7 @@ export async function resubmitRequest(
     } else {
       pendingRecipientUids = await resolveStepPendingUids(db, collegeId, step, recipientContext(req));
     }
-    if (pendingRecipientUids.length === 0) throw new CertificationError("NO_APPROVER", `No one is set to approve "${step.label}" right now - please contact the College Office.`, 409);
+    if (pendingRecipientUids.length === 0) throw new CertificationError("NO_APPROVER", `No one is set to approve "${step.label}" right now - contact the College Office.`, 409);
 
     const history = [...req.history, { action: "RESUBMITTED", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now } as CertificateHistoryEntry];
     const update: Record<string, unknown> = {

@@ -23,7 +23,7 @@ export function DepartmentOfficeAccessCard() {
     queryFn: async () => {
       const res = await fetch("/api/college/department-office/access", { cache: "no-store" });
       const json = (await res.json()) as Payload & { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load");
+      if (!res.ok) throw new Error(json.error ?? "Unable to load");
       return json;
     },
   });
@@ -38,11 +38,11 @@ export function DepartmentOfficeAccessCard() {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ editStudentAttendance: next }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Could not save");
+      if (!res.ok) throw new Error(json.error ?? "Unable to save");
       await qc.invalidateQueries({ queryKey: KEY });
       toast({ variant: "success", title: next ? "Department Office can now edit student attendance" : "Department Office can no longer edit student attendance" });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSavingAttendance(false);
     }
@@ -66,12 +66,12 @@ export function DepartmentOfficeAccessCard() {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hrefs: Array.from(selected) }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Could not save");
+      if (!res.ok) throw new Error(json.error ?? "Unable to save");
       setDraft(null);
       await qc.invalidateQueries({ queryKey: KEY });
       toast({ variant: "success", title: "Department Office modules saved", description: "Applies the next time they open or refresh the app." });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }

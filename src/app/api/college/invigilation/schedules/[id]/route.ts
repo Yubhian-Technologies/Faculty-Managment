@@ -27,7 +27,7 @@ export async function GET(_request: Request, { params }: Ctx) {
     const { id } = await params;
     const db = getAdminDb();
     const schedule = await loadSchedule(db, session.collegeId, id);
-    if (!schedule) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    if (!schedule) return NextResponse.json({ error: "Schedule not found. It may have been deleted." }, { status: 404 });
     const [{ slots, seatingPlans }, dutiesSnap, pool, locks] = await Promise.all([
       scheduleSlots(db, session.collegeId, schedule),
       dutiesCol(db, session.collegeId).where("scheduleId", "==", id).get(),
@@ -61,10 +61,10 @@ export async function PATCH(request: Request, { params }: Ctx) {
     const db = getAdminDb();
     const body = (await readJsonBody(request)) as { name?: string; midPlanIds?: string[]; rules?: unknown; status?: string };
     const schedule = await loadSchedule(db, session.collegeId, id);
-    if (!schedule) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    if (!schedule) return NextResponse.json({ error: "Schedule not found. It may have been deleted." }, { status: 404 });
     const update: Partial<InvigilationSchedule> & { updatedAt: Date } = { updatedAt: new Date() };
     if (body.name !== undefined) {
-      if (!String(body.name).trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
+      if (!String(body.name).trim()) return NextResponse.json({ error: "Name is required." }, { status: 400 });
       update.name = String(body.name).trim();
     }
     if (body.midPlanIds !== undefined) {
@@ -103,7 +103,7 @@ export async function DELETE(request: Request, { params }: Ctx) {
     const force = new URL(request.url).searchParams.get("force") === "1";
     const db = getAdminDb();
     const schedule = await loadSchedule(db, session.collegeId, id);
-    if (!schedule) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    if (!schedule) return NextResponse.json({ error: "Schedule not found. It may have been deleted." }, { status: 404 });
     const [duties, locks, slotLocks] = await Promise.all([
       dutiesCol(db, session.collegeId).where("scheduleId", "==", id).get(),
       locksCol(db, session.collegeId).where("scheduleId", "==", id).get(),

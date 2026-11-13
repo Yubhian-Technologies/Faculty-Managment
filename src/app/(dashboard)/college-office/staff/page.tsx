@@ -99,7 +99,7 @@ export default function CollegeOfficePayPromotionsPage() {
           }));
         setRows([...leaders, ...faculty]);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff" }))
       .finally(() => setIsLoading(false));
   }, []);
 

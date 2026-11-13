@@ -30,7 +30,7 @@ export default function RejectVacancyPage() {
         }
         setVacancy(v);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load vacancy request" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load vacancy request" }))
       .finally(() => setLoading(false));
   }, [id, router]);
 
@@ -50,7 +50,7 @@ export default function RejectVacancyPage() {
       toast({ title: "Rejected", description: "HOD has been notified." });
       router.push("/principal/vacancies");
     } catch (err) {
-      toast({ variant: "destructive", title: "Action failed", description: err instanceof Error && err.message ? err.message : "Please try again." });
+      toast({ variant: "destructive", title: "Action failed", description: err instanceof Error && err.message ? err.message : "Try again." });
     } finally {
       setSaving(false);
     }

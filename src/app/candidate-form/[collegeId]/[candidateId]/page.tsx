@@ -333,7 +333,7 @@ export default function CandidateFormPage() {
       setConfirmOpen(false);
       setSubmitted(true);
     } catch {
-      toast({ variant: "destructive", title: "Failed to submit", description: "Please try again." });
+      toast({ variant: "destructive", title: "Unable to submit", description: "Please try again." });
     } finally {
       setSaving(false);
     }

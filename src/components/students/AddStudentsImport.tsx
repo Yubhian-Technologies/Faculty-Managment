@@ -320,12 +320,12 @@ export function AddStudentsImport() {
         body: JSON.stringify(rowPassword ? { ...payload, loginPassword: rowPassword } : payload),
       });
       const json = await res.json() as { id?: string; error?: string };
-      if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
+      if (!res.ok) { setFixError(json.error ?? "Unable to save"); return; }
       toast({ variant: "success", title: `${form.name.trim()} imported` });
       setFailedRows((prev) => prev.map((r) => (r.row === fixTarget.row ? { ...r, status: "fixed" as const } : r)));
       setFixTarget(null);
     } catch {
-      setFixError("Network error - please try again");
+      setFixError("Network error - try again");
     } finally {
       setFixSaving(false);
     }
@@ -368,7 +368,7 @@ export function AddStudentsImport() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      setTemplateError("Couldn't build the Excel template. Please try again.");
+      setTemplateError("Unable to build the Excel template. Try again.");
     } finally {
       setIsBuildingTemplate(false);
     }
@@ -385,7 +385,7 @@ export function AddStudentsImport() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -429,7 +429,7 @@ export function AddStudentsImport() {
 
       setRows(dataRows);
     } catch {
-      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Unable to parse the file. Ensure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -503,7 +503,7 @@ export function AddStudentsImport() {
       });
     }
     if (created > 0 && stoppedAt === null) {
-      toast({ variant: "success", title: `${created} students imported successfully` });
+      toast({ variant: "success", title: `${created} students imported` });
       setRows([]);
     }
   }
@@ -613,7 +613,7 @@ export function AddStudentsImport() {
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
         </CardContent>

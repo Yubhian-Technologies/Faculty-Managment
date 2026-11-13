@@ -21,7 +21,7 @@ export default function HODSetupPage() {
     fetch("/api/college/hiring-batches?status=APPROVED")
       .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
       .then((d) => setBatches(d.batches ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }, []);
 

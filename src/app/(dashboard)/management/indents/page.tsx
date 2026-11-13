@@ -53,7 +53,7 @@ export default function ManagementIndentsPage() {
     fetch("/api/management/colleges")
       .then((r) => r.json() as Promise<{ colleges: College[] }>)
       .then((d) => setColleges(d.colleges ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load colleges" }));
   }, []);
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export default function ManagementIndentsPage() {
     fetch(`/api/management/colleges/${collegeId}/departments`)
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments(d.departments ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }));
   }, [collegeId]);
 
   useEffect(() => {
@@ -75,7 +75,7 @@ export default function ManagementIndentsPage() {
     fetch(`/api/purchase/indents/overview?${params.toString()}`)
       .then((r) => r.json() as Promise<{ indents: OverviewIndent[] }>)
       .then((d) => setRequests(d.indents ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load indent requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load indent requests" }))
       .finally(() => setIsLoading(false));
   }, [collegeId]);
 

@@ -31,5 +31,5 @@ export async function resolveOfferContactBlock(params: {
       })();
 
   const lines = [person.name, person.phone ? `Phone: ${person.phone}` : "", person.email ? `Email: ${person.email}` : ""].filter(Boolean);
-  return lines.length > 0 ? `\nFor any queries, please contact your ${person.label}:\n${lines.join("\n")}\n` : "";
+  return lines.length > 0 ? `\nFor any queries contact your ${person.label}:\n${lines.join("\n")}\n` : "";
 }

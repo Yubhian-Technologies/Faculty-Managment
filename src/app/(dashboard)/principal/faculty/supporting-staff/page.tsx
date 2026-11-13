@@ -61,7 +61,7 @@ function PrincipalSupportingStaffViewContent() {
     fetch("/api/college/supporting-staff")
       .then((r) => r.json() as Promise<{ staff?: StaffRow[] }>)
       .then((d) => setStaff(d.staff ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load Supporting Staff" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load Supporting Staff" }))
       .finally(() => setIsLoading(false));
   }, []);
 

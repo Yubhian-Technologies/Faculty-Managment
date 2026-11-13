@@ -103,7 +103,7 @@ export default function DeptHeadInterviewDetailPage() {
         }
         setScoreForms(pre);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -146,7 +146,7 @@ export default function DeptHeadInterviewDetailPage() {
       toast({ variant: "success", title: "Score submitted", description: `Feedback saved for ${candidateName}` });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to submit score" });
+      toast({ variant: "destructive", title: "Unable to submit score" });
     } finally {
       setSubmittingFor(null);
     }

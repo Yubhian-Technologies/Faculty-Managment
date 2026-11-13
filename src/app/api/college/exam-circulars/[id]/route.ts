@@ -31,14 +31,14 @@ export async function PATCH(
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection("examCirculars").doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     const existing = snap.data() as { kind?: string };
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (existing.kind === "NOTICE") {
       const { courseId, courseName, semester, totalSemesters, noticeDate, subject } = body;
       const noticeBody = body.body;
-      if (!courseName) return NextResponse.json({ error: "Course is required" }, { status: 400 });
+      if (!courseName) return NextResponse.json({ error: "Course is required." }, { status: 400 });
       if (!semester || !totalSemesters) return NextResponse.json({ error: "Semester is required" }, { status: 400 });
       if (!noticeDate) return NextResponse.json({ error: "Date is required" }, { status: 400 });
       if (isPastDate(noticeDate)) return NextResponse.json({ error: "Date cannot be in the past" }, { status: 400 });
@@ -59,10 +59,10 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/exam-circulars/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -77,7 +77,7 @@ export async function DELETE(
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection("examCirculars").doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
 
     const { fileUrl } = snap.data() as { fileUrl?: string };
     await ref.delete();
@@ -98,9 +98,9 @@ export async function DELETE(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/exam-circulars/[id] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

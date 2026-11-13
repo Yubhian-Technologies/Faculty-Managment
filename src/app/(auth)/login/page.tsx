@@ -19,10 +19,10 @@ import { toast } from "@/hooks/useToast";
 import { studentLoginEmail } from "@/lib/students/loginDefaults";
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
-  "auth/invalid-credential": "Invalid username or password. Please try again.",
+  "auth/invalid-credential": "Invalid username or password. Try again.",
   "auth/user-disabled": "This account has been disabled. Contact your administrator.",
-  "auth/too-many-requests": "Too many failed attempts. Please try again later.",
-  "auth/network-request-failed": "Network error. Please check your connection.",
+  "auth/too-many-requests": "Too many failed attempts. Try again later.",
+  "auth/network-request-failed": "Network error. Check your connection.",
   "auth/user-not-found": "No account found with this username or email.",
   "auth/wrong-password": "Incorrect password.",
 };
@@ -164,7 +164,7 @@ async function completeLogin(
 function loginFailureMessage(err: unknown): string {
   const code = (err as { code?: string }).code ?? "";
   return (
-    FIREBASE_ERROR_MESSAGES[code] ?? (err instanceof Error ? err.message : "Sign in failed. Please try again.")
+    FIREBASE_ERROR_MESSAGES[code] ?? (err instanceof Error ? err.message : "Sign in failed. Try again.")
   );
 }
 
@@ -224,7 +224,7 @@ function LoginForm() {
             body: JSON.stringify({ rollNumber: identifier.trim() }),
           });
           if (resolveRes.status === 429) {
-            throw Object.assign(new Error("Too many attempts. Please wait a minute and try again."), { code: "auth/too-many-requests" });
+            throw Object.assign(new Error("Too many attempts. Wait a minute and try again."), { code: "auth/too-many-requests" });
           }
           const resolveBody = (await resolveRes.json().catch(() => ({}))) as { loginEmail?: string; loginEmails?: string[] };
           const candidates = (resolveBody.loginEmails ?? (resolveBody.loginEmail ? [resolveBody.loginEmail] : []))
@@ -259,7 +259,7 @@ function LoginForm() {
           });
           const empBody = (await empRes.json().catch(() => ({}))) as { customToken?: string; error?: string };
           if (empRes.status === 429) {
-            throw Object.assign(new Error("Too many attempts. Please wait a minute and try again."), { code: "auth/too-many-requests" });
+            throw Object.assign(new Error("Too many attempts. Wait a minute and try again."), { code: "auth/too-many-requests" });
           }
           if (empRes.status === 403) {
             throw Object.assign(new Error(empBody.error), { code: "auth/user-disabled" });

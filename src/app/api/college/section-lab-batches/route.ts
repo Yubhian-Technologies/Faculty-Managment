@@ -21,7 +21,7 @@ export async function PUT(request: Request) {
     const session = await requireCollegeMember("PANEL_MEMBER", "HOD");
     const body = (await readJsonBody(request)) as { sectionId?: string; labBatches?: unknown };
     const sectionId = body.sectionId?.trim();
-    if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+    if (!sectionId) return NextResponse.json({ error: "Select a section." }, { status: 400 });
     if (!Array.isArray(body.labBatches)) return NextResponse.json({ error: "labBatches must be a list of names" }, { status: 400 });
     if (body.labBatches.length > MAX_BATCHES) return NextResponse.json({ error: `At most ${MAX_BATCHES} batches` }, { status: 400 });
 
@@ -70,10 +70,10 @@ export async function PUT(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/section-lab-batches PUT]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -88,7 +88,7 @@ export async function PATCH(request: Request) {
     const session = await requireCollegeMember("PANEL_MEMBER", "HOD");
     const body = (await readJsonBody(request)) as { sectionId?: string; assign?: Record<string, unknown>; deleteBatch?: string };
     const sectionId = body.sectionId?.trim();
-    if (!sectionId) return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+    if (!sectionId) return NextResponse.json({ error: "Select a section." }, { status: 400 });
     if ((body.assign === undefined) === (body.deleteBatch === undefined)) {
       return NextResponse.json({ error: "Send either assign or deleteBatch" }, { status: 400 });
     }
@@ -158,9 +158,9 @@ export async function PATCH(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/section-lab-batches PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -25,10 +25,10 @@ export function StudentOwnDocuments({ answers }: { answers: Record<string, strin
     try {
       const res = await fetch("/api/college/student/me/documents", { cache: "no-store" });
       const body = (await res.json()) as { documents?: StudentDocument[]; error?: string };
-      if (!res.ok) throw new Error(body.error ?? "Failed to load your documents");
+      if (!res.ok) throw new Error(body.error ?? "Unable to load your documents");
       setDocuments((body.documents ?? []).filter((d) => d.selfUploaded === true && !!d.selfUploadKind));
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load your documents" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load your documents" });
     } finally {
       setIsLoading(false);
     }
@@ -41,12 +41,12 @@ export function StudentOwnDocuments({ answers }: { answers: Record<string, strin
     try {
       const res = await fetch(`/api/college/student/me/documents/${removeTarget.id}`, { method: "DELETE" });
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!res.ok || !body.ok) throw new Error(body.error ?? "Failed to remove the document");
+      if (!res.ok || !body.ok) throw new Error(body.error ?? "Unable to remove the document");
       toast({ variant: "success", title: "Document removed" });
       setRemoveTarget(null);
       await load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Network error - please try again" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Network error - try again" });
     }
   }
 
@@ -109,12 +109,12 @@ function KindSection({
         body: JSON.stringify({ kind: info.kind, fileUrl: upBody.url, fileName: upBody.fileName ?? file.name, fileType: upBody.fileType, fileSize: upBody.fileSize }),
       });
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!res.ok || !body.ok) throw new Error(body.error ?? "Failed to save the document");
+      if (!res.ok || !body.ok) throw new Error(body.error ?? "Unable to save the document");
       toast({ variant: "success", title: "Document uploaded" });
       reset();
       await onAdded();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Network error - please try again" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Network error - try again" });
     } finally {
       setSaving(false);
     }

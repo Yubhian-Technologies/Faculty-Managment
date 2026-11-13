@@ -57,7 +57,7 @@ async function nameOf(db: FirebaseFirestore.Firestore, collegeId: string, uid: s
 
 function unauthorized(err: unknown) {
   if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
   }
   return null;
 }
@@ -86,7 +86,7 @@ export async function GET() {
     const res = unauthorized(err);
     if (res) return res;
     console.error("[college/research-review GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -109,14 +109,14 @@ export async function PATCH(request: Request) {
     }
     const reason = body.reason?.trim() ?? "";
     if ((body.action === "SEND_BACK" || body.action === "REJECT") && !reason) {
-      return NextResponse.json({ error: "A reason is required" }, { status: 400 });
+      return NextResponse.json({ error: "Enter a reason." }, { status: 400 });
     }
 
     const db = getAdminDb();
     const departments = await getCoordinatorDepartments(db, session.collegeId, session.uid);
     const ref = db.collection("colleges").doc(session.collegeId).collection(cfg.collection).doc(body.id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Record not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     const rec = snap.data() as Record<string, unknown> & { uid?: string; title?: string; reviewDepartment?: string; status?: string };
 
     const inScope = !!rec.reviewDepartment && departments.some((d) => d.trim().toLowerCase() === rec.reviewDepartment!.trim().toLowerCase());
@@ -175,7 +175,7 @@ export async function PATCH(request: Request) {
         coordinatorReviewedBy: session.uid, coordinatorReviewedByName: coordinatorName, coordinatorReviewedAt: now,
       });
     } else if (body.action !== "EDIT") {
-      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+      return NextResponse.json({ error: "This action is not recognised. Reload the page and try again." }, { status: 400 });
     }
     if (body.action === "EDIT" && editedFields.length === 0) {
       return NextResponse.json({ error: "No changes to save" }, { status: 400 });
@@ -212,6 +212,6 @@ export async function PATCH(request: Request) {
     const res = unauthorized(err);
     if (res) return res;
     console.error("[college/research-review PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

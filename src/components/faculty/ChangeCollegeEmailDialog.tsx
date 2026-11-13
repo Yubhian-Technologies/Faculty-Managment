@@ -70,12 +70,12 @@ function EmailForm({ faculty, onClose, onChanged }: { faculty: NonNullable<Props
         body: JSON.stringify({ employeeId: faculty.employeeId, newEmail: next }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) { setError(data.error ?? "Failed to change the college email"); return; }
+      if (!res.ok) { setError(data.error ?? "Unable to change the college email"); return; }
       toast({ variant: "success", title: "College email changed", description: `${faculty.name} has been signed out on all devices and can sign in again with their Employee ID or ${next}.` });
       onChanged(faculty.id, next);
       onClose();
     } catch {
-      setError("Network error - please try again");
+      setError("Network error - try again");
     } finally {
       setSaving(false);
     }

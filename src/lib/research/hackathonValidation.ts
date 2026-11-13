@@ -102,5 +102,5 @@ export function hackathonMissingFields(input: HackathonValidationInput): string[
 
 /** One sentence for an API 400. */
 export function hackathonMissingMessage(missing: string[]): string {
-  return `Please complete the required fields: ${missing.join(", ")}`;
+  return `Complete the required fields: ${missing.join(", ")}`;
 }

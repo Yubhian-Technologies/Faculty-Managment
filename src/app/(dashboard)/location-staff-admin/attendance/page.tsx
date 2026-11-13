@@ -78,7 +78,7 @@ export default function LocationStaffAttendanceOverviewPage() {
         setRoster(d.roster ?? []);
         setSummary(d.summary ?? null);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load attendance" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load attendance" }))
       .finally(() => setIsLoading(false));
   }, [date, selectedDeptId]);
 

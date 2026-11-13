@@ -152,7 +152,7 @@ export default function AcademicsHolidaysPage() {
     fetch("/api/college/holidays")
       .then((r) => r.json() as Promise<{ holidays: Holiday[] }>)
       .then((d) => setHolidays(d.holidays ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load holidays" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load holidays" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -161,7 +161,7 @@ export default function AcademicsHolidaysPage() {
     fetch("/api/college/summer-holidays")
       .then((r) => r.json() as Promise<{ summerHolidays: SummerHoliday[] }>)
       .then((d) => setSummerHolidays(d.summerHolidays ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load summer holidays" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load summer holidays" }))
       .finally(() => setIsSummerLoading(false));
   }
 
@@ -170,7 +170,7 @@ export default function AcademicsHolidaysPage() {
     fetch("/api/college/sem-breaks")
       .then((r) => r.json() as Promise<{ semBreaks: SemBreak[] }>)
       .then((d) => setSemBreaks(d.semBreaks ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load sem breaks" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load sem breaks" }))
       .finally(() => setIsSemBreaksLoading(false));
   }
 
@@ -196,7 +196,7 @@ export default function AcademicsHolidaysPage() {
     fetch("/api/college/working-days")
       .then((r) => r.json() as Promise<{ workingDays: WorkingDayOverride[] }>)
       .then((d) => setWorkingDays(d.workingDays ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load working days" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load working days" }))
       .finally(() => setIsLoadingWorkingDays(false));
   }
 
@@ -230,13 +230,13 @@ export default function AcademicsHolidaysPage() {
         }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to add working day");
+      if (!res.ok) throw new Error(data.error ?? "Unable to add working day");
       toast({ variant: "success", title: "Working day added" });
       setWorkingDayOpen(false);
       setWorkingDayForm(emptyWorkingDayForm());
       loadWorkingDays();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add working day" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to add working day" });
     } finally {
       setIsSavingWorkingDay(false);
     }
@@ -252,7 +252,7 @@ export default function AcademicsHolidaysPage() {
       setWorkingDayDeleteTarget(null);
       loadWorkingDays();
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove working day" });
+      toast({ variant: "destructive", title: "Unable to remove working day" });
     } finally {
       setIsDeletingWorkingDay(false);
     }
@@ -299,14 +299,14 @@ export default function AcademicsHolidaysPage() {
         }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? (editing ? "Failed to update holiday" : "Failed to add holiday"));
+      if (!res.ok) throw new Error(data.error ?? (editing ? "Unable to update holiday" : "Unable to add holiday"));
       toast({ variant: "success", title: editing ? "Holiday updated" : "Holiday added" });
       setOpen(false);
       setEditing(null);
       setForm(emptyForm());
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add holiday" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to add holiday" });
     } finally {
       setIsSaving(false);
     }
@@ -322,7 +322,7 @@ export default function AcademicsHolidaysPage() {
       setDeleteTarget(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove holiday" });
+      toast({ variant: "destructive", title: "Unable to remove holiday" });
     } finally {
       setIsDeleting(false);
     }
@@ -345,12 +345,12 @@ export default function AcademicsHolidaysPage() {
         body: JSON.stringify(semBreakForm),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save sem break");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save sem break");
       toast({ variant: "success", title: "Sem break saved" });
       setSemBreakOpen(false);
       loadSemBreaks();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save sem break" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save sem break" });
     } finally {
       setIsSemBreakSaving(false);
     }
@@ -366,7 +366,7 @@ export default function AcademicsHolidaysPage() {
       setSemBreakDeleteTarget(null);
       loadSemBreaks();
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove sem break" });
+      toast({ variant: "destructive", title: "Unable to remove sem break" });
     } finally {
       setIsSemBreakDeleting(false);
     }
@@ -410,12 +410,12 @@ export default function AcademicsHolidaysPage() {
         body: JSON.stringify(summerForm),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save summer holidays");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save summer holidays");
       toast({ variant: "success", title: "Summer holidays saved" });
       setSummerOpen(false);
       loadSummerHolidays();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save summer holidays" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save summer holidays" });
     } finally {
       setIsSummerSaving(false);
     }
@@ -431,7 +431,7 @@ export default function AcademicsHolidaysPage() {
       setSummerDeleteTarget(null);
       loadSummerHolidays();
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove summer holidays" });
+      toast({ variant: "destructive", title: "Unable to remove summer holidays" });
     } finally {
       setIsSummerDeleting(false);
     }

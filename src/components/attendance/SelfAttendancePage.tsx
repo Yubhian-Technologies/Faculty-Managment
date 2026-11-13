@@ -99,12 +99,12 @@ export function SelfAttendancePage({ title, description }: SelfAttendancePagePro
     setIsLoading(true);
     try {
       const res = await fetch(`/api/college/attendance?year=${y}&month=${m}`);
-      if (!res.ok) throw new Error("Failed to load attendance");
+      if (!res.ok) throw new Error("Unable to load attendance");
       const json = await res.json() as { summary: AttendanceSummary | null; records: AttendanceRecord[] };
       setSummary(json.summary ?? null);
       setRecords(json.records ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load attendance records" });
+      toast({ variant: "destructive", title: "Unable to load attendance records" });
     } finally {
       setIsLoading(false);
     }

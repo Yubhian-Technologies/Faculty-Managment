@@ -62,7 +62,7 @@ export default function InterviewDetailPage() {
         }
         setDetailBatch(batch);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load interview plan" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load interview plan" }))
       .finally(() => setLoadingBatch(false));
   }, [id, router]);
 

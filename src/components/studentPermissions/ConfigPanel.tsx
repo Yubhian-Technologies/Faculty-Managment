@@ -192,7 +192,7 @@ export function ConfigPanel() {
   }, [data]);
 
   if (isLoading) return <ListSkeleton rows={2} />;
-  if (error || !data || !config) return <LoadError message={(error as Error)?.message ?? "Could not load the configuration"} onRetry={() => void refetch()} />;
+  if (error || !data || !config) return <LoadError message={(error as Error)?.message ?? "Unable to load the configuration"} onRetry={() => void refetch()} />;
   if (editable.length === 0) return <EmptyState icon={ShieldCheck} headline="You don't have access to configure permission routing." hint="Ask the Principal to enable it for your department." />;
 
   const active = scope && editable.includes(scope) ? scope : editable[0];
@@ -216,7 +216,7 @@ export function ConfigPanel() {
       await qc.invalidateQueries({ queryKey: ["student-permission-config"] });
       toast({ title: "Routing saved" });
     } catch (e) {
-      toast({ title: "Could not save", description: (e as Error).message, variant: "destructive" });
+      toast({ title: "Unable to save", description: (e as Error).message, variant: "destructive" });
     } finally {
       setSaving(false);
     }

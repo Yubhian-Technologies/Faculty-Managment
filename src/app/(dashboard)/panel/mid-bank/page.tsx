@@ -37,10 +37,10 @@ export default function FacultyQuestionBankPage() {
       try {
         const res = await fetch("/api/college/mid-question-banks");
         const data = (await res.json()) as { items?: MidBankListItem[]; error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Failed to load");
+        if (!res.ok) throw new Error(data.error ?? "Unable to load");
         setItems(data.items ?? []);
       } catch (e) {
-        toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load" });
+        toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load" });
       } finally {
         setIsLoading(false);
       }

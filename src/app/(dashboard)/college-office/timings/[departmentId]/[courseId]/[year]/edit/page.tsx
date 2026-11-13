@@ -20,7 +20,7 @@ export default function CollegeOfficeCourseYearTimingPage() {
     fetch(`/api/college/courses?departmentId=${encodeURIComponent(departmentId)}`)
       .then((r) => r.json() as Promise<{ courses: Course[] }>)
       .then((d) => setCourse((d.courses ?? []).find((c) => c.id === courseId) ?? null))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load course" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load course" }))
       .finally(() => setLoading(false));
   }, [departmentId, courseId]);
 

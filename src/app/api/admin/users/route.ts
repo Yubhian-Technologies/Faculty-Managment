@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     }
 
     if (!collegeId) {
-      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a college." }, { status: 400 });
     }
 
     const snap = await db
@@ -149,12 +149,12 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[admin/users GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -192,7 +192,7 @@ export async function POST(request: Request) {
     const { name, email, password, role, collegeId, locationId, department, phone, academicProfile, profilePhotoUrl } = body;
 
     if (!name || !email || !password || !role) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "Fill in all required fields." }, { status: 400 });
     }
     // Validate email shape via shared EMAIL_REGEX (trim + lower before check) - 400 guard before any write.
     const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
@@ -208,7 +208,7 @@ export async function POST(request: Request) {
     // Uploaded before the account exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific uid.
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
     }
 
     if (!creatableRoles.includes(role)) {
@@ -280,13 +280,13 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (
       err && typeof err === "object" && "code" in err &&
       (err as { code: string }).code === "auth/email-already-exists"
     ) {
-      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+      return NextResponse.json({ error: "An account with this email address already exists." }, { status: 409 });
     }
     const msg = err instanceof Error ? err.message : String(err);
     const authErr = firebaseAuthErrorResponse(err);

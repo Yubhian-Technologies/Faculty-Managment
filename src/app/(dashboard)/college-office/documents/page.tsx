@@ -53,7 +53,7 @@ export default function CollegeOfficeDocumentsPage() {
 
         setDepartments(Array.from(summaryByDept.values()).sort((a, b) => a.department.localeCompare(b.department)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring pipeline" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring pipeline" }))
       .finally(() => setIsLoading(false));
   }
 

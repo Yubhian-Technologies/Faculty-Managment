@@ -49,7 +49,7 @@ export function StaffAccountsSection() {
       setStaff(json.users ?? []);
       setDepartments(deptsJson.departments ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load staff" });
+      toast({ variant: "destructive", title: "Unable to load staff" });
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +74,7 @@ export function StaffAccountsSection() {
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: json.error ?? "Failed to update" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to update" });
         return;
       }
       toast({ variant: "success", title: `${u.name} ${u.isActive ? "deactivated" : "activated"}` });
@@ -97,7 +97,7 @@ export function StaffAccountsSection() {
         // The server refuses while the person still holds a role or heads a
         // department, and says which - worth showing in full rather than a
         // generic failure.
-        toast({ variant: "destructive", title: json.error ?? "Failed to delete" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to delete" });
         return;
       }
       toast({ variant: "success", title: `${u.name} deleted` });

@@ -38,7 +38,7 @@ const refOf = (id: string, s: StudentRecord): PermissionStudentRef => ({
 export async function createStudentRequest(db: Firestore, user: ActingUser, raw: unknown): Promise<PermissionRequest> {
   const input = parse(() => permissionInputSchema.parse(raw));
   const student = await loadStudentByUid(db, user.collegeId, user.uid);
-  if (!student) throw invalid("Your login isn't linked to a student record yet. Please contact your College Office.");
+  if (!student) throw invalid("Your login isn't linked to a student record yet. Contact your College Office.");
   const [req] = await createRequests(db, user, "STUDENT", input, [student]);
   return req;
 }

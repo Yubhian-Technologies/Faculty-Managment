@@ -36,7 +36,7 @@ export default function RAndDSeedFundingPage() {
       const data = await res.json() as { projects: SeedFundingRow[] };
       setProjects(data.projects ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load seed funding projects" });
+      toast({ variant: "destructive", title: "Unable to load seed funding projects" });
     } finally {
       setIsLoading(false);
     }
@@ -56,7 +56,7 @@ export default function RAndDSeedFundingPage() {
       setDeleteTarget(null);
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete seed funding project" });
+      toast({ variant: "destructive", title: "Unable to delete seed funding project" });
     } finally {
       setDeleting(false);
     }
@@ -74,7 +74,7 @@ export default function RAndDSeedFundingPage() {
       toast({ variant: "success", title: "Seed funding project approved" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to approve seed funding project" });
+      toast({ variant: "destructive", title: "Unable to approve seed funding project" });
     } finally {
       setApproving(null);
     }
@@ -95,7 +95,7 @@ export default function RAndDSeedFundingPage() {
       setRejectReason("");
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to reject seed funding project" });
+      toast({ variant: "destructive", title: "Unable to reject seed funding project" });
     } finally {
       setRejecting(false);
     }

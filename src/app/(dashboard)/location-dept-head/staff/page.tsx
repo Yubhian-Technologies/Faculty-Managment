@@ -65,7 +65,7 @@ function LocationStaffRosterContent() {
         }),
     ])
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load staff roster" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load staff roster" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);

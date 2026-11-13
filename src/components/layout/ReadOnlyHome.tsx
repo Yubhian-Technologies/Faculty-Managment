@@ -93,7 +93,7 @@ export function ReadOnlyHome({ blockedPath }: { blockedPath?: string }) {
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
-        If you think this is a mistake, please contact your HOD or the college office.
+        If you think this is a mistake contact your HOD or the college office.
       </p>
     </div>
   );

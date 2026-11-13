@@ -36,7 +36,7 @@ export default function EditFundAllocationPage() {
         }
         setAllocation(found);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load allocation" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load allocation" }))
       .finally(() => setLoading(false));
   }, [allocationId, router]);
 
@@ -57,7 +57,7 @@ export default function EditFundAllocationPage() {
       toast({ variant: "success", title: "Allocation modified" });
       router.push("/finance/fund-allocation");
     } catch {
-      toast({ variant: "destructive", title: "Failed to modify allocation" });
+      toast({ variant: "destructive", title: "Unable to modify allocation" });
     } finally {
       setSaving(false);
     }

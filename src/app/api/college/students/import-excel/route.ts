@@ -121,10 +121,10 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request)) as { records: BulkImportRow[] };
 
     if (!body.records || !Array.isArray(body.records) || body.records.length === 0) {
-      return NextResponse.json({ error: "No records provided" }, { status: 400 });
+      return NextResponse.json({ error: "The file has no records to import." }, { status: 400 });
     }
     if (body.records.length > 500) {
-      return NextResponse.json({ error: "Maximum 500 records per import" }, { status: 400 });
+      return NextResponse.json({ error: "A file can have at most 500 records. Split the file and import each part." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -414,7 +414,7 @@ export async function POST(request: Request) {
       }
 
       // A row needs a Regd. No OR a Student Mobile No (either one is enough) - checked with the mobile rules below.
-      if (!row.name?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Name is required" }); continue; }
+      if (!row.name?.trim()) { failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Name is required." }); continue; }
       // Section may be blank for an "unassigned" import (a whole branch cohort
       // loaded before its sections exist); such rows must instead name a
       // Department. A row with neither can't be placed at all.
@@ -572,7 +572,7 @@ export async function POST(request: Request) {
         // declared/intended course, and lets Distribute later narrow target
         // sections to it.
         if (!row.course?.trim()) {
-          failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Course is required" });
+          failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Course is required." });
           continue;
         }
         const resolvedCourse = resolveCourse(departmentName!, row.course);
@@ -795,7 +795,7 @@ export async function POST(request: Request) {
       // different, unrelated same-named section happened to match the
       // department+name+year search first.
       if (!row.course?.trim()) {
-        failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Course is required" });
+        failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: "Course is required." });
         continue;
       }
       const resolvedPlacedCourse = resolveCourse(section.department, row.course);
@@ -901,7 +901,7 @@ export async function POST(request: Request) {
           ...lost.filter((a) => a.mobileClaimed).map((a) => releaseStudentMobile(db, collegeId, a.mobile, a.docRef.id)),
         ]);
         if (!failedChunks) throw commitErr;
-        for (const a of lost) failed.push({ row: a.rowNum, rollNumber: a.roll || "-", error: "Could not be saved - please import this row again" });
+        for (const a of lost) failed.push({ row: a.rowNum, rollNumber: a.roll || "-", error: "Unable to be saved - import this row again" });
         saved = claimed.filter((a) => !failedChunks.has(a.chunkIndex));
       }
     }
@@ -952,9 +952,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/students/import-excel POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

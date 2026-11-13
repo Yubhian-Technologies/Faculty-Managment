@@ -63,7 +63,7 @@ export function LocationStaffProfileView({ staffId, backHref }: LocationStaffPro
         setGateName(gates.find((g) => g.id === staffData?.reportAtLocationId)?.name ?? staffData?.reportAtLocationName ?? "");
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load staff profile" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load staff profile" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);

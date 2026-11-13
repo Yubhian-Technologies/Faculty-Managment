@@ -308,11 +308,11 @@ function NotesTab({ api }: { api: string }) {
     try {
       const res = await fetch(`${api}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: body }) });
       const d = (await res.json().catch(() => ({}))) as { note?: NoteRow; error?: string };
-      if (!res.ok || !d.note) throw new Error(d.error || "Could not save the note");
+      if (!res.ok || !d.note) throw new Error(d.error || "Unable to save the note");
       setNotes((prev) => [d.note as NoteRow, ...(prev ?? [])]);
       setText("");
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save the note" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save the note" });
     } finally {
       setSaving(false);
     }
@@ -321,10 +321,10 @@ function NotesTab({ api }: { api: string }) {
   async function remove(id: string) {
     try {
       const res = await fetch(`${api}/notes/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Could not delete the note");
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || "Unable to delete the note");
       setNotes((prev) => (prev ?? []).filter((n) => n.id !== id));
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not delete the note" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to delete the note" });
     }
   }
 

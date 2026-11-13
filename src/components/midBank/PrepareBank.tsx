@@ -139,7 +139,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
       }),
     });
     const json = (await res.json()) as { error?: string; errors?: string[] };
-    if (!res.ok) { setErrors(json.errors ?? [json.error ?? "Failed to save"]); return false; }
+    if (!res.ok) { setErrors(json.errors ?? [json.error ?? "Unable to save"]); return false; }
     return true;
   }
 
@@ -154,7 +154,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
             method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sectionIds: [...picked] }),
           });
           const json = (await res.json()) as { error?: string };
-          if (!res.ok) { setErrors([json.error ?? "Could not save the sections"]); return; }
+          if (!res.ok) { setErrors([json.error ?? "Unable to save the sections"]); return; }
           toast({ variant: "success", title: "Sections saved" });
         }
         onStep(2);
@@ -173,7 +173,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
           body: JSON.stringify({ deadlineId: deadline.id, subjectId: subject.id, branch, sectionIds: [...picked] }),
         });
         const json = (await res.json()) as { error?: string; bank?: { id: string } };
-        if (!res.ok || !json.bank) { setErrors([json.error ?? `Could not start the ${what}`]); onChanged(); return; }
+        if (!res.ok || !json.bank) { setErrors([json.error ?? `Unable to start the ${what}`]); onChanged(); return; }
         toast({ variant: "success", title: papers ? "Question papers started" : "Question bank started" });
         router.push(`/panel/mid-bank/${encodeURIComponent(json.bank.id)}`);
       }

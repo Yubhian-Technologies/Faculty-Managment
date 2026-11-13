@@ -23,7 +23,7 @@ export function CeaSections() {
   const [show, setShow] = useState<"" | "PENDING">("");
   const [open, setOpen] = useState<string | null>(null);
   useEffect(() => {
-    fetch("/api/college/cea/sections").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Couldn't load"); setRows(j.sections); }).catch((e: Error) => setError(e.message));
+    fetch("/api/college/cea/sections").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Unable to load"); setRows(j.sections); }).catch((e: Error) => setError(e.message));
   }, []);
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -72,7 +72,7 @@ function SheetDialog({ sheetId, onClose }: { sheetId: string; onClose: () => voi
   const [s, setS] = useState<CeaMarksSheet | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    fetch(`/api/college/cea/marks/${encodeURIComponent(sheetId)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Couldn't load"); setS(j.sheet); }).catch((e: Error) => setError(e.message));
+    fetch(`/api/college/cea/marks/${encodeURIComponent(sheetId)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Unable to load"); setS(j.sheet); }).catch((e: Error) => setError(e.message));
   }, [sheetId]);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

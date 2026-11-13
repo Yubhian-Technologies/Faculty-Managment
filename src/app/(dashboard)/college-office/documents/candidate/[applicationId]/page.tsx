@@ -124,7 +124,7 @@ export default function CollegeOfficeCandidateDetailPage() {
         for (const [doc, checked] of Object.entries(saved)) if (!(doc in merged)) merged[doc] = checked;
         setChecklist(merged);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load candidate" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load candidate" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -171,7 +171,7 @@ export default function CollegeOfficeCandidateDetailPage() {
         toast({ variant: "success", title: "Joining letter saved", description: "Principal notified automatically." });
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to save joining letter" });
+      toast({ variant: "destructive", title: "Unable to save joining letter" });
     }
   }
 
@@ -200,7 +200,7 @@ export default function CollegeOfficeCandidateDetailPage() {
       setPersistedVerified(allVerified);
       return true;
     } catch {
-      toast({ variant: "destructive", title: "Failed to save checklist" });
+      toast({ variant: "destructive", title: "Unable to save checklist" });
       return false;
     }
   }
@@ -232,7 +232,7 @@ export default function CollegeOfficeCandidateDetailPage() {
         candidate.name
       );
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to generate acknowledgement", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate acknowledgement", description: err instanceof Error ? err.message : undefined });
     } finally {
       setBusy(false);
     }
@@ -272,7 +272,7 @@ export default function CollegeOfficeCandidateDetailPage() {
         offer.candidateName ?? offer.id
       );
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to generate PDF", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate PDF", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloadingId(null);
     }
@@ -327,7 +327,7 @@ export default function CollegeOfficeCandidateDetailPage() {
 
 Greetings from ${institution}.
 
-We are pleased to offer you the position of ${offer.designation} in the ${offer.department} department, effective from ${formatDate(offer.joiningDate as Parameters<typeof formatDate>[0])}. Please find your offer letter attached.
+We are pleased to offer you the position of ${offer.designation} in the ${offer.department} department, effective from ${formatDate(offer.joiningDate as Parameters<typeof formatDate>[0])}. Find your offer letter attached.
 ${coordinatorBlock}
 Please review the Terms & Conditions and confirm your acceptance and date of joining here:
 ${acceptanceUrl}
@@ -342,7 +342,7 @@ ${institution}`;
       else window.open(gmailUrl, "_blank");
     } catch (err) {
       mailWindow?.close();
-      toast({ variant: "destructive", title: "Failed to prepare email", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to prepare email", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloadingId(null);
     }

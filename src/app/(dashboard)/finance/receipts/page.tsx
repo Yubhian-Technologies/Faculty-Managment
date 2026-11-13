@@ -25,7 +25,7 @@ export default function FinanceReceiptsPage() {
     collegeFetch("/api/college/finance-receipts")
       .then((r) => r.json() as Promise<{ receipts: Row[] }>)
       .then((d) => setReceipts(d.receipts ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load receipts" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load receipts" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -39,7 +39,7 @@ export default function FinanceReceiptsPage() {
       toast({ variant: "success", title: "Receipt verified" });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to verify receipt" });
+      toast({ variant: "destructive", title: "Unable to verify receipt" });
     } finally {
       setVerifyingId(null);
     }

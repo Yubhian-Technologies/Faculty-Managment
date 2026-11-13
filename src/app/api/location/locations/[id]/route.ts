@@ -16,9 +16,9 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") || session.locationId;
-    if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
+    if (!locationId) return NextResponse.json({ error: "Select a location." }, { status: 400 });
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
-      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this location." }, { status: 403 });
     }
     const db = getAdminDb();
     const docSnap = await db.collection("locations").doc(locationId).collection("reportLocations").doc(id).get();
@@ -27,9 +27,9 @@ export async function GET(
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[location/locations/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -43,9 +43,9 @@ export async function PATCH(
     const body = (await readJsonBody(request)) as { name?: string; address?: string; city?: string; state?: string; isActive?: boolean };
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") || session.locationId;
-    if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
+    if (!locationId) return NextResponse.json({ error: "Select a location." }, { status: 400 });
     if (session.role !== "SUPER_ADMIN" && session.locationId !== locationId) {
-      return NextResponse.json({ error: "Unauthorized for this location" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this location." }, { status: 403 });
     }
     const db = getAdminDb();
     const updates: Record<string, unknown> = { updatedAt: Timestamp.now() };
@@ -60,9 +60,9 @@ export async function PATCH(
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[location/locations/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -75,8 +75,8 @@ export async function DELETE(
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const locationId = searchParams.get("locationId") || session.locationId;
-    if (!locationId) return NextResponse.json({ error: "locationId required" }, { status: 400 });
-    if (session.locationId !== locationId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!locationId) return NextResponse.json({ error: "Select a location." }, { status: 400 });
+    if (session.locationId !== locationId) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 403 });
     const db = getAdminDb();
     const docRef = db.collection("locations").doc(locationId).collection("reportLocations").doc(id);
     await docRef.delete();
@@ -84,8 +84,8 @@ export async function DELETE(
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (err instanceof Error && err.message === "UNAUTHORIZED") return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[location/locations/[id] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

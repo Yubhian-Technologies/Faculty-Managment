@@ -44,7 +44,7 @@ export default function NewDepartmentPage() {
     fetch("/api/college/course-catalog")
       .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
       .then((d) => setCatalog(d.items ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load courses" }))
       .finally(() => setCatalogLoaded(true));
 
     fetch("/api/college/departments")
@@ -108,7 +108,7 @@ export default function NewDepartmentPage() {
       toast({ variant: "success", title: "Department added" });
       router.push("/principal/courses?tab=departments");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSubmitting(false);
     }

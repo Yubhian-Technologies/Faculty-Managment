@@ -102,7 +102,7 @@ export default function PrincipalAppointmentLettersPage() {
         )
       );
     } catch {
-      toast({ variant: "destructive", title: "Failed to load candidates" });
+      toast({ variant: "destructive", title: "Unable to load candidates" });
     } finally {
       setIsLoading(false);
     }
@@ -170,7 +170,7 @@ export default function PrincipalAppointmentLettersPage() {
         }),
       });
       const data = await res.json() as { error?: string; ccEmails?: string[] };
-      if (!res.ok) throw new Error(data.error ?? "Failed to generate");
+      if (!res.ok) throw new Error(data.error ?? "Unable to generate");
 
       const letterFields = {
         candidateName: candidate.name,
@@ -201,9 +201,9 @@ export default function PrincipalAppointmentLettersPage() {
 
 Congratulations! With reference to your application and interview, you have been appointed as ${form.designation} in the Department of ${form.department} at ${institution}, effective from ${formatDate(new Date(form.joiningDate))}.
 ${payLine}
-Your appointment is subject to the Terms and Conditions set out in the attached Appointment Order - please read them carefully, in particular the two-year probation period, the pay scale and allowances, and the requirement to deposit your original certificates with the Principal at the time of joining.
+Your appointment is subject to the Terms and Conditions set out in the attached Appointment Order - read them carefully, in particular the two-year probation period, the pay scale and allowances, and the requirement to deposit your original certificates with the Principal at the time of joining.
 
-Please find your Appointment Order attached. You are requested to sign and return one copy acknowledging receipt and acceptance of these terms.
+Find your Appointment Order attached. You are requested to sign and return one copy acknowledging receipt and acceptance of these terms.
 
 Warm regards,
 ${institution}`;
@@ -224,7 +224,7 @@ ${institution}`;
       setGeneratedIds((prev) => new Set(prev).add(candidate.id));
     } catch (err) {
       mailWindow?.close();
-      toast({ variant: "destructive", title: "Failed to generate appointment letter", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate appointment letter", description: err instanceof Error ? err.message : undefined });
     } finally {
       setGeneratingId(null);
     }

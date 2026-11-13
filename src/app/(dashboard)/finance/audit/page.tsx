@@ -20,7 +20,7 @@ export default function FinanceAuditPage() {
     collegeFetch("/api/college/finance-audit-logs")
       .then((r) => r.json() as Promise<{ logs: Row[] }>)
       .then((d) => setLogs(d.logs ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load audit logs" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load audit logs" }))
       .finally(() => setIsLoading(false));
   }, []);
 

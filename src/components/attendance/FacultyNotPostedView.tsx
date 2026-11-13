@@ -80,7 +80,7 @@ export function FacultyNotPostedView({
         const scoped = ownIds ? active.filter((dep) => ownIds.has(dep.id) || (!!dep.parentDepartmentId && ownIds.has(dep.parentDepartmentId))) : active;
         setDepartments(scoped.sort((a, b) => a.name.localeCompare(b.name)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }));
     // hodOwnDepartments is derived fresh from the user every render - depend
     // on the user identity fields it's built from instead, so this doesn't
     // re-fetch on every render (same convention as FacultyAttendanceCompletionView).
@@ -103,7 +103,7 @@ export function FacultyNotPostedView({
         const active = (d.courses ?? []).filter((c) => c.isActive);
         setCourses(active.sort((a, b) => a.name.localeCompare(b.name)));
       } catch {
-        toast({ variant: "destructive", title: "Failed to load courses" });
+        toast({ variant: "destructive", title: "Unable to load courses" });
       } finally {
         setIsLoadingCourses(false);
       }

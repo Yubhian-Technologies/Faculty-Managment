@@ -127,7 +127,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
           coordsRef.current = coords;
           setUserCoords({ latitude: coords.latitude, longitude: coords.longitude });
         },
-        () => { fail("Failed to get your location. Check location permissions and try again."); },
+        () => { fail("Unable to get your location. Check location permissions and try again."); },
         { enableHighAccuracy: true, timeout: 15000 }
       );
     }
@@ -142,7 +142,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       }
       setStage("camera-ready");
     } catch {
-      fail("Could not access your camera. Check camera permissions and try again.");
+      fail("Unable to access your camera. Check camera permissions and try again.");
     }
   }
 
@@ -207,7 +207,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       const baseline = await calibrateFaceBaseline(video, { shouldAbort: abortCheck });
       if (cancelledRef.current) return false;
       if (!baseline) {
-        fail("Couldn't get a clear view of your face. Please try again.");
+        fail("Unable to get a clear view of your face. Try again.");
         return false;
       }
 
@@ -217,7 +217,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       );
       if (cancelledRef.current) return false;
       if (!blinkOk) {
-        fail("No blink detected. Please try again.");
+        fail("No blink detected. Try again.");
         return false;
       }
 
@@ -227,7 +227,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       );
       if (cancelledRef.current) return false;
       if (!tiltOk) {
-        fail("No head movement detected. Please try again.");
+        fail("No head movement detected. Try again.");
         return false;
       }
 
@@ -237,14 +237,14 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       );
       if (cancelledRef.current) return false;
       if (!centerOk) {
-        fail("Please try again.");
+        fail("Try again.");
         return false;
       }
 
       return true;
     } catch (err) {
       console.error("[MarkAttendanceDialog] guided liveness failed", err);
-      fail("Something went wrong verifying your face. Please try again.");
+      fail("Unable to complete the request verifying your face. Try again.");
       return false;
     }
   }
@@ -281,14 +281,14 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        fail(json.error ?? "Failed to register your face");
+        fail(json.error ?? "Unable to register your face");
         return;
       }
       setStage("success");
       onSuccess();
     } catch (err) {
       console.error("[MarkAttendanceDialog] registration capture failed", err);
-      fail("Something went wrong capturing your face. Please try again.");
+      fail("Unable to complete the request capturing your face. Try again.");
     }
   }
 
@@ -307,7 +307,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       const regRes = await fetch("/api/college/attendance/face-registration");
       const regJson = await regRes.json() as { registered?: boolean; embedding?: number[] | null };
       if (!regJson.registered || !regJson.embedding) {
-        fail("You haven't registered your face yet. Please register your face first.");
+        fail("You haven't registered your face yet. Register your face first.");
         return;
       }
       const refDescriptor = new Float32Array(regJson.embedding);
@@ -351,7 +351,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       await submitAttendance(lateNow || hasReason);
     } catch (err) {
       console.error("[MarkAttendanceDialog] capture failed", err);
-      fail("Something went wrong verifying your face. Please try again.");
+      fail("Unable to complete the request verifying your face. Try again.");
     }
   }
 
@@ -364,7 +364,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
     }
     const proof = capturedProofRef.current;
     if (!proof) {
-      fail("Something went wrong - please try again.");
+      fail("Unable to complete the request - try again.");
       return;
     }
     setStage("submitting");
@@ -393,7 +393,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
         return;
       }
       if (!res.ok) {
-        fail(json.error ?? "Failed to mark attendance");
+        fail(json.error ?? "Unable to mark attendance");
         return;
       }
       setResultTime(json.checkIn ?? json.checkOut ?? "");
@@ -401,7 +401,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       onSuccess();
     } catch (err) {
       console.error("[MarkAttendanceDialog] submit failed", err);
-      fail("Something went wrong recording your attendance. Please try again.");
+      fail("Unable to complete the request recording your attendance. Try again.");
     }
   }
 
@@ -451,7 +451,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
             <div className="flex flex-col items-center gap-2 py-6 text-center">
               <CheckCircle2 className="h-12 w-12 text-green-600" />
               <p className="font-medium">
-                {isRegister ? "Face registered successfully" : `${label} recorded at ${resultTime}`}
+                {isRegister ? "Face registered" : `${label} recorded at ${resultTime}`}
               </p>
             </div>
           ) : stage === "reason-first" ? (

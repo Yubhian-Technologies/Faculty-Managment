@@ -48,7 +48,7 @@ export function MidPaperPatternCard() {
     fetch("/api/college/mid-paper-patterns")
       .then((r) => r.json() as Promise<{ patterns?: MidPaperPattern[]; regulationsByCourse?: Record<string, string[]> }>)
       .then((d) => { setPatterns(d.patterns ?? []); setRegulationsByCourse(d.regulationsByCourse ?? {}); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the question paper patterns" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the question paper patterns" }));
   }
   useEffect(() => {
     load();
@@ -76,12 +76,12 @@ export function MidPaperPatternCard() {
         body: JSON.stringify({ courseKey, courseName: group.name, regulation: regulation || "ALL", setsPerFaculty: Number(sets), durationMinutes: Number(duration), instruction, regdBoxes: Number(regdBoxes), parts }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: `Paper pattern saved for ${group.name}${regulation ? ` (${regulation})` : ""}` });
       reset();
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -90,7 +90,7 @@ export function MidPaperPatternCard() {
   async function remove() {
     if (!deleting) return;
     const res = await fetch(`/api/college/mid-paper-patterns?id=${encodeURIComponent(deleting.id)}`, { method: "DELETE" });
-    if (!res.ok) toast({ variant: "destructive", title: "Failed to delete" });
+    if (!res.ok) toast({ variant: "destructive", title: "Unable to delete" });
     setDeleting(null);
     load();
   }

@@ -172,14 +172,14 @@ export function StudentAttendanceHistoryReport({
         setShownRangeLabel("entire history");
       }
       const res = await fetch(`/api/college/student-attendance-history?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed to load attendance history");
+      if (!res.ok) throw new Error("Unable to load attendance history");
       const json = (await res.json()) as { student?: StudentInfo; subjects?: SubjectRow[]; total?: TotalRow; availableSemesters?: number[] };
       setStudent(json.student ?? null);
       setSubjects(json.subjects ?? []);
       setTotal(json.total ?? null);
       if (json.availableSemesters) setAvailableSemesters(json.availableSemesters);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load attendance history" });
+      toast({ variant: "destructive", title: "Unable to load attendance history" });
     } finally {
       setIsLoading(false);
     }

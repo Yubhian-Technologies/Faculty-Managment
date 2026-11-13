@@ -125,7 +125,7 @@ export default function PrincipalSettingsPage() {
         setMaxPracticalPeriodsPerWeek(String(s.maxPracticalPeriodsPerWeek ?? 6));
         setSubjectSlots(s.subjectBlockSizes ?? {});
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load settings" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load settings" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -145,7 +145,7 @@ export default function PrincipalSettingsPage() {
       !mtp || mtp < 1 ||
       !mpp || mpp < 1
     ) {
-      toast({ variant: "destructive", title: "Please enter valid numeric settings" });
+      toast({ variant: "destructive", title: "Enter valid numeric settings" });
       return;
     }
 
@@ -167,7 +167,7 @@ export default function PrincipalSettingsPage() {
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Settings saved" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setIsSaving(false);
     }

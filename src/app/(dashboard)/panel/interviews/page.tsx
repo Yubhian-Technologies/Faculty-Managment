@@ -52,7 +52,7 @@ export default function PanelInterviewsPage() {
       fetch(url)
         .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
         .then((d) => setBatches(d.batches ?? []))
-        .catch(() => toast({ variant: "destructive", title: "Failed to load interviews" }))
+        .catch(() => toast({ variant: "destructive", title: "Unable to load interviews" }))
         .finally(() => setIsLoading(false));
     }
     load();

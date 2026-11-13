@@ -78,7 +78,7 @@ export default function PurchaseBrowseDepartmentsPage() {
             .sort((a, b) => a.label.localeCompare(b.label))
         );
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }))
       .finally(() => setIsLoading(false));
   }, [params.collegeId, params.locationId, setSelectedCollegeId]);
 

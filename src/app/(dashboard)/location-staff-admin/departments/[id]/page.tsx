@@ -167,7 +167,7 @@ export default function DepartmentDetailPage() {
         setDeptData(data);
       })
       .catch(() => {
-        toast({ variant: "destructive", title: "Failed to load department details" });
+        toast({ variant: "destructive", title: "Unable to load department details" });
       })
       .finally(() => setIsLoadingDept(false));
   }, [deptId]);
@@ -224,7 +224,7 @@ export default function DepartmentDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ linkDepartmentId: deptId }),
       });
-      if (!res.ok) throw new Error("Failed to link shift");
+      if (!res.ok) throw new Error("Unable to link shift");
       toast({
         title: "Shift Linked Successfully",
         description: `${shiftToLink.name} is now available in this department.`,
@@ -233,7 +233,7 @@ export default function DepartmentDetailPage() {
       fetchCampusShifts();
       setIsLinkShiftModalOpen(false);
     } catch {
-      toast({ variant: "destructive", title: "Error", description: "Failed to link shift." });
+      toast({ variant: "destructive", title: "Error", description: "Unable to link shift." });
     } finally {
       setIsLinkingShift(false);
     }
@@ -248,7 +248,7 @@ export default function DepartmentDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ unlinkDepartmentId: deptId }),
       });
-      if (!res.ok) throw new Error("Failed to unlink shift");
+      if (!res.ok) throw new Error("Unable to unlink shift");
       toast({
         title: "Shift Unlinked",
         description: `Removed ${shiftToUnlink.name} from this department.`,
@@ -256,7 +256,7 @@ export default function DepartmentDetailPage() {
       fetchShifts();
       fetchCampusShifts();
     } catch {
-      toast({ variant: "destructive", title: "Error", description: "Failed to unlink shift." });
+      toast({ variant: "destructive", title: "Error", description: "Unable to unlink shift." });
     }
   };
 
@@ -296,7 +296,7 @@ export default function DepartmentDetailPage() {
         setAttendanceSummary(data.summary ?? null);
       })
       .catch(() => {
-        toast({ variant: "destructive", title: "Failed to load attendance" });
+        toast({ variant: "destructive", title: "Unable to load attendance" });
       })
       .finally(() => setIsLoadingAttendance(false));
   }, [deptId, attendanceDate, attendanceShiftFilter]);
@@ -326,7 +326,7 @@ export default function DepartmentDetailPage() {
         setReportRows(data.rows ?? []);
       })
       .catch(() => {
-        toast({ variant: "destructive", title: "Failed to load attendance report" });
+        toast({ variant: "destructive", title: "Unable to load attendance report" });
       })
       .finally(() => setIsLoadingReports(false));
   }, [deptId, reportFrom, reportTo, reportShiftFilter]);

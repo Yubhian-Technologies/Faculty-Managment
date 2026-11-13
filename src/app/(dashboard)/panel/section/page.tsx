@@ -47,7 +47,7 @@ export default function MySectionPage() {
         .sort(compareStudentsForList));
       setAssignments((ad.assignments ?? []).filter((a) => !a.isPast));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load section" });
+      toast({ variant: "destructive", title: "Unable to load section" });
     }
   }
 
@@ -61,7 +61,7 @@ export default function MySectionPage() {
         setSectionId(list[0]?.id ?? "");
         await loadSection(list[0]);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load sections" });
+        toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         setIsLoading(false);
       }

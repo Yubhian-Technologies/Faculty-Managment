@@ -45,15 +45,15 @@ export function MidTimetableViewer({ emptyText }: { emptyText: string }) {
 
   useEffect(() => {
     fetch("/api/college/mid-timetables/published")
-      .then(async (r) => { const d = (await r.json()) as { timetables?: MidTimetable[]; exams?: Record<string, ExamOf>; orders?: Record<string, string[]>; error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); setExams(d.exams ?? {}); setOrders(d.orders ?? {}); setList(d.timetables ?? []); })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .then(async (r) => { const d = (await r.json()) as { timetables?: MidTimetable[]; exams?: Record<string, ExamOf>; orders?: Record<string, string[]>; error?: string }; if (!r.ok) throw new Error(d.error ?? "Unable to load"); setExams(d.exams ?? {}); setOrders(d.orders ?? {}); setList(d.timetables ?? []); })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unable to load"));
   }, []);
   const sheets = useMemo(() => toSheets(list ?? [], orders), [list, orders]);
 
   async function pdf(s: Sheet, mode: "sheet" | "branches" | "sessions" = s.rows.length === 1 ? "branches" : "sheet") {
     setBusy(`${s.planId}|${mode}`);
     try { await downloadMidTimetablePdf({ ...s, exam: exams[s.planId], rows: s.rows.map((r) => ({ branch: r.branch, slots: r.slots, usualSessionId: r.usualSessionId ?? usualSessionOf(r.sessions, undefined, r.slots) })) }, `mid${s.midNumber}-${s.courseName}-year${s.year}-${s.rows.length === 1 ? s.rows[0].branch : mode === "sessions" ? "session-wise" : "timetable"}`, mode); }
-    catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
+    catch { toast({ variant: "destructive", title: "Unable to make the PDF" }); }
     finally { setBusy(null); }
   }
 

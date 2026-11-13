@@ -101,7 +101,7 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved, rollEd
         setCourses(meta.courses);
         setYears(meta.years);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load form options" });
+        toast({ variant: "destructive", title: "Unable to load form options" });
       } finally {
         setIsLoadingMeta(false);
       }
@@ -203,7 +203,7 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved, rollEd
           showProblems(list, json.error);
         } else {
           // Nothing names a field (Add, or a refusal such as "Outside your department"): kept in the dialog.
-          const message = json.error ?? (editTarget ? "Failed to save changes" : "Failed to add student");
+          const message = json.error ?? (editTarget ? "Unable to save changes" : "Unable to add student");
           setFormError(message);
           toast({ variant: "destructive", title: message });
           setTimeout(() => document.getElementById("student-edit-problems")?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
@@ -225,8 +225,8 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved, rollEd
       onOpenChange(false);
       onSaved();
     } catch {
-      setFormError("Network error - please try again");
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      setFormError("Network error - try again");
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setSaving(false);
     }

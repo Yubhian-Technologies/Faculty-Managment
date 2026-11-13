@@ -34,7 +34,7 @@ export default function RAndDResearchProfilesPage() {
       const data = await res.json() as { requests: ResearchProfileRow[] };
       setRequests(data.requests ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load research profiles" });
+      toast({ variant: "destructive", title: "Unable to load research profiles" });
     } finally {
       setIsLoading(false);
     }
@@ -57,7 +57,7 @@ export default function RAndDResearchProfilesPage() {
       toast({ variant: "success", title: "Research profile approved" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to approve" });
+      toast({ variant: "destructive", title: "Unable to approve" });
     } finally {
       setApproving(null);
     }
@@ -78,7 +78,7 @@ export default function RAndDResearchProfilesPage() {
       setRejectReason("");
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to reject" });
+      toast({ variant: "destructive", title: "Unable to reject" });
     } finally {
       setRejecting(false);
     }

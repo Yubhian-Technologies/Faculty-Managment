@@ -20,7 +20,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
     const body = (await readJsonBody(request)) as { name?: string; block?: string; floor?: number; benches?: number; studentsPerBench?: number; columns?: number | string | null; isActive?: boolean };
     const update: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) {
-      if (!body.name.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
+      if (!body.name.trim()) return NextResponse.json({ error: "Name is required." }, { status: 400 });
       update.name = body.name.trim();
     }
     if (body.block !== undefined) {
@@ -71,9 +71,9 @@ export async function PATCH(request: Request, { params }: Ctx) {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (unauthorized(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (unauthorized(err)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[exam-rooms PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -88,8 +88,8 @@ export async function DELETE(_request: Request, { params }: Ctx) {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (unauthorized(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (unauthorized(err)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[exam-rooms DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

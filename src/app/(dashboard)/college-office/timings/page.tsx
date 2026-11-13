@@ -35,7 +35,7 @@ export default function CollegeOfficeTimingsPage() {
         const topLevel = (d.departments ?? []).filter((dept) => !dept.parentDepartmentId);
         setDepartments(topLevel.sort((a, b) => a.name.localeCompare(b.name)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -65,7 +65,7 @@ export default function CollegeOfficeTimingsPage() {
       );
       setTimings(timingLists.flat());
     } catch {
-      toast({ variant: "destructive", title: "Failed to load courses" });
+      toast({ variant: "destructive", title: "Unable to load courses" });
     } finally {
       setIsLoadingCourses(false);
     }

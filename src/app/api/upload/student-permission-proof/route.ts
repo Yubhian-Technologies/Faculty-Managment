@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     let form: FormData;
     try { form = await request.formData(); } catch { return NextResponse.json({ error: "Send the file as multipart form data" }, { status: 400 }); }
     const file = form.get("file");
-    if (!file || typeof file === "string") return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    if (!file || typeof file === "string") return NextResponse.json({ error: "Select a file to upload." }, { status: 400 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.byteLength === 0) return NextResponse.json({ error: "The file is empty" }, { status: 400 });

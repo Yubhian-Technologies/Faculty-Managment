@@ -54,8 +54,8 @@ export function QuestionBankProgress({ deadlineId, base, examCell }: { deadlineI
 
   useEffect(() => {
     fetch(`/api/college/mid-bank-deadlines/${encodeURIComponent(deadlineId)}/progress`)
-      .then(async (r) => { const d = (await r.json()) as Progress & { error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); setData(d); })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .then(async (r) => { const d = (await r.json()) as Progress & { error?: string }; if (!r.ok) throw new Error(d.error ?? "Unable to load"); setData(d); })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unable to load"));
   }, [deadlineId]);
 
   const branches = useMemo(() => [...new Set((data?.groups ?? []).map((g) => g.branch))].sort(), [data]);

@@ -28,7 +28,7 @@ const WINDOW_MS = 60_000;
 
 function tooMany(retryAfterSeconds: number) {
   return NextResponse.json(
-    { error: "Too many attempts - please wait a minute and try again" },
+    { error: "Too many attempts - wait a minute and try again" },
     { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
   );
 }
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     try {
       body = (await readJsonBody(request)) as { rollNumber?: unknown };
     } catch {
-      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+      return NextResponse.json({ error: "The request is not valid. Reload the page and try again." }, { status: 400 });
     }
     const rollNumber = typeof body?.rollNumber === "string" ? body.rollNumber.trim() : "";
     if (!rollNumber) {
@@ -63,6 +63,6 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[auth/resolve-student-login POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

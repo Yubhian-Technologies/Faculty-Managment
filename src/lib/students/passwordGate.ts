@@ -21,7 +21,7 @@ export function passwordChangeRequired(student: Pick<StudentRecord, "mustChangeP
 
 export function passwordChangeRequiredResponse() {
   return NextResponse.json(
-    { error: "Please set a new password before continuing.", code: PASSWORD_CHANGE_REQUIRED },
+    { error: "Set a new password before continuing.", code: PASSWORD_CHANGE_REQUIRED },
     { status: 403 }
   );
 }

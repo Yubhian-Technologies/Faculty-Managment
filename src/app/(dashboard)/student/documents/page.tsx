@@ -21,10 +21,10 @@ export default function StudentDocumentsPage() {
     fetch("/api/college/student/me/documents")
       .then(async (r) => {
         const body = (await r.json()) as { documents?: StudentDocument[]; error?: string };
-        if (!r.ok) throw new Error(body.error ?? "Failed to load documents");
+        if (!r.ok) throw new Error(body.error ?? "Unable to load documents");
         setDocuments(body.documents ?? []);
       })
-      .catch((err: unknown) => toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load documents" }))
+      .catch((err: unknown) => toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load documents" }))
       .finally(() => setIsLoading(false));
   }, []);
 

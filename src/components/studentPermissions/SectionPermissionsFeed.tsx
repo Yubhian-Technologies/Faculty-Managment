@@ -14,7 +14,7 @@ interface SectionApprovedResponse {
 
 async function fetchSectionApproved(): Promise<SectionApprovedResponse> {
   const res = await fetch("/api/college/student-permissions/section-approved");
-  if (!res.ok) throw new Error("Failed to load section permissions");
+  if (!res.ok) throw new Error("Unable to load section permissions");
   return res.json();
 }
 

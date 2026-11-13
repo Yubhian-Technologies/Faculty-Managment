@@ -162,7 +162,7 @@ export default function NewSectionPage() {
         courseCache.current.set(qs, list);
         if (!stale) setCourses(list);
       })
-      .catch(() => { if (!stale) toast({ variant: "destructive", title: "Failed to load courses" }); });
+      .catch(() => { if (!stale) toast({ variant: "destructive", title: "Unable to load courses" }); });
     return () => { stale = true; };
   }, [departmentId, topDepartmentId, myDepartments]);
 
@@ -486,13 +486,13 @@ export default function NewSectionPage() {
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: json.error ?? "Failed to save" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to save" });
         return;
       }
       toast({ variant: "success", title: "Section created" });
       router.push("/hod/sections");
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setSaving(false);
     }

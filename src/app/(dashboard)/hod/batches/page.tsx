@@ -21,7 +21,7 @@ export default function HODBatchesPage() {
     fetch("/api/college/hiring-batches")
       .then((r) => r.json() as Promise<{ batches: BatchRow[] }>)
       .then((d) => setBatches(d.batches ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load batches" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load batches" }))
       .finally(() => setIsLoading(false));
   }, []);
 

@@ -45,7 +45,7 @@ export default function CollegeOfficeStaffPromotionSalaryPage() {
         // (and the PATCH body) only ever holds the current ones.
         setValue(normalizeAcademicProfile(data.user.academicProfile ?? {}));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff profile" }))
       .finally(() => setLoading(false));
   }, [uid, router]);
 
@@ -61,7 +61,7 @@ export default function CollegeOfficeStaffPromotionSalaryPage() {
       toast({ variant: "success", title: "Saved" });
       router.push("/college-office/staff");
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSaving(false);
     }

@@ -32,7 +32,7 @@ export default function FinanceBudgetApprovalsPage() {
         );
         setRequests(sorted);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget requests" }))
       .finally(() => setIsLoading(false));
   }
 

@@ -26,7 +26,7 @@ export default function StudentMentoringPage() {
     let cancelled = false;
     getJson<Overview>(`${API}?part=mentor`)
       .then((d) => { if (!cancelled) setData(d); })
-      .catch((e: Error) => { if (!cancelled) setError(e.message || "Couldn't load your mentoring record."); });
+      .catch((e: Error) => { if (!cancelled) setError(e.message || "Unable to load your mentoring record."); });
     return () => { cancelled = true; };
   }, []);
 

@@ -43,10 +43,10 @@ export default function StudentResultsPage() {
         const res = await fetch("/api/college/student/me/results");
         const json = (await res.json()) as Partial<Payload> & { error?: string };
         if (cancelled) return;
-        if (!res.ok || !json.results) setError(json.error ?? "Couldn't load your results.");
+        if (!res.ok || !json.results) setError(json.error ?? "Unable to load your results.");
         else setData(json as Payload);
       } catch {
-        if (!cancelled) setError("Couldn't load your results.");
+        if (!cancelled) setError("Unable to load your results.");
       } finally {
         if (!cancelled) setIsLoading(false);
       }

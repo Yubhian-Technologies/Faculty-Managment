@@ -47,13 +47,13 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
     try {
       const res = await fetch(`/api/college/role-seats${qs}`);
       const data = await res.json() as { seats?: RoleSeat[]; retiredSeats?: RoleSeat[]; people?: Person[]; departments?: Dept[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load");
+      if (!res.ok) throw new Error(data.error ?? "Unable to load");
       setSeats(data.seats ?? []);
       setRetiredSeats(data.retiredSeats ?? []);
       setPeople(data.people ?? []);
       setDepartments(data.departments ?? []);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load role assignments" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load role assignments" });
     } finally {
       setIsLoading(false);
     }

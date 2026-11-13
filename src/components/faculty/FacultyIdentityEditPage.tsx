@@ -176,7 +176,7 @@ export function FacultyIdentityEditPage({
         setExtraPhones((m.additionalPhoneNumbers as { label?: string; number: string }[]) ?? []);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty record" }))
       .finally(() => setLoading(false));
   }, [facultyId, listHref, router]);
 
@@ -261,7 +261,7 @@ export function FacultyIdentityEditPage({
       }
       toast({ variant: "success", title: "Saved" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSavingModule(null);
     }
@@ -363,7 +363,7 @@ export function FacultyIdentityEditPage({
       });
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
-        throw new Error(data.error ?? "Failed to save changes");
+        throw new Error(data.error ?? "Unable to save changes");
       }
       // Only present when this save made them RESIGNED/RETIRED in a college with
       // read-only faculty access on: what happened to the seats they held.
@@ -381,7 +381,7 @@ export function FacultyIdentityEditPage({
       }
       router.push(detailHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save changes" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save changes" });
     } finally {
       setSaving(false);
     }

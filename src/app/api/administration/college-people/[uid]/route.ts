@@ -10,16 +10,16 @@ import { assignSeat, listSeats } from "@/lib/roles/seats";
 const HEAD_OFFICE_MANAGED = ["COLLEGE_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL"];
 
 async function loadTarget(collegeId: string | null, uid: string, locationId: string) {
-  if (!collegeId) return { error: "collegeId is required", status: 400 as const };
+  if (!collegeId) return { error: "Select a college.", status: 400 as const };
   const db = getAdminDb();
   const collegeSnap = await db.collection("colleges").doc(collegeId).get();
-  if (!collegeSnap.exists) return { error: "College not found", status: 404 as const };
+  if (!collegeSnap.exists) return { error: "College not found. It may have been deleted.", status: 404 as const };
   if ((collegeSnap.data() as { locationId?: string }).locationId !== locationId) {
     return { error: "College does not belong to your location", status: 403 as const };
   }
   const userRef = db.collection("colleges").doc(collegeId).collection("users").doc(uid);
   const userSnap = await userRef.get();
-  if (!userSnap.exists) return { error: "User not found", status: 404 as const };
+  if (!userSnap.exists) return { error: "User not found. The account may have been deleted.", status: 404 as const };
   const user = userSnap.data() as { role?: string; seatRoles?: string[]; name?: string; email?: string; collegeEmail?: string };
   const held = [user.role ?? "", ...(user.seatRoles ?? [])];
   if (!held.some((r) => HEAD_OFFICE_MANAGED.includes(r))) {
@@ -30,14 +30,14 @@ async function loadTarget(collegeId: string | null, uid: string, locationId: str
 
 function handleError(err: unknown, tag: string) {
   if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_LOCATION_CONTEXT")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
   }
   const code = (err as { code?: string } | null)?.code;
   if (code === "auth/email-already-exists") return NextResponse.json({ error: "That email is already used by another account" }, { status: 409 });
-  if (code === "auth/invalid-email") return NextResponse.json({ error: "Enter a valid email address" }, { status: 400 });
-  if (code === "auth/invalid-password") return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+  if (code === "auth/invalid-email") return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
+  if (code === "auth/invalid-password") return NextResponse.json({ error: "The password must be at least 6 characters." }, { status: 400 });
   console.error(`[administration/college-people/[uid] ${tag}]`, err);
-  return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ uid: string }> }) {
@@ -49,7 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ui
     if ("error" in t) return NextResponse.json({ error: t.error }, { status: t.status });
 
     if (body.newPassword !== undefined && body.newPassword.length < 6) {
-      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+      return NextResponse.json({ error: "The password must be at least 6 characters." }, { status: 400 });
     }
     const email = body.collegeEmail?.trim().toLowerCase();
     if (body.collegeEmail !== undefined && !email) {

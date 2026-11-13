@@ -86,14 +86,14 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
       const res = await fetch(`/api/college/attendance?year=${loadedYear}&month=${loadedMonth}&facultyId=${facultyId}`);
       const json = await res.json() as { personName?: string | null; registered?: boolean; records?: (AttendanceRecord & { id: string })[]; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load attendance" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load attendance" });
         return;
       }
       setPersonName(json.personName ?? null);
       setRegistered(json.registered ?? true);
       setRecords(json.records ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load attendance" });
+      toast({ variant: "destructive", title: "Unable to load attendance" });
     } finally {
       setIsLoading(false);
     }
@@ -127,14 +127,14 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to mark attendance" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to mark attendance" });
         return;
       }
       toast({ title: "Attendance updated" });
       setMarkDate(null);
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to mark attendance" });
+      toast({ variant: "destructive", title: "Unable to mark attendance" });
     } finally {
       setIsMarking(false);
     }

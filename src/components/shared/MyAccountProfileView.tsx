@@ -42,7 +42,7 @@ export function MyAccountProfileView({ basePath, fetchEndpoint, photoEndpoint }:
         setDepartment(d.user?.department);
         setLocationName(d.locationName);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load profile" }))
       .finally(() => setLoading(false));
   }, [fetchEndpoint]);
 

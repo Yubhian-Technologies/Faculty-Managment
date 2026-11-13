@@ -70,11 +70,11 @@ export default function StudentProfilePage() {
     try {
       const r = await fetch("/api/college/student/me/profile", { cache: "no-store" });
       const body = (await r.json()) as ProfileResponse;
-      if (!r.ok) throw new Error(body.error ?? "Failed to load your profile");
+      if (!r.ok) throw new Error(body.error ?? "Unable to load your profile");
       setData(body);
       setError(null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to load your profile");
+      setError(e instanceof Error ? e.message : "Unable to load your profile");
     } finally {
       setIsLoading(false);
       loaded.current = true;
@@ -120,12 +120,12 @@ export default function StudentProfilePage() {
         body: JSON.stringify({ details: changed }),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(body.error ?? "Failed to save");
+      if (!res.ok) throw new Error(body.error ?? "Unable to save");
       toast({ variant: "success", title: "Your details were updated" });
       setEditing(false);
       await load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }

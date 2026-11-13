@@ -59,7 +59,7 @@ export default function TeachingLoadPage() {
           fetch("/api/college/courses"),
           fetch("/api/college/departments"),
         ]);
-        if (!assignRes.ok) throw new Error("Failed to load teaching assignments");
+        if (!assignRes.ok) throw new Error("Unable to load teaching assignments");
         const json = await assignRes.json() as {
           assignments: TeachingAssignment[];
           timetableSlots: TimetableSlot[];
@@ -105,7 +105,7 @@ export default function TeachingLoadPage() {
           setDepartments(deptsJson.departments ?? []);
         }
       } catch {
-        toast({ variant: "destructive", title: "Failed to load teaching load" });
+        toast({ variant: "destructive", title: "Unable to load teaching load" });
       } finally {
         setIsLoading(false);
       }
@@ -193,7 +193,7 @@ export default function TeachingLoadPage() {
       toast({ title: "Timetable downloaded", description: "Saved as PDF" });
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Download failed", description: "Failed to generate PDF" });
+      toast({ variant: "destructive", title: "Download failed", description: "Unable to generate PDF" });
     } finally {
       setIsExportingPdf(false);
     }
@@ -231,7 +231,7 @@ export default function TeachingLoadPage() {
       toast({ title: "Timetable exported", description: "Saved as Excel spreadsheet" });
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Export failed", description: "Failed to export spreadsheet" });
+      toast({ variant: "destructive", title: "Export failed", description: "Unable to export spreadsheet" });
     } finally {
       setIsExportingXlsx(false);
     }
@@ -242,7 +242,7 @@ export default function TeachingLoadPage() {
     const html = buildSheetHtml();
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
-      toast({ title: "Popup blocked", description: "Please allow popups to print", variant: "destructive" });
+      toast({ title: "Popup blocked", description: "Allow popups to print", variant: "destructive" });
       return;
     }
     printWindow.document.open();

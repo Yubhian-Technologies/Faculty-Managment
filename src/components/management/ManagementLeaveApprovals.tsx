@@ -37,7 +37,7 @@ export function ManagementLeaveApprovals() {
     fetch("/api/management/leave-approvals")
       .then((r) => r.json() as Promise<{ requests: Row[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave approvals" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave approvals" }))
       .finally(() => setIsLoading(false));
   }
 

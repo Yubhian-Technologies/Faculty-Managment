@@ -109,7 +109,7 @@ function AdvanceDialog({ collegeId, advance, employees, canEdit, onClose, onSave
       const url = advance ? `/api/college/payroll/advances/${advance.id}${collegeQs(collegeId)}` : `/api/college/payroll/advances${collegeQs(collegeId)}`;
       await payrollFetch(url, { method: advance ? "PATCH" : "POST", body: JSON.stringify(advance ? { rev: advance.rev, ...body } : body) });
       toast({ variant: "success", title: done }); onSaved();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
   const values = () => ({
@@ -231,7 +231,7 @@ function AdvanceImport({ collegeId, onClose, onDone }: { collegeId?: string; onC
       if (rows.length === 0) throw new Error("No rows under the header");
       setFile({ headers, rows });
       await run("preview", { headers, rows });
-    } catch (err) { toast({ variant: "destructive", title: err instanceof Error ? err.message : "Couldn't read the file" }); }
+    } catch (err) { toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to read the file" }); }
   }
   async function run(mode: "preview" | "apply", body: { headers: string[]; rows: { row: number; code: string; values: Record<string, string> }[] } | null = file) {
     if (!body) return;
@@ -243,7 +243,7 @@ function AdvanceImport({ collegeId, onClose, onDone }: { collegeId?: string; onC
     } catch (err) {
       const data = (err as { data?: ImportPlan }).data;
       if (data?.rows) setPlan(data);
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Couldn't import" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to import" });
     } finally { setBusy(false); }
   }
   const bad = plan?.rows.filter((r) => r.status === "ERROR") ?? [];

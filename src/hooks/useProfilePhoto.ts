@@ -18,7 +18,7 @@ async function uploadProfilePhoto(file: File, endpoint: string): Promise<string>
     body: JSON.stringify({ photoUrl: uploadData.url }),
   });
   const saveData = (await saveRes.json()) as { photoUrl?: string; error?: string };
-  if (!saveRes.ok || !saveData.photoUrl) throw new Error(saveData.error ?? "Failed to save photo");
+  if (!saveRes.ok || !saveData.photoUrl) throw new Error(saveData.error ?? "Unable to save photo");
 
   return saveData.photoUrl;
 }
@@ -30,7 +30,7 @@ async function deleteProfilePhoto(endpoint: string): Promise<void> {
     body: JSON.stringify({ photoUrl: "" }),
   });
   const data = (await res.json()) as { error?: string };
-  if (!res.ok) throw new Error(data.error ?? "Failed to remove photo");
+  if (!res.ok) throw new Error(data.error ?? "Unable to remove photo");
 }
 
 // endpoint defaults to the college-scoped route so every existing caller

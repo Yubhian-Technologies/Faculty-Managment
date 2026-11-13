@@ -57,7 +57,7 @@ export default function ManagementBudgetDetailPage() {
           }))
         );
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load college budget activity" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load college budget activity" }))
       .finally(() => setIsLoading(false));
   }, [collegeId]);
 

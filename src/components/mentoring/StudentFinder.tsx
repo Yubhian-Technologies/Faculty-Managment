@@ -113,7 +113,7 @@ export function StudentFinder({ byDepartment, byMentor }: { byDepartment: Mentor
       setRows((prev) => [...prev, ...d.students]);
       setNextCursor(d.nextCursor);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load more");
+      setError(e instanceof Error ? e.message : "Unable to load more");
     }
     setState("done");
   }

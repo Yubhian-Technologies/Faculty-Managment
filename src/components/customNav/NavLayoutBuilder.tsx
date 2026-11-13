@@ -74,7 +74,7 @@ export function NavLayoutBuilder() {
       setHidden(nextHidden);
       setSavedKey(keyOf(nextRows, nextHidden));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load this college's navigation" });
+      toast({ variant: "destructive", title: "Unable to load this college's navigation" });
     } finally {
       setLoading(false);
     }
@@ -92,7 +92,7 @@ export function NavLayoutBuilder() {
 
   async function saveOrder(nextRows: BuilderRow[]) {
     const res = await fetch("/api/admin/custom-nav", json({ collegeId, role, order: toOrder(nextRows) }));
-    if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? "Failed to save the order");
+    if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? "Unable to save the order");
   }
 
   async function save() {
@@ -104,11 +104,11 @@ export function NavLayoutBuilder() {
         hiddenModules: visibility?.hiddenModules?.[role] ?? [],
         hiddenItems: mergeHidden(visibility?.hiddenItems?.[role] ?? [], rows.map((r) => r.href), hidden),
       }));
-      if (!res.ok) throw new Error("Failed to save visibility");
+      if (!res.ok) throw new Error("Unable to save visibility");
       toast({ variant: "success", title: "Navigation saved", description: `${ROLE_LABELS[role]} sidebar updated for this college.` });
       await load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -134,7 +134,7 @@ export function NavLayoutBuilder() {
     if (!target?.pageId) return;
     setDeleteTarget(null);
     const res = await fetch(`/api/admin/custom-nav/pages/${target.pageId}?collegeId=${collegeId}`, { method: "DELETE" });
-    if (!res.ok) { toast({ variant: "destructive", title: "Failed to delete the tab" }); return; }
+    if (!res.ok) { toast({ variant: "destructive", title: "Unable to delete the tab" }); return; }
     toast({ variant: "success", title: "Tab deleted" });
     await load();
   }

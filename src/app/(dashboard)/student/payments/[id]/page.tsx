@@ -24,10 +24,10 @@ export default function StudentPaymentPage({ params }: { params: Promise<{ id: s
     try {
       const res = await fetch(`/api/college/payments/my/${encodeURIComponent(id)}/check`, { method: "POST" });
       const d = (await res.json()) as { payment?: Payment; changed?: boolean; error?: string };
-      if (!res.ok || !d.payment) throw new Error(d.error ?? "Couldn't check");
+      if (!res.ok || !d.payment) throw new Error(d.error ?? "Unable to check");
       setP(d.payment);
       toast({ variant: d.changed ? "success" : "default", title: d.changed ? "Updated from CCAvenue" : "No change yet - CCAvenue hasn't confirmed it" });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't check" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to check" }); }
     finally { setChecking(false); }
   }
 
@@ -59,7 +59,7 @@ export default function StudentPaymentPage({ params }: { params: Promise<{ id: s
       <div className="flex gap-2">
         <Button asChild><Link href="/student/certificates">Back to certificates</Link></Button>
         <Button asChild variant="outline"><Link href="/student/payments">My payments</Link></Button>
-        {ok && <Button variant="outline" onClick={() => void printFeeReceipt(`/api/college/payments/my/${encodeURIComponent(p.id)}/receipt`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't print" }))}>Print receipt</Button>}
+        {ok && <Button variant="outline" onClick={() => void printFeeReceipt(`/api/college/payments/my/${encodeURIComponent(p.id)}/receipt`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to print" }))}>Print receipt</Button>}
         {!ok && canCheck && <Button variant="outline" onClick={() => void checkAgain()} loading={checking}>Check again</Button>}
       </div>
     </div>

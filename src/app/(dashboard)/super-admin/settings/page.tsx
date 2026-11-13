@@ -81,7 +81,7 @@ export default function SuperAdminSettingsPage() {
       })
       .catch((err) => {
         if ((err as Error)?.name === "AbortError") return;
-        toast({ variant: "destructive", title: "Failed to load colleges" });
+        toast({ variant: "destructive", title: "Unable to load colleges" });
       });
   }, []);
 
@@ -104,7 +104,7 @@ export default function SuperAdminSettingsPage() {
       })
       .catch((err) => {
         if ((err as Error)?.name === "AbortError") return;
-        toast({ variant: "destructive", title: "Failed to load settings" });
+        toast({ variant: "destructive", title: "Unable to load settings" });
       })
       .finally(() => setIsLoading(false));
   }, [normsCollegeId]);
@@ -155,7 +155,7 @@ export default function SuperAdminSettingsPage() {
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Faculty norms saved", description: "Changes will be reflected across all vacancy requests." });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -381,9 +381,9 @@ const FIREBASE_CHANGE_PW_ERRORS: Record<string, string> = {
   "auth/wrong-password": "Current password is incorrect.",
   "auth/invalid-credential": "Current password is incorrect.",
   "auth/weak-password": "New password is too weak - use at least 8 characters.",
-  "auth/requires-recent-login": "Please log out and log back in, then try again.",
-  "auth/too-many-requests": "Too many attempts. Please try again later.",
-  "auth/network-request-failed": "Network error. Please check your connection.",
+  "auth/requires-recent-login": "Log out and log back in, then try again.",
+  "auth/too-many-requests": "Too many attempts. Try again later.",
+  "auth/network-request-failed": "Network error. Check your connection.",
 };
 
 function SuperAdminChangePasswordCard() {
@@ -411,7 +411,7 @@ function SuperAdminChangePasswordCard() {
     }
     const currentUser = auth.currentUser;
     if (!currentUser?.email) {
-      toast({ variant: "destructive", title: "No active session", description: "Please log in again." });
+      toast({ variant: "destructive", title: "No active session", description: "Log in again." });
       return;
     }
     setIsChanging(true);
@@ -427,8 +427,8 @@ function SuperAdminChangePasswordCard() {
       const code = (err as { code?: string }).code ?? "";
       toast({
         variant: "destructive",
-        title: "Failed to change password",
-        description: FIREBASE_CHANGE_PW_ERRORS[code] ?? "Please try again.",
+        title: "Unable to change password",
+        description: FIREBASE_CHANGE_PW_ERRORS[code] ?? "Try again.",
       });
     } finally {
       setIsChanging(false);
@@ -525,7 +525,7 @@ function NavVisibilitySection() {
       })
       .catch((err) => {
         if ((err as Error)?.name === "AbortError") return;
-        toast({ variant: "destructive", title: "Failed to load colleges" });
+        toast({ variant: "destructive", title: "Unable to load colleges" });
       });
   }, []);
 
@@ -545,7 +545,7 @@ function NavVisibilitySection() {
       })
       .catch((err) => {
         if ((err as Error)?.name === "AbortError") return;
-        toast({ variant: "destructive", title: "Failed to load navigation visibility" });
+        toast({ variant: "destructive", title: "Unable to load navigation visibility" });
       })
       .finally(() => setIsLoading(false));
   }, [collegeId, role]);
@@ -580,7 +580,7 @@ function NavVisibilitySection() {
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Navigation visibility saved", description: `Applied to ${ROLE_LABELS[role]} at the selected college.` });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setIsSaving(false);
     }

@@ -127,12 +127,12 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[college/users GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
     const { name, email, collegeEmail, password, role, department, academicProfile, profilePhotoUrl, designation, sectionId, dateOfJoining } = body;
 
     if (!password || !role) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "Fill in all required fields." }, { status: 400 });
     }
     const degreeErr = degreeTypeError(academicProfile);
     if (degreeErr) return NextResponse.json({ error: degreeErr }, { status: 400 });
@@ -172,24 +172,24 @@ export async function POST(request: Request) {
     // /api/college/supporting-staff already enforce. `email` here becomes
     // just an optional personal contact address for real staff.
     if (role === "CLASS_LEADER" && !email) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "Fill in all required fields." }, { status: 400 });
     }
     if (role !== "CLASS_LEADER" && !collegeEmail) {
       return NextResponse.json({ error: "collegeEmail is required" }, { status: 400 });
     }
     if (role !== "CLASS_LEADER" && !name) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json({ error: "Fill in all required fields." }, { status: 400 });
     }
     if (dateOfJoining && Number.isNaN(new Date(dateOfJoining).getTime())) {
       return NextResponse.json({ error: "Invalid dateOfJoining" }, { status: 400 });
     }
     if (role === "CLASS_LEADER" && !sectionId) {
-      return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a section." }, { status: 400 });
     }
     // Uploaded before the account exists (under a temp id), so we can only check
     // it came from our own upload endpoint, not that it names this specific uid.
     if (profilePhotoUrl !== undefined && !profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/")) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
     }
 
     const collegeId = session.collegeId;
@@ -226,7 +226,7 @@ export async function POST(request: Request) {
       sectionRef = db.collection("colleges").doc(collegeId).collection("sections").doc(sectionId!);
       const sectionSnap = await sectionRef.get();
       if (!sectionSnap.exists) {
-        return NextResponse.json({ error: "Section not found" }, { status: 404 });
+        return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
       }
       sectionData = sectionSnap.data() as { department?: string; name?: string; classLeaderUid?: string };
       if (sectionData.classLeaderUid) {
@@ -429,7 +429,7 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (
       err &&
@@ -438,13 +438,13 @@ export async function POST(request: Request) {
       err.code === "auth/email-already-exists"
     ) {
       return NextResponse.json(
-        { error: "An account with this email already exists" },
+        { error: "An account with this email address already exists." },
         { status: 409 }
       );
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[college/users POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -32,7 +32,7 @@ export function AttendanceNotPostedSettingsCard() {
       const json = await res.json() as { settings?: Settings };
       if (json.settings) setSettings({ enabled: json.settings.enabled, cutoffTime: json.settings.cutoffTime });
     } catch {
-      toast({ variant: "destructive", title: "Failed to load reminder settings" });
+      toast({ variant: "destructive", title: "Unable to load reminder settings" });
     } finally {
       setIsLoading(false);
     }
@@ -51,10 +51,10 @@ export function AttendanceNotPostedSettingsCard() {
         body: JSON.stringify(settings),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to save");
+      if (!res.ok) throw new Error(json.error ?? "Unable to save");
       toast({ variant: "success", title: "Saved" });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }

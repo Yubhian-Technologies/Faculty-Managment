@@ -75,7 +75,7 @@ function CampusStaffDirectoryContent() {
         }),
     ])
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load directory" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load directory" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);

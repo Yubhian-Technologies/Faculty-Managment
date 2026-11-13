@@ -24,7 +24,7 @@ export default function ManagementLocationsPage() {
     fetch("/api/admin/locations")
       .then((r) => r.json() as Promise<{ locations: Location[] }>)
       .then((d) => setLocations(d.locations ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load locations" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load locations" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -34,11 +34,11 @@ export default function ManagementLocationsPage() {
     try {
       const res = await fetch(`/api/admin/locations/${deleteTarget.id}`, { method: "DELETE" });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to delete location");
+      if (!res.ok) throw new Error(data.error ?? "Unable to delete location");
       setLocations((prev) => prev.filter((l) => l.id !== deleteTarget.id));
       toast({ variant: "success", title: "Location deleted" });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete location" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to delete location" });
     } finally {
       setIsDeleting(false);
       setDeleteTarget(null);

@@ -42,7 +42,7 @@ export default function PrincipalBudgetDetailPage() {
         if (!d.request) throw new Error(d.error ?? "Not found");
         setRequest(d.request);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget request" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget request" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -59,14 +59,14 @@ export default function PrincipalBudgetDetailPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to update budget request");
+        throw new Error(err.error ?? "Unable to update budget request");
       }
       toast({ variant: "success", title: action === "VERIFY" ? "Budget request verified" : action === "REJECT" ? "Budget request rejected" : "Budget request returned to HOD" });
       setMode("idle");
       setRemarks("");
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to update", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to update", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }

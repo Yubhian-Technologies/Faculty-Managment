@@ -48,7 +48,7 @@ export function IssueCard({ request, onDone }: { request: CertificateRequest; on
   async function showPreview() {
     setBusy(true);
     try { setPreview(await previewCertificate(request.id, values)); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't build the preview" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to build the preview" }); }
     finally { setBusy(false); }
   }
 
@@ -69,12 +69,12 @@ export function IssueCard({ request, onDone }: { request: CertificateRequest; on
       if (done.issuedCertificateId) await downloadIssued(done.issuedCertificateId).catch(() => undefined);
       onDone();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't issue the certificate" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to issue the certificate" });
     } finally { setBusy(false); }
   }
 
   async function reject() {
-    if (!remarks.trim()) { toast({ variant: "destructive", title: "Please add a reason for rejecting" }); return; }
+    if (!remarks.trim()) { toast({ variant: "destructive", title: "Add a reason for rejecting" }); return; }
     setBusy(true);
     try { await rejectAtIssuance(request.id, remarks.trim()); toast({ variant: "success", title: "Rejected" }); onDone(); }
     catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "That didn't work" }); }

@@ -83,7 +83,7 @@ export function DepartmentOverview() {
       setRows(data.rows);
       setRequests(data.requests ?? []);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load the department overview" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load the department overview" });
     } finally {
       setLoading(false);
     }

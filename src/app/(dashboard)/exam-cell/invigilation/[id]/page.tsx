@@ -42,8 +42,8 @@ export default function InvigilationSchedulePage() {
 
   const load = useCallback(() => {
     fetch(`/api/college/invigilation/schedules/${id}`, { cache: "no-store" })
-      .then(async (r) => { const d = (await r.json()) as Overview & { error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); setOverview(d); })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .then(async (r) => { const d = (await r.json()) as Overview & { error?: string }; if (!r.ok) throw new Error(d.error ?? "Unable to load"); setOverview(d); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Unable to load"));
   }, [id]);
   useEffect(() => {
     load();
@@ -61,7 +61,7 @@ export default function InvigilationSchedulePage() {
     const res = await fetch(`/api/college/invigilation/schedules/${id}${publishedCount ? "?force=1" : ""}`, { method: "DELETE" });
     const data = (await res.json()) as { error?: string };
     setDeleting(false);
-    if (!res.ok) return toast({ variant: "destructive", title: data.error ?? "Could not delete" });
+    if (!res.ok) return toast({ variant: "destructive", title: data.error ?? "Unable to delete" });
     router.push("/exam-cell/invigilation");
   }
 

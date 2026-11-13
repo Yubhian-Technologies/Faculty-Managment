@@ -51,7 +51,7 @@ export default function EditAdministrationCollegePage() {
           contactPhone: college.contactPhone ?? "",
         });
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load college" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load college" }))
       .finally(() => setLoading(false));
   }, [collegeId, router]);
 
@@ -83,7 +83,7 @@ export default function EditAdministrationCollegePage() {
       toast({ variant: "success", title: "College updated" });
       router.push("/administration/colleges");
     } catch {
-      toast({ variant: "destructive", title: "Failed to update college" });
+      toast({ variant: "destructive", title: "Unable to update college" });
     } finally {
       setSaving(false);
     }

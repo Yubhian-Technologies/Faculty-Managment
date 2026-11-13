@@ -26,7 +26,7 @@ export async function PUT(request: Request, { params }: Params) {
     const db = getAdminDb();
     const refs = midTimetableRefs(db, session.collegeId);
     const plan = await loadPlan(db, session.collegeId, planId);
-    if (!plan) return NextResponse.json({ error: "Timetable not found" }, { status: 404 });
+    if (!plan) return NextResponse.json({ error: "Timetable not found. It may have been deleted." }, { status: 404 });
     const all = await branchSubjects(db, session.collegeId, plan);
     const branch = [...all.keys()].find((b) => branchKey(b) === key);
     if (!branch) return NextResponse.json({ error: "This branch has no Theory subjects taught in this semester" }, { status: 404 });

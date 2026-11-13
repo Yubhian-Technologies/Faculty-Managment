@@ -36,7 +36,7 @@ export default function LocationsPage() {
         setLocations(d.locations ?? []);
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load gates" });
+      toast({ variant: "destructive", title: "Unable to load gates" });
     } finally {
       setIsLoading(false);
     }
@@ -67,7 +67,7 @@ export default function LocationsPage() {
         loadLocations();
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setIsSubmitting(false);
     }
@@ -78,7 +78,7 @@ export default function LocationsPage() {
       const res = await fetch(`/api/location/locations/${id}`, { method: "DELETE" });
       if (res.ok) { loadLocations(); toast({ variant: "success", title: "Gate deleted" }); }
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete" });
+      toast({ variant: "destructive", title: "Unable to delete" });
     }
   }
 

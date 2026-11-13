@@ -54,14 +54,14 @@ export function PermissionRequestDialog({ onSubmitted }: { onSubmitted?: () => v
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Couldn't send the request" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to send the request" });
         return;
       }
       toast({ variant: "success", title: "Permission requested", description: "Sent to your approver." });
       setOpen(false);
       onSubmitted?.();
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setSaving(false);
     }

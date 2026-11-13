@@ -146,7 +146,7 @@ function PayEditDialog({ collegeId, row, settings, canEdit, onClose, onSaved }: 
       await payrollFetch(url, { method: "PUT", body: JSON.stringify({ revisionCount: revisions.length, revision: { effectiveFrom: from, amounts: Object.fromEntries(parts.map((e) => [e.id, amounts[e.id] ? Number(amounts[e.id]) : 0])), exempt, note } }) });
       toast({ variant: "success", title: `Pay saved from ${monthLabel(from)}` });
       onSaved();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
 

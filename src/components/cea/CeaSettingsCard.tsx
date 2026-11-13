@@ -29,10 +29,10 @@ export function CeaSettingsCard() {
     try {
       const res = await fetch("/api/college/cea/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings: edit, version: edit.version }) });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.error ?? "Couldn't save");
+      if (!res.ok) throw new Error(j.error ?? "Unable to save");
       toast({ variant: "success", title: `CIE saved for ${edit.courseName} ${edit.regulation}` });
       setEdit(null); load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
 

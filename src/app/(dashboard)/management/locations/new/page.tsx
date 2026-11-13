@@ -31,7 +31,7 @@ export default function NewLocationPage() {
       toast({ variant: "success", title: "Location created" });
       router.push("/management/locations");
     } catch {
-      toast({ variant: "destructive", title: "Failed to create location" });
+      toast({ variant: "destructive", title: "Unable to create location" });
     } finally {
       setSaving(false);
     }

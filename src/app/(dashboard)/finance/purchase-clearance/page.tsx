@@ -124,7 +124,7 @@ export default function FinancePurchaseClearancePage() {
         setRequests(mergeRows(d.clearances ?? [], d.indents ?? [], true));
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load purchase clearance requests" });
+      toast({ variant: "destructive", title: "Unable to load purchase clearance requests" });
     } finally {
       setIsLoading(false);
     }

@@ -76,7 +76,7 @@ export function PayImportDialog({ collegeId, settings, rows: people, onClose, on
       if (rows.length === 0) throw new Error("No rows under the header");
       setFile({ name: f.name, headers, rows });
       await run("preview", { headers, rows });
-    } catch (err) { toast({ variant: "destructive", title: err instanceof Error ? err.message : "Couldn't read the file" }); }
+    } catch (err) { toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to read the file" }); }
   }
 
   async function run(mode: "preview" | "apply", body: { headers: string[]; rows: { row: number; code: string; values: Record<string, string> }[] } | null = file) {
@@ -89,7 +89,7 @@ export function PayImportDialog({ collegeId, settings, rows: people, onClose, on
     } catch (err) {
       const data = (err as { data?: Plan }).data;
       if (data?.rows) setPlan(data);
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Couldn't import" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to import" });
     } finally { setBusy(false); }
   }
 

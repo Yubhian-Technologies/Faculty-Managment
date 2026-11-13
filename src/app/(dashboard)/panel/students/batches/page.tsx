@@ -61,7 +61,7 @@ export default function LabBatchesPage() {
       if (!res.ok) throw new Error(d.error ?? "Failed");
       setStudents(d.students ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load students" });
+      toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       setIsLoadingStudents(false);
     }
@@ -87,7 +87,7 @@ export default function LabBatchesPage() {
         setSectionId(keep?.id ?? "");
         return loadStudentsOf(keep);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load students" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load students" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -184,7 +184,7 @@ export default function LabBatchesPage() {
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; labBatches?: string[] };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Could not save the batches", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save the batches", description: json.error });
         return false;
       }
       const saved = json.labBatches ?? list;
@@ -193,7 +193,7 @@ export default function LabBatchesPage() {
       setSavedVersion((v) => v + 1);
       return true;
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
       return false;
     } finally {
       setIsSavingBatches(false);
@@ -260,7 +260,7 @@ export default function LabBatchesPage() {
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; unassigned?: number; slotsStillUsingBatch?: number };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Could not delete the batch", description: json.error });
+        toast({ variant: "destructive", title: "Unable to delete the batch", description: json.error });
         return;
       }
       const slots = json.slotsStillUsingBatch ?? 0;
@@ -275,7 +275,7 @@ export default function LabBatchesPage() {
       setDeleteTarget(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsDeleting(false);
     }
@@ -297,7 +297,7 @@ export default function LabBatchesPage() {
         });
         const json = (await res.json().catch(() => ({}))) as { error?: string; updated?: number };
         if (!res.ok) {
-          toast({ variant: "destructive", title: "Could not save the changes", description: json.error });
+          toast({ variant: "destructive", title: "Unable to save the changes", description: json.error });
           return;
         }
         toast({ variant: "success", title: `Updated ${json.updated ?? pending.size} student${(json.updated ?? pending.size) === 1 ? "" : "s"}` });
@@ -306,7 +306,7 @@ export default function LabBatchesPage() {
       if (localBatches !== null && !(await persistBatches(localBatches))) return;
       load();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsSaving(false);
     }

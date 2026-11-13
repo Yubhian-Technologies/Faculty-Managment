@@ -52,7 +52,7 @@ export default function WebmasterCredentialRequestsPage() {
       requests.sort((a, b) => order[a.status] - order[b.status]);
       setRequests(requests);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load" });
+      toast({ variant: "destructive", title: "Unable to load" });
     } finally {
       setIsLoading(false);
     }
@@ -129,7 +129,7 @@ export default function WebmasterCredentialRequestsPage() {
     fetch("/api/college/users?allDepts=true&includeAll=true")
       .then((r) => r.json() as Promise<{ users?: ExistingUser[] }>)
       .then((d) => setLinkUsers(d.users ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load accounts" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load accounts" }))
       .finally(() => setLinkUsersLoading(false));
   }
 

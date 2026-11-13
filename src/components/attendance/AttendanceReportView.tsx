@@ -248,7 +248,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       const d = await res.json() as { roster: RosterEntry[]; error?: string };
       setRoster(d.roster ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load attendance report" });
+      toast({ variant: "destructive", title: "Unable to load attendance report" });
     } finally {
       setIsLoading(false);
     }
@@ -284,14 +284,14 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to mark attendance" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to mark attendance" });
         return;
       }
       toast({ title: `Attendance updated for ${markTarget.name}` });
       setMarkTarget(null);
       await loadRoster();
     } catch {
-      toast({ variant: "destructive", title: "Failed to mark attendance" });
+      toast({ variant: "destructive", title: "Unable to mark attendance" });
     } finally {
       setIsMarking(false);
     }
@@ -319,14 +319,14 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to grant permission" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to grant permission" });
         return;
       }
       toast({ title: `Check-in permission granted for ${permissionTarget.name}`, description: `${date} is excused - won't count as late no matter when they check in.` });
       setPermissionTarget(null);
       await loadRoster();
     } catch {
-      toast({ variant: "destructive", title: "Failed to grant permission" });
+      toast({ variant: "destructive", title: "Unable to grant permission" });
     } finally {
       setIsGrantingPermission(false);
     }
@@ -337,7 +337,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
     fetch("/api/college/departments")
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive).sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }));
   }, [groupByDepartmentAndCourse]);
 
   useEffect(() => {
@@ -366,7 +366,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
         }
         setCourses(Array.from(byCatalogCourse.values()).sort((a, b) => a.name.localeCompare(b.name)));
       } catch {
-        toast({ variant: "destructive", title: "Failed to load courses" });
+        toast({ variant: "destructive", title: "Unable to load courses" });
       } finally {
         setIsLoadingCourses(false);
       }
@@ -517,7 +517,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       const res = await fetch(`/api/college/attendance/monthly-export?${params.toString()}`);
       const d = await res.json() as { rows?: MonthlySummaryRow[]; department?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: d.error ?? "Failed to export" });
+        toast({ variant: "destructive", title: d.error ?? "Unable to export" });
         return;
       }
       if (!d.rows || d.rows.length === 0) {
@@ -527,7 +527,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       const label = scope === "college" ? "college" : (d.department || selectedDepartment?.name || "department");
       exportRosterMonthlyCSV(d.rows, `attendance-${label}-${exportMonth}`);
     } catch {
-      toast({ variant: "destructive", title: "Failed to export" });
+      toast({ variant: "destructive", title: "Unable to export" });
     } finally {
       setExportingScope(null);
     }

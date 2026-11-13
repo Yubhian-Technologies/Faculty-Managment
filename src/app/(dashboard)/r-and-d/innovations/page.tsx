@@ -41,7 +41,7 @@ export default function RAndDInnovationsPage() {
       const data = await res.json() as { records: InnovationRow[] };
       setRecords(data.records ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load innovation records" });
+      toast({ variant: "destructive", title: "Unable to load innovation records" });
     } finally {
       setIsLoading(false);
     }
@@ -61,7 +61,7 @@ export default function RAndDInnovationsPage() {
       setDeleteTarget(null);
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete record" });
+      toast({ variant: "destructive", title: "Unable to delete record" });
     } finally {
       setDeleting(false);
     }
@@ -79,7 +79,7 @@ export default function RAndDInnovationsPage() {
       toast({ variant: "success", title: "Record approved" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to approve record" });
+      toast({ variant: "destructive", title: "Unable to approve record" });
     } finally {
       setApproving(null);
     }
@@ -100,7 +100,7 @@ export default function RAndDInnovationsPage() {
       setRejectReason("");
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to reject record" });
+      toast({ variant: "destructive", title: "Unable to reject record" });
     } finally {
       setRejecting(false);
     }

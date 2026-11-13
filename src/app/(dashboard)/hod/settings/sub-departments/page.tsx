@@ -100,7 +100,7 @@ export default function SubDepartmentsSettingsPage() {
         setChildren([]);
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sub-departments" });
+      toast({ variant: "destructive", title: "Unable to load sub-departments" });
     } finally {
       setIsLoading(false);
     }
@@ -120,13 +120,13 @@ export default function SubDepartmentsSettingsPage() {
     try {
       const res = await fetch(`/api/college/departments?deptId=${deleteTarget.id}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to delete");
+      if (!res.ok) throw new Error(json.error ?? "Unable to delete");
 
       toast({ variant: "success", title: `${deleteTarget.name} removed` });
       setDeleteTarget(null);
       void load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to delete" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to delete" });
     } finally {
       setIsDeleting(false);
     }

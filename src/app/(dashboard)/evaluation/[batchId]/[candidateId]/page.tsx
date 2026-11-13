@@ -122,18 +122,18 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
           setPerson({ name: candidate.name ?? "Unknown", email: candidate.email ?? "", bioDataSubmitted: candidate.bioDataSubmitted });
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load evaluation" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load evaluation" }))
       .finally(() => setIsLoading(false));
   }, [batchId, candidateId, myUid]);
 
   async function submitPanelFeedback() {
     const allRated = PANEL_CRITERIA.every(([key]) => panelForm.scores[key] != null);
     if (!allRated) {
-      toast({ variant: "destructive", title: "Please score all 5 criteria out of 10" });
+      toast({ variant: "destructive", title: "Score all 5 criteria out of 10" });
       return;
     }
     if (!panelForm.recommendation) {
-      toast({ variant: "destructive", title: "Please select a recommendation" });
+      toast({ variant: "destructive", title: "Select a recommendation" });
       return;
     }
     setIsSaving(true);
@@ -155,7 +155,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
       toast({ variant: "success", title: "Evaluation submitted" });
       router.back();
     } catch {
-      toast({ variant: "destructive", title: "Failed to submit evaluation" });
+      toast({ variant: "destructive", title: "Unable to submit evaluation" });
     } finally {
       setIsSaving(false);
     }

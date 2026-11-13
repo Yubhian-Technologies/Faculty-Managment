@@ -74,12 +74,12 @@ export default function NewBudgetCyclePage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to release budget cycle");
+        throw new Error(err.error ?? "Unable to release budget cycle");
       }
       toast({ variant: "success", title: "Budget cycle released", description: "Sent to the Principal for approval." });
       router.push("/finance/budget");
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to release budget cycle", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to release budget cycle", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
     }

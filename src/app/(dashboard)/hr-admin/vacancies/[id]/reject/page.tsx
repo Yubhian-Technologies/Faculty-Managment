@@ -49,7 +49,7 @@ export default function RejectVacancyRequestPage() {
         setSelected(found);
       })
       .catch(() => {
-        toast({ variant: "destructive", title: "Failed to load hiring request" });
+        toast({ variant: "destructive", title: "Unable to load hiring request" });
         router.push("/hr-admin/vacancies");
       })
       .finally(() => setLoading(false));

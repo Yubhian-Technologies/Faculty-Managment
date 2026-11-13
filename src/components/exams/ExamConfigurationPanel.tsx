@@ -94,7 +94,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
           }
         }
       } catch {
-        toast({ variant: "destructive", title: "Failed to load academic data" });
+        toast({ variant: "destructive", title: "Unable to load academic data" });
       } finally {
         setIsLoadingData(false);
       }
@@ -212,7 +212,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
           setComponents([emptyComponent()]);
         }
       } catch {
-        toast({ variant: "destructive", title: "Failed to load configuration" });
+        toast({ variant: "destructive", title: "Unable to load configuration" });
       } finally {
         setIsLoadingConfig(false);
       }
@@ -240,7 +240,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
       method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: existingConfig.id, componentId, midNumber, cea }),
     });
     const json = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) toast({ variant: "destructive", title: json.error ?? "Couldn't save" });
+    if (!res.ok) toast({ variant: "destructive", title: json.error ?? "Unable to save" });
     else toast({ variant: "success", title: cea ? "Marks now come from CIE (the units added up and scaled)" : midNumber ? `Marks now come from the Mid ${midNumber} question paper` : "Marks are typed as one number" });
   }
 
@@ -301,11 +301,11 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
         }),
       });
       const json = (await res.json()) as { configuration?: ExamConfiguration; error?: string };
-      if (!res.ok || !json.configuration) throw new Error(json.error ?? "Failed to save configuration");
+      if (!res.ok || !json.configuration) throw new Error(json.error ?? "Unable to save configuration");
       setExistingConfig(json.configuration);
       toast({ variant: "success", title: "Examination configuration saved" });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save configuration" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save configuration" });
     } finally {
       setSaving(false);
     }

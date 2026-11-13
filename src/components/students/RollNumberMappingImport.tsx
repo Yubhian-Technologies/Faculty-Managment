@@ -125,7 +125,7 @@ export function RollNumberMappingImport() {
       if (parsed.length === 0) { setParseError("Every row in that file is empty."); setRows([]); return; }
       setRows(parsed);
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Could not read that file.");
+      setParseError(err instanceof Error ? err.message : "Unable to read that file.");
       setRows([]);
     }
   }
@@ -140,10 +140,10 @@ export function RollNumberMappingImport() {
         body: JSON.stringify({ rows, replaceExisting }),
       });
       const json = (await res.json()) as PreviewResponse;
-      if (!res.ok) throw new Error(json.error ?? "Could not check the file");
+      if (!res.ok) throw new Error(json.error ?? "Unable to check the file");
       setResults(json.results ?? []);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not check the file" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to check the file" });
     } finally {
       setIsPreviewing(false);
     }
@@ -159,7 +159,7 @@ export function RollNumberMappingImport() {
         body: JSON.stringify({ rows, replaceExisting }),
       });
       const json = (await res.json()) as ApplyResponse;
-      if (!res.ok) throw new Error(json.error ?? "Could not apply the Regd. Nos");
+      if (!res.ok) throw new Error(json.error ?? "Unable to apply the Regd. Nos");
       setApplyResult(json);
       await preview(); // so the table shows what is now true and a second apply is a no-op
       toast({
@@ -168,7 +168,7 @@ export function RollNumberMappingImport() {
         ...((json.failedCount ?? 0) > 0 ? { description: `${json.failedCount} row(s) failed - download the results.` } : {}),
       });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not apply the Regd. Nos" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to apply the Regd. Nos" });
     } finally {
       setIsApplying(false);
     }
@@ -206,7 +206,7 @@ export function RollNumberMappingImport() {
         body: JSON.stringify({ studentIds: loginCandidates, password }),
       });
       const json = (await res.json()) as { created?: number; failed?: unknown[]; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Could not create logins");
+      if (!res.ok) throw new Error(json.error ?? "Unable to create logins");
       const failed = Array.isArray(json.failed) ? json.failed.length : 0;
       toast({
         variant: failed > 0 ? "destructive" : "success",
@@ -215,7 +215,7 @@ export function RollNumberMappingImport() {
       });
       setPassword("");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not create logins" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to create logins" });
     } finally {
       setIsCreatingLogins(false);
     }
@@ -277,7 +277,7 @@ export function RollNumberMappingImport() {
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{fileName} - {rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{fileName} - {rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
         </CardContent>

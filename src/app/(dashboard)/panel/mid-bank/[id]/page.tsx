@@ -28,10 +28,10 @@ export default function MidBankPage({ params, searchParams }: { params: Promise<
     fetch(`/api/college/mid-question-banks/${encodeURIComponent(id)}`)
       .then(async (r) => {
         const d = (await r.json()) as MidBankDetail & { error?: string };
-        if (!r.ok) throw new Error(d.error ?? "Failed to load");
+        if (!r.ok) throw new Error(d.error ?? "Unable to load");
         setDetail(d);
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unable to load"));
   }, [id]);
   useEffect(() => { load(); }, [load]);
 

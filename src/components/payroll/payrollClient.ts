@@ -12,7 +12,7 @@ export const collegeQs = (collegeId?: string, extra: Record<string, string> = {}
 export async function payrollFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw Object.assign(new Error(data.error ?? "Something went wrong"), { data, status: res.status });
+  if (!res.ok) throw Object.assign(new Error(data.error ?? "Unable to complete the request. Try again."), { data, status: res.status });
   return data;
 }
 

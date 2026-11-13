@@ -32,7 +32,7 @@ export default function PurchaseByTypePage() {
     fetch(`/api/purchase/indents/overview?${params.toString()}`)
       .then((r) => r.json() as Promise<{ indents: OverviewIndent[] }>)
       .then((d) => setRequests(d.indents ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load indent requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load indent requests" }))
       .finally(() => setIsLoading(false));
   }, [locationId, collegeId]);
 

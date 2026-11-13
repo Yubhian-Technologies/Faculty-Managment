@@ -95,10 +95,10 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
     try {
       const res = await fetch(`/api/college/mid-question-banks/${encodeURIComponent(bank.id)}/update-pattern`, { method: "POST" });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Couldn't update");
+      if (!res.ok) throw new Error(json.error ?? "Unable to update");
       toast({ variant: "success", title: "Your question papers now follow the current pattern" });
       window.location.reload();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't update" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to update" }); }
     finally { setUpdating(false); }
   }
 
@@ -117,7 +117,7 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
         if (!res.ok) {
           setSaveState(res.status >= 500 ? "failed" : "idle");
           if (data.errors) setErrors(data.errors);
-          toast({ variant: "destructive", title: data.error ?? "Could not save" });
+          toast({ variant: "destructive", title: data.error ?? "Unable to save" });
           return false;
         }
         setQuestions((qs) => { const n = { ...qs }; if (data.question) n[sent.qid] = data.question; else delete n[sent.qid]; return n; });
@@ -177,7 +177,7 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "remove" }),
       });
       const data = (await res.json()) as { error?: string; progress?: { setProgress: MidQuestionBank["setProgress"]; completeCount: number; totalCount: number; allComplete: boolean } };
-      if (!res.ok) throw new Error(data.error ?? "Could not remove it");
+      if (!res.ok) throw new Error(data.error ?? "Unable to remove it");
       setQuestions((qs) => {
         const next: Record<string, MidPaperQuestion> = {};
         for (const x of Object.values(qs)) {
@@ -192,7 +192,7 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
       setCur({ partId: cur.partId, no: Math.max(1, cur.no - 1) });
       setDirty(false);
       setTimeout(() => window.location.reload(), 300);
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not remove it" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to remove it" }); }
   }
 
   async function upload(file: File, sub?: number) {

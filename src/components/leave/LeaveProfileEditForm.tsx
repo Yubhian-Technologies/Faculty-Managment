@@ -38,7 +38,7 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
         const doj = (p.dateOfJoining as unknown as { toDate?: () => Date }).toDate?.() ?? new Date(p.dateOfJoining as unknown as string);
         setDateOfJoining(doj.toISOString().slice(0, 10));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave profile" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave profile" }))
       .finally(() => setIsLoading(false));
   }, [params.uid]);
 
@@ -51,11 +51,11 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
         body: JSON.stringify({ uid: params.uid, staffCategory, dateOfJoining }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: "Leave profile updated" });
       router.push(backHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }

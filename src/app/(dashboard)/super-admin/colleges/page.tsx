@@ -57,7 +57,7 @@ export default function CollegesPage() {
       setLocationMap(map);
       setColleges(collegesData.colleges ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load colleges" });
+      toast({ variant: "destructive", title: "Unable to load colleges" });
     } finally {
       setIsLoading(false);
     }
@@ -77,7 +77,7 @@ export default function CollegesPage() {
       toast({ variant: "success", title: `College ${college.isActive ? "deactivated" : "activated"}` });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update college" });
+      toast({ variant: "destructive", title: "Unable to update college" });
     } finally {
       setToggling(null);
       setConfirmCollege(null);
@@ -89,14 +89,14 @@ export default function CollegesPage() {
     try {
       const res = await fetch(`/api/admin/colleges?collegeId=${college.id}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Failed to delete college");
+      if (!res.ok) throw new Error(data?.error || "Unable to delete college");
       toast({ variant: "success", title: "College deleted" });
       setDeleteCollege(null);
       await load();
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Failed to delete college",
+        title: "Unable to delete college",
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {

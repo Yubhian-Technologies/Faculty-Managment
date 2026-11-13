@@ -86,7 +86,7 @@ export default function PrincipalStaffModuleEditPage() {
           academicProfile: (m.academicProfile as FacultyEditRecord["academicProfile"]) ?? {},
         });
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff account" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff account" }))
       .finally(() => setLoading(false));
   }, [uid, router]);
 
@@ -140,7 +140,7 @@ export default function PrincipalStaffModuleEditPage() {
       toast({ variant: "success", title: "Saved" });
       router.push(`/principal/staff/${uid}/${moduleKey}`);
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSaving(false);
     }

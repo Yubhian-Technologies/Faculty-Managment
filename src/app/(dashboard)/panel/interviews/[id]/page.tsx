@@ -78,7 +78,7 @@ export default function PanelInterviewDetailPage({ params }: { params: Promise<{
             });
           }
         })
-        .catch(() => toast({ variant: "destructive", title: "Failed to load interview" }))
+        .catch(() => toast({ variant: "destructive", title: "Unable to load interview" }))
         .finally(() => setIsLoading(false));
     }
     load();

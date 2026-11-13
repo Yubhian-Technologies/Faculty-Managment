@@ -35,7 +35,7 @@ export default function NonTechnicalStaffViewPage() {
         }
         setStaff(d.staff);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff record" }))
       .finally(() => setIsLoading(false));
   }, [staffId, router, listPath]);
 

@@ -25,7 +25,7 @@ export function CeaPlans({ title, description, tabs }: { title: string; descript
   const [show, setShow] = useState<"" | "TODO" | "DONE">("");
   const [open, setOpen] = useState<string | null>(null);
   const load = useCallback(() => {
-    fetch("/api/college/cea/subjects").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Couldn't load"); setD(j); setError(""); }).catch((e: Error) => setError(e.message));
+    fetch("/api/college/cea/subjects").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Unable to load"); setD(j); setError(""); }).catch((e: Error) => setError(e.message));
   }, []);
   useEffect(load, [load]);
   const rows = useMemo(() => {
@@ -92,9 +92,9 @@ export function CeaPlanDialog({ subjectId, onClose, onSaved }: { subjectId: stri
     try {
       const res = await fetch(`/api/college/cea/plans/${encodeURIComponent(subjectId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: d?.plan?.version ?? 0, units }) });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.error ?? "Couldn't save");
+      if (!res.ok) throw new Error(j.error ?? "Unable to save");
       toast({ variant: "success", title: "CIE plan saved" }); onSaved();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
   const types = d?.settings?.types ?? [];

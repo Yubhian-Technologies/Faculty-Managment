@@ -128,7 +128,7 @@ export async function notifyAdjustmentAssignees(
     const what = a.kind === "SUBSTITUTE" ? "cover their class(es)" : "be their point of contact";
     await notify(
       db, collegeId, a.assigneeUid, "ADJUSTMENT_REQUESTED", "Adjustment Request",
-      `${req.employeeName} has asked you to ${what} while they're on leave (${req.totalDays} day(s)). Please accept or decline.`,
+      `${req.employeeName} has asked you to ${what} while they're on leave (${req.totalDays} day(s)). Accept or decline.`,
       "/leave/adjustments"
     );
   }

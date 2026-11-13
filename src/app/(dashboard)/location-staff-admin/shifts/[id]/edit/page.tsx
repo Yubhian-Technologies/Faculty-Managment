@@ -74,7 +74,7 @@ export default function LocationStaffAdminEditShiftPage({
         }
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shift" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shift" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -112,7 +112,7 @@ export default function LocationStaffAdminEditShiftPage({
       toast({
         variant: "destructive",
         title: "Department required",
-        description: "Please select at least one department or enable 'Campus-Wide'.",
+        description: "Select at least one department or enable 'Campus-Wide'.",
       });
       return;
     }
@@ -146,13 +146,13 @@ export default function LocationStaffAdminEditShiftPage({
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to update shift");
+        throw new Error(data.error || "Unable to update shift");
       }
 
-      toast({ title: "Shift Updated", description: `${name} has been updated successfully.` });
+      toast({ title: "Shift Updated", description: `${name} has been updated.` });
       router.push(fallbackHref);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update shift";
+      const msg = err instanceof Error ? err.message : "Unable to update shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsSubmitting(false);
@@ -171,13 +171,13 @@ export default function LocationStaffAdminEditShiftPage({
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to delete shift");
+        throw new Error(data.error || "Unable to delete shift");
       }
 
       toast({ title: "Shift Deleted", description: `${name} has been removed.` });
       router.push(fallbackHref);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to delete shift";
+      const msg = err instanceof Error ? err.message : "Unable to delete shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsDeleting(false);

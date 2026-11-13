@@ -50,7 +50,7 @@ export function useRegulationCourseDepartmentPicker() {
         const topLevel = all.filter((dept) => !dept.parentDepartmentId);
         setDepartments(topLevel.sort((a, b) => a.name.localeCompare(b.name)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }))
       .finally(() => setIsLoading(false));
 
     fetch("/api/college/course-catalog")
@@ -112,7 +112,7 @@ export function useRegulationCourseDepartmentPicker() {
       return list;
     } catch {
       if (requestId !== coursesRequestIdRef.current) return null;
-      toast({ variant: "destructive", title: "Failed to load courses" });
+      toast({ variant: "destructive", title: "Unable to load courses" });
       return null;
     } finally {
       if (requestId === coursesRequestIdRef.current) setIsLoadingCourses(false);
@@ -180,7 +180,7 @@ export function useRegulationCourseDepartmentPicker() {
       setLoadedKey(`${sel.regulation}|${sel.catalogId}|${sel.departmentId}`);
       return { ok: true, course };
     } catch {
-      toast({ variant: "destructive", title: "Failed to load" });
+      toast({ variant: "destructive", title: "Unable to load" });
       return { ok: false, course: null };
     } finally {
       setIsLoadingData(false);

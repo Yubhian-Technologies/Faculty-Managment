@@ -35,12 +35,12 @@ export async function GET(
       collegeId = (sysSnap.data() as { collegeId?: string } | undefined)?.collegeId ?? "";
     }
     if (!collegeId) {
-      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a college." }, { status: 400 });
     }
 
     const snap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({ error: "User not found. The account may have been deleted." }, { status: 404 });
     }
 
     const user = { uid: snap.id, ...migrateUserDoc(snap.data() ?? {}) } as Record<string, unknown> & { role?: string };
@@ -72,12 +72,12 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[admin/users/[uid] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -107,7 +107,7 @@ export async function PATCH(
     const { role, isActive, department, name, email, collegeEmail, employeeId, phone, academicProfile, newPassword } = body;
 
     if (newPassword !== undefined && newPassword.length < 6) {
-      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+      return NextResponse.json({ error: "The password must be at least 6 characters." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -139,7 +139,7 @@ export async function PATCH(
       collegeId = (sysSnap.data() as { collegeId?: string } | undefined)?.collegeId ?? "";
     }
     if (!collegeId) {
-      return NextResponse.json({ error: "collegeId required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a college." }, { status: 400 });
     }
 
     // A faculty member's login email is changed by the College Office only (lib/faculty/changeCollegeEmail.ts) - this
@@ -153,7 +153,7 @@ export async function PATCH(
 
     // Reset Password only ever sends { collegeId, newPassword } - this was
     // previously silently dropped (not in this destructure at all), so the
-    // dialog showed "Password reset successfully" while the Auth password
+    // dialog showed "Password reset" while the Auth password
     // never actually changed. Firebase Auth is the actual credential store;
     // nothing in `colleges/{id}/users` needs updating for a password change.
     if (newPassword !== undefined) {
@@ -223,12 +223,12 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[admin/users/[uid] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -290,11 +290,11 @@ export async function DELETE(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[admin/users/[uid] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

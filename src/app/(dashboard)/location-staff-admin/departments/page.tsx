@@ -70,7 +70,7 @@ export default function LocationDepartmentsPage() {
         if (!isCancelled) setDepartments(d.departments ?? []);
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load departments" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load departments" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -103,7 +103,7 @@ export default function LocationDepartmentsPage() {
         method: "DELETE",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete department");
+      if (!res.ok) throw new Error(data.error || "Unable to delete department");
 
       toast({
         title: "Department Deleted",

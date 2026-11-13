@@ -183,7 +183,7 @@ export const EXPORT_FIELDS: ExportField[] = [
   scalar("qualification", "researchAreasInterests", "Research Areas/Interests"),
   scalar("qualification", "netSletSetGateOthers", "NET/SLET/SET/GATE/Others"),
   scalar("qualification", "qualifiedExam", "Qualified Exam"),
-  scalar("qualification", "pleaseSpecifyExam", "Please specify exam"),
+  scalar("qualification", "pleaseSpecifyExam", "Specify exam"),
   scalar("qualification", "examScore", "Exam Score"),
   scalar("qualification", "qualifiedYear", "Qualified Year"),
   // Export only: exams 2, 3, ... (the first exam is the four columns above).
@@ -229,7 +229,7 @@ export const EXPORT_FIELDS: ExportField[] = [
   group("mentorship", "newLabsEstablishedGroup", "New Labs Established", ["Facility Details", "Outcomes"]),
   group("mentorship", "academicResponsibilitiesGroup", "Academic Responsibilities", ["Category", "Other Category", "Description", "From Date", "To Date"]),
   group("mentorship", "fdpsWorkshopsMoocsCertificationsGroup", "FDPs, Workshops, MOOCs & Certifications", [
-    "Type", "Please specify type", "Certification Type", "Participated or Conducted", "Title of the Program",
+    "Type", "Specify type", "Certification Type", "Participated or Conducted", "Title of the Program",
     "Name of the Faculty / Coordinator", "From Date", "To Date", "Duration", "Number of Weeks",
     "National / International", "Place", "Mode of the Program",
     "Beneficiaries", "Total Count", "Internal Count", "External Count",

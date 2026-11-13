@@ -317,7 +317,7 @@ export function cleanProfileOverrides(student: Source, overrides: Record<string,
       out[target] = digits;
     } else if (def.kind === "email") {
       const e = v.toLowerCase();
-      if (!EMAIL_REGEX.test(e)) return { ok: false, status: 400, error: "Enter a valid email address" };
+      if (!EMAIL_REGEX.test(e)) return { ok: false, status: 400, error: "Enter a valid email address." };
       out[target] = e;
     } else if (def.kind === "landline") {
       if (!/^[\d\s+\-()]{6,15}$/.test(v)) return { ok: false, status: 400, error: `${def.label} can only contain digits, spaces, +, - and brackets (6-15 characters)` };

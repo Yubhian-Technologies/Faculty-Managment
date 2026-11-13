@@ -33,11 +33,11 @@ export default function FacultyAttendanceReportPage() {
     void (async () => {
       try {
         const res = await fetch("/api/college/class-work-records/sections");
-        if (!res.ok) throw new Error("Failed to load sections");
+        if (!res.ok) throw new Error("Unable to load sections");
         const json = (await res.json()) as { sections?: FacultySection[] };
         setSections(json.sections ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load your sections" });
+        toast({ variant: "destructive", title: "Unable to load your sections" });
         setSections([]);
       }
     })();

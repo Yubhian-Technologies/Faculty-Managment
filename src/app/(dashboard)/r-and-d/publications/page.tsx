@@ -54,7 +54,7 @@ export default function RAndDPublicationsPage() {
       const data = await res.json() as { publications: PublicationRow[] };
       setPublications(data.publications ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load publications" });
+      toast({ variant: "destructive", title: "Unable to load publications" });
     } finally {
       setIsLoading(false);
     }
@@ -90,7 +90,7 @@ export default function RAndDPublicationsPage() {
       setDeleteTarget(null);
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete publication" });
+      toast({ variant: "destructive", title: "Unable to delete publication" });
     } finally {
       setDeleting(false);
     }
@@ -110,7 +110,7 @@ export default function RAndDPublicationsPage() {
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Failed to approve publication",
+        title: "Unable to approve publication",
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {
@@ -135,7 +135,7 @@ export default function RAndDPublicationsPage() {
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Failed to reject publication",
+        title: "Unable to reject publication",
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {

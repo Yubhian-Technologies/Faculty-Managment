@@ -24,7 +24,7 @@ export default function CollegeAuditLogsPage() {
     fetch("/api/college/audit-logs")
       .then((r) => r.json() as Promise<{ logs: LogRow[] }>)
       .then((data) => setLogs(data.logs ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load audit logs" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load audit logs" }))
       .finally(() => setIsLoading(false));
   }, []);
 

@@ -142,7 +142,7 @@ export default function NewInterviewPlanPage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to create", description: json.error });
+        toast({ variant: "destructive", title: "Unable to create", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Interview plan submitted", description: "Administration will review and approve." });

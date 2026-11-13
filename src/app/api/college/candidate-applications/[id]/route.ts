@@ -49,7 +49,7 @@ export async function PATCH(
     const applicationSnap = await collegeRef.collection("candidateApplications").doc(id).get();
 
     if (!applicationSnap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const isPrincipalRole = session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL" || session.role === "SUPER_ADMIN";
@@ -337,7 +337,7 @@ export async function PATCH(
           toUid: officeDoc.id,
           type: "GENERAL",
           title: "Candidate Ready for Offer Letter",
-          message: `${candidateName ?? "A candidate"} has been approved. Please send the offer letter.`,
+          message: `${candidateName ?? "A candidate"} has been approved. Send the offer letter.`,
           link: `/college-office/documents`,
           read: false,
           createdAt: now,
@@ -367,9 +367,9 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[candidate-applications/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

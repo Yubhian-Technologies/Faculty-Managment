@@ -33,7 +33,7 @@ export function RequestForm() {
       const mine = await listRequests("mine");
       setExisting(mine.find((r) => ACTIVE_STATUSES.includes(r.status)) ?? null);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load your certificates" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load your certificates" });
     } finally {
       setLoading(false);
     }
@@ -50,7 +50,7 @@ export function RequestForm() {
 
   async function handleSubmit() {
     if (purposeCode === "OTHER" && !purposeOther.trim()) {
-      toast({ variant: "destructive", title: "Please describe the purpose" });
+      toast({ variant: "destructive", title: "Describe the purpose" });
       return;
     }
     setSubmitting(true);
@@ -64,7 +64,7 @@ export function RequestForm() {
         title: alreadyExists ? "You already have a request for this certificate" : "Request submitted",
       });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't submit your request" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to submit your request" });
     } finally {
       setSubmitting(false);
     }

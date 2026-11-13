@@ -146,14 +146,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const db = getAdminDb();
     const studentSnap = await db.collection("colleges").doc(session.collegeId).collection("students").doc(id).get();
-    if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    if (!studentSnap.exists) return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
     const student = studentSnap.data() as StudentRecord;
 
     if (session.role === "HOD") {
       const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
       const catalogId = await catalogIdForStudent(db, session.collegeId, student);
       if (!inHodScope(student.department, student.year, catalogId)) {
-        return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
       }
     }
 
@@ -162,10 +162,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/students/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -214,7 +214,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const collegeRef = db.collection("colleges").doc(session.collegeId);
       const studentRef = collegeRef.collection("students").doc(id);
       const studentSnap = await studentRef.get();
-      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
       const student = studentSnap.data() as StudentRecord;
 
       if (!student.section) {
@@ -225,7 +225,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
         const catalogId = await catalogIdForStudent(db, session.collegeId, student);
         if (!inHodScope(student.department, student.year, catalogId)) {
-          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+          return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
         }
       }
 
@@ -257,14 +257,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const collegeRef = db.collection("colleges").doc(session.collegeId);
       const studentRef = collegeRef.collection("students").doc(id);
       const studentSnap = await studentRef.get();
-      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
       const student = studentSnap.data() as StudentRecord;
 
       if (session.role === "HOD") {
         const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
         const catalogId = await catalogIdForStudent(db, session.collegeId, student);
         if (!inHodScope(student.department, student.year, catalogId)) {
-          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+          return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
         }
       } else if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"].includes(session.role)) {
         return NextResponse.json({ error: "Not allowed to edit student details" }, { status: 403 });
@@ -323,14 +323,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const collegeRef = db.collection("colleges").doc(session.collegeId);
       const studentRef = collegeRef.collection("students").doc(id);
       const studentSnap = await studentRef.get();
-      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
       const student = studentSnap.data() as StudentRecord;
 
       if (session.role === "HOD") {
         const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
         const catalogId = await catalogIdForStudent(db, session.collegeId, student);
         if (!inHodScope(student.department, student.year, catalogId)) {
-          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+          return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
         }
       } else if (!["PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE"].includes(session.role)) {
         return NextResponse.json({ error: "Not allowed to edit student details" }, { status: 403 });
@@ -644,14 +644,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const collegeRef = db.collection("colleges").doc(session.collegeId);
       const studentRef = collegeRef.collection("students").doc(id);
       const studentSnap = await studentRef.get();
-      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      if (!studentSnap.exists) return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
       const student = studentSnap.data() as StudentRecord;
 
       if (session.role === "HOD") {
         const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
         const catalogId = await catalogIdForStudent(db, session.collegeId, student);
         if (!inHodScope(student.department, student.year, catalogId)) {
-          return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+          return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
         }
       } else if (session.role === "PANEL_MEMBER") {
         const candidateIds = await getFacultyIdCandidates(db, session.collegeId, session.uid);
@@ -767,8 +767,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       studentRef.get(),
       collegeRef.collection("sections").doc(body.targetSectionId).get(),
     ]);
-    if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
-    if (!targetSnap.exists) return NextResponse.json({ error: "Target section not found" }, { status: 404 });
+    if (!studentSnap.exists) return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
+    if (!targetSnap.exists) return NextResponse.json({ error: "Target section not found. It may have been deleted." }, { status: 404 });
 
     const student = studentSnap.data() as StudentRecord;
     const targetSection = { id: targetSnap.id, ...(targetSnap.data() as object) } as Section;
@@ -791,7 +791,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         catalogIdForCourseId(db, session.collegeId, targetSection.courseId),
       ]);
       if (!inHodScope(student.department, student.year, fromCatalogId) || !inHodScope(targetSection.department, targetSection.year, toCatalogId)) {
-        return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
       }
     }
 
@@ -896,10 +896,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/students/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -920,7 +920,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const studentRef = collegeRef.collection("students").doc(id);
     const studentSnap = await studentRef.get();
-    if (!studentSnap.exists) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    if (!studentSnap.exists) return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
     const student = studentSnap.data() as StudentRecord;
 
     if (session.role === "PANEL_MEMBER") {
@@ -934,13 +934,13 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     if (session.role === "HOD") {
       const { inHodScope } = await loadStudentAndScope(db, session.collegeId, session.uid, session.role);
       if (!inHodScope(student.department, student.year)) {
-        return NextResponse.json({ error: "Outside your department" }, { status: 403 });
+        return NextResponse.json({ error: "This record is outside your department." }, { status: 403 });
       }
     }
 
     const { failedIds } = await deleteStudentsCompletely(db, getAdminAuth, session.collegeId, [studentSnap]);
     if (failedIds.length > 0) {
-      return NextResponse.json({ error: "Could not delete the student's login - nothing was deleted, please try again" }, { status: 500 });
+      return NextResponse.json({ error: "Unable to delete the student's login - nothing was deleted try again" }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });
@@ -948,9 +948,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/students/[id] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

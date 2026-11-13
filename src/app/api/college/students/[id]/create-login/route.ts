@@ -23,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     try {
       body = (await readJsonBody(request)) as { password?: unknown };
     } catch {
-      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+      return NextResponse.json({ error: "The request is not valid. Reload the page and try again." }, { status: 400 });
     }
     const passwordProblem = studentPasswordError(body?.password);
     if (passwordProblem) return NextResponse.json({ error: passwordProblem }, { status: 400 });
@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const studentSnap = await collegeRef.collection("students").doc(id).get();
     if (!studentSnap.exists) {
-      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
     }
     const student = studentSnap.data() as StudentRecord;
 
@@ -63,9 +63,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/students/[id]/create-login POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

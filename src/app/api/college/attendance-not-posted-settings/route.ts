@@ -19,8 +19,8 @@ export async function GET() {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -42,9 +42,9 @@ export async function PATCH(request: Request) {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     if (err instanceof Error && err.message.includes("HH:MM")) return NextResponse.json({ error: err.message }, { status: 400 });
     console.error("[attendance-not-posted-settings PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -53,7 +53,7 @@ export default function StudentAttendanceImportPage() {
     fetch("/api/college/sections")
       .then((r) => r.json() as Promise<{ sections?: SectionOption[] }>)
       .then((d) => setSections(d.sections ?? []))
-      .catch(() => toast({ title: "Could not load sections", variant: "destructive" }));
+      .catch(() => toast({ title: "Unable to load sections", variant: "destructive" }));
   }, []);
 
   // Moves keyboard / screen-reader focus to the heading of the step that just became current.
@@ -106,7 +106,7 @@ export default function StudentAttendanceImportPage() {
       }));
       setFocusId("step-2-heading");
     } catch (e) {
-      toast({ title: e instanceof Error ? e.message : "Could not read the file", variant: "destructive" });
+      toast({ title: e instanceof Error ? e.message : "Unable to read the file", variant: "destructive" });
     }
   }
 
@@ -203,7 +203,7 @@ export default function StudentAttendanceImportPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast({ title: "Couldn't build the Excel template. Please try again.", variant: "destructive" });
+      toast({ title: "Unable to build the Excel template. Try again.", variant: "destructive" });
     } finally {
       setBusy("");
     }

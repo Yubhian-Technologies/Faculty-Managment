@@ -49,7 +49,7 @@ export async function PATCH(
       .doc(id);
     const snap = await ref.get();
     if (!snap.exists || (snap.data() as { collegeId?: string })?.collegeId !== session.collegeId) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const existing = { id: snap.id, ...snap.data() } as FinancePurchaseClearance;
@@ -64,12 +64,12 @@ export async function PATCH(
 
     if (session.role === "HOD" || session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL") {
       if (existing.hodUid !== session.uid) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
 
       if (body.action === "RESUBMIT") {
         if (existing.status !== "RETURNED_TO_HOD") {
-          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+          return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
         }
         if (!body.items || !body.estimatedAmount) {
           return NextResponse.json({ error: "items and estimatedAmount are required" }, { status: 400 });
@@ -106,7 +106,7 @@ export async function PATCH(
 
       if (body.action === "UPLOAD_GRN") {
         if (existing.status !== "GOODS_PURCHASED") {
-          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+          return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
         }
         if (!body.grnUrl || !body.grnNumber || !body.grnMessage) {
           return NextResponse.json({ error: "grnUrl, grnNumber, and grnMessage are all required" }, { status: 400 });
@@ -162,10 +162,10 @@ export async function PATCH(
 
       if (body.action === "REJECT" || body.action === "RETURN") {
         if (existing.status !== "PENDING_PURCHASE_REVIEW") {
-          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+          return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
         }
         if (!body.remarks) {
-          return NextResponse.json({ error: "remarks required" }, { status: 400 });
+          return NextResponse.json({ error: "Enter remarks." }, { status: 400 });
         }
         const nextStatus: "REJECTED_BY_PURCHASE" | "RETURNED_TO_HOD" = body.action === "REJECT" ? "REJECTED_BY_PURCHASE" : "RETURNED_TO_HOD";
         const historyEntry = {
@@ -198,7 +198,7 @@ export async function PATCH(
 
       if (body.action === "SEND_TO_FINANCE") {
         if (existing.status !== "PENDING_PURCHASE_REVIEW" && existing.status !== "RETURNED_TO_PURCHASE") {
-          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+          return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
         }
         const quotations = Array.isArray(body.quotations) ? body.quotations : [];
         if (quotations.length < MIN_QUOTATIONS) {
@@ -244,7 +244,7 @@ export async function PATCH(
 
       if (body.action === "GOODS_PURCHASED") {
         if (existing.status !== "APPROVED") {
-          return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+          return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
         }
 
         const historyEntry = {
@@ -284,10 +284,10 @@ export async function PATCH(
     // ── Finance: approve / reject / return ──────────────────────────────────
 
     if (existing.status !== "PENDING_FINANCE_REVIEW") {
-      return NextResponse.json({ error: "Action not permitted in current state." }, { status: 409 });
+      return NextResponse.json({ error: "This action is not available at the current stage." }, { status: 409 });
     }
     if ((body.action === "REJECT" || body.action === "RETURN") && !body.remarks) {
-      return NextResponse.json({ error: "remarks required" }, { status: 400 });
+      return NextResponse.json({ error: "Enter remarks." }, { status: 400 });
     }
 
     const { name: financeName } = await getUserProfile(db, session.collegeId, session.uid);
@@ -298,7 +298,7 @@ export async function PATCH(
       : null;
 
     if (!nextStatus) {
-      return NextResponse.json({ error: "action must be APPROVE, REJECT, or RETURN" }, { status: 400 });
+      return NextResponse.json({ error: "Choose Approve, Reject or Return." }, { status: 400 });
     }
 
     const historyEntry = {
@@ -333,9 +333,9 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/finance-purchase-clearance/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -28,7 +28,7 @@ export default function ClassRepresentativesPage() {
         (s.department === sec.department || s.secondaryDepartment === sec.department) && s.section === sec.name && s.year === sec.year,
       ));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load students" });
+      toast({ variant: "destructive", title: "Unable to load students" });
     }
   }
 
@@ -42,7 +42,7 @@ export default function ClassRepresentativesPage() {
         setSectionId(list[0]?.id ?? "");
         await loadStudents(list[0]);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load sections" });
+        toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         setIsLoading(false);
       }

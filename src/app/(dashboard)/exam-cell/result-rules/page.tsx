@@ -74,7 +74,7 @@ export default function ExamResultRulesPage() {
         setDecimals(String(json.rules.decimals));
         setSaved(json.saved === true);
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load result rules" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load result rules" });
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -116,7 +116,7 @@ export default function ExamResultRulesPage() {
       });
       const json = (await res.json()) as { rules?: ExamResultRules; error?: string };
       if (!res.ok || !json.rules) {
-        toast({ variant: "destructive", title: json.error ?? "Could not save the rules" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to save the rules" });
         return;
       }
       setTables(toTables(json.rules));

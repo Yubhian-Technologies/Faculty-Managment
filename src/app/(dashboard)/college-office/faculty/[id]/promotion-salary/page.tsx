@@ -62,7 +62,7 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
         setStatus(data.faculty.status);
         setCurrentDesignation(data.faculty.designation);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty record" }))
       .finally(() => setLoading(false));
   }, [facultyId, router]);
 
@@ -87,13 +87,13 @@ export default function CollegeOfficeFacultyPromotionSalaryPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };
-        toast({ variant: "destructive", title: "Failed to save", description: err.error });
+        toast({ variant: "destructive", title: "Unable to save", description: err.error });
         return;
       }
       toast({ variant: "success", title: "Saved" });
       router.push("/college-office/staff");
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSaving(false);
     }

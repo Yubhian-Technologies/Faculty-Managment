@@ -65,7 +65,7 @@ export default function HODSupportingStaffPage() {
       const data = await res.json() as { staff: StaffRow[] };
       setStaff(data.staff ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load Supporting Staff" });
+      toast({ variant: "destructive", title: "Unable to load Supporting Staff" });
     } finally {
       setIsLoading(false);
     }
@@ -83,7 +83,7 @@ export default function HODSupportingStaffPage() {
       setDeleteTarget(null);
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete staff record" });
+      toast({ variant: "destructive", title: "Unable to delete staff record" });
     } finally {
       setIsDeleting(false);
     }

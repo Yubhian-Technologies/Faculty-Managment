@@ -27,7 +27,7 @@ export default function HodAttendanceReportsPage() {
     queryFn: async () => {
       const res = await fetch("/api/college/department-office/access", { cache: "no-store" });
       const json = (await res.json()) as { canEditAttendance?: boolean; error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load");
+      if (!res.ok) throw new Error(json.error ?? "Unable to load");
       return json;
     },
     staleTime: 60_000,

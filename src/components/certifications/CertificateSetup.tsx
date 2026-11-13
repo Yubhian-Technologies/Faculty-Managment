@@ -102,7 +102,7 @@ function TypeEditor({ initial, id, templates, signatures, staff, college, onClos
   async function save() {
     setBusy(true);
     try { await saveType(t, id); toast({ variant: "success", title: "Saved" }); onSaved(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
 
@@ -243,7 +243,7 @@ function TemplateEditor({ initial, id, signature, college, onClose, onSaved }: {
   async function save() {
     setBusy(true);
     try { await saveTemplate({ ...t, kind }, id); toast({ variant: "success", title: "Template saved" }); onSaved(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
   const insert = (key: string) => set("body", `${t.body ?? ""}{{${key}}}`);
@@ -340,7 +340,7 @@ function SignaturesEditor({ settings, canEdit, onSaved }: { settings: Certificat
   async function save() {
     setBusy(true);
     try { await saveSignatures(list); toast({ variant: "success", title: "Signatures saved" }); onSaved(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
   return (
@@ -384,7 +384,7 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
 
   const load = useCallback(async () => {
     try { setData(await loadSetup()); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load setup" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load setup" }); }
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (canEdit) loadStaff().then(setStaff).catch(() => setStaff([])); }, [canEdit]);
@@ -402,7 +402,7 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
       const { added } = await installCatalog();
       toast({ variant: "success", title: added.types || added.templates ? `Added ${added.types} certificates and ${added.templates} templates` : "Everything in the starter list is already installed" });
       load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't install" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to install" }); }
     finally { setBusy(""); }
   }
 
@@ -410,14 +410,14 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
     if (!window.confirm(`Put "${t.name}" and its template back to the starter version? Your edits to them are replaced.`)) return;
     setBusy(`reset:${t.id}`);
     try { await resetType(t.id); toast({ variant: "success", title: "Reset to the starter version" }); load(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't reset" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to reset" }); }
     finally { setBusy(""); }
   }
 
   async function toggle(t: SetupType, on: boolean) {
     setBusy(t.id);
     try { await saveType({ ...t, isActive: on }, t.id); load(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't change it" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to change it" }); }
     finally { setBusy(""); }
   }
 
@@ -427,7 +427,7 @@ export function CertificateSetup({ canEdit }: { canEdit: boolean }) {
     try {
       if (deleting.kind === "type") await deleteType(deleting.id); else await deleteTemplate(deleting.id);
       toast({ variant: "success", title: "Deleted" }); setDeleting(null); load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't delete" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to delete" }); }
     finally { setBusy(""); }
   }
 

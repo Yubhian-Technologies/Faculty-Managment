@@ -28,20 +28,20 @@ export async function POST(request: Request, { params }: Params) {
   try {
     const body = (await readJsonBody(request)) as { action?: string; remarks?: string };
     const action = body.action as ApprovalAction;
-    if (!ACTIONS.includes(action)) return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    if (!ACTIONS.includes(action)) return NextResponse.json({ error: "This action is not recognised. Reload the page and try again." }, { status: 400 });
     // Deciding is the HOD's; submitting / withdrawing the preparing faculty's.
     const session = action === "approve" || action === "return" ? await requireCollegeMember("HOD") : await requireCollegeMember(...MID_BANK_WRITE_ROLES);
     const { id } = await params;
     const db = getAdminDb();
     const access = await bankAccess(db, session, id);
-    if (!access) return NextResponse.json({ error: "Question bank not found" }, { status: 404 });
+    if (!access) return NextResponse.json({ error: "Question bank not found. It may have been deleted." }, { status: 404 });
     const name = (await actorName(db, session.collegeId, session.uid)) || session.email || "";
     const remarks = body.remarks?.trim() || undefined;
     const ref = midBankRefs(db, session.collegeId).banks.doc(id);
 
     const result = await db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
-      if (!snap.exists) return { status: 404, body: { error: "Question bank not found" } };
+      if (!snap.exists) return { status: 404, body: { error: "Question bank not found. It may have been deleted." } };
       const bank = { ...(snap.data() as MidQuestionBank), id };
       if (bank.withdrawn) return { status: 409, body: { error: "The HOD removed this setter - it is withdrawn, nothing to submit or decide" } };
       const next = nextApproval(bank, action, { isOwner: access.isOwner, isHod: access.isHod }, remarks);

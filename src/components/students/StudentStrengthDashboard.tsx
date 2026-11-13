@@ -46,10 +46,10 @@ async function fetchStrength(): Promise<FetchResult> {
   try {
     const res = await fetch("/api/college/student-strength", { cache: "no-store" });
     const json = (await res.json()) as StrengthPayload & { error?: string };
-    if (!res.ok) return { ok: false, error: json.error ?? "Failed to load student strength" };
+    if (!res.ok) return { ok: false, error: json.error ?? "Unable to load student strength" };
     return { ok: true, data: json };
   } catch {
-    return { ok: false, error: "Network error - please try again" };
+    return { ok: false, error: "Network error - try again" };
   }
 }
 

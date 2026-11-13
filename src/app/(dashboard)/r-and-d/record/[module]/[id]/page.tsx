@@ -118,14 +118,14 @@ export default function ResearchRecordPage({
       // with the viewer's OWN records and the row reads as not found.
       const res = await fetch(`/api/college/${config!.apiPath}?scope=all`);
       const data = await res.json() as Record<string, unknown>;
-      if (!res.ok) throw new Error("Failed to load this record");
+      if (!res.ok) throw new Error("Unable to load this record");
       const list = (data[config!.responseKey] ?? []) as RecordShape[];
       return list.find((r) => r.id === id) ?? null;
     },
   });
 
   useEffect(() => {
-    if (isError) toast({ variant: "destructive", title: "Failed to load this record" });
+    if (isError) toast({ variant: "destructive", title: "Unable to load this record" });
   }, [isError]);
 
   if (!config) {

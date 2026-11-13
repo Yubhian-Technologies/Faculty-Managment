@@ -144,7 +144,7 @@ const ENTRIES: Entry[] = [
     description: "States that you completed the course.", statuses: PASSED_OUT, purposes: GENERAL_PURPOSES, allowOtherPurpose: true,
     flow: [HOD_STEP, EXAM_STEP, PRINCIPAL_STEP],
     issuerFields: [f("completionMonth", "Month and year of completion (e.g. May 2026)")],
-    template: { kind: "LETTER", title: "COURSE COMPLETION CERTIFICATE", body: `${STUDENT_LINE} has successfully completed {{course}} ({{branch}}), batch {{batch}}, under regulation {{regulation}}, in {{completionMonth}}, with a CGPA of {{cgpa}}.\n\n${REQUEST_LINE}` },
+    template: { kind: "LETTER", title: "COURSE COMPLETION CERTIFICATE", body: `${STUDENT_LINE} has completed {{course}} ({{branch}}), batch {{batch}}, under regulation {{regulation}}, in {{completionMonth}}, with a CGPA of {{cgpa}}.\n\n${REQUEST_LINE}` },
   },
   {
     key: "PROVISIONAL", code: "PC", name: "Provisional Certificate", category: "EXAMINATION",

@@ -18,11 +18,11 @@ const KEY_LIMIT = 10;
 const WINDOW_MS = 60_000;
 
 const INVALID = () =>
-  NextResponse.json({ error: "Invalid username or password. Please try again." }, { status: 401 });
+  NextResponse.json({ error: "Invalid username or password. Try again." }, { status: 401 });
 
 function tooMany(retryAfterSeconds: number) {
   return NextResponse.json(
-    { error: "Too many attempts - please wait a minute and try again" },
+    { error: "Too many attempts - wait a minute and try again" },
     { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
   );
 }
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     try {
       body = (await readJsonBody(request)) as { employeeId?: unknown; password?: unknown };
     } catch {
-      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+      return NextResponse.json({ error: "The request is not valid. Reload the page and try again." }, { status: 400 });
     }
     const employeeId = typeof body?.employeeId === "string" ? body.employeeId.trim() : "";
     const password = typeof body?.password === "string" ? body.password : "";
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Employee ID and password are required" }, { status: 400 });
     }
     if (employeeId.length > MAX_EMPLOYEE_ID_LENGTH || password.length > 256) {
-      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+      return NextResponse.json({ error: "The request is not valid. Reload the page and try again." }, { status: 400 });
     }
 
     const perKey = checkRateLimit(`employee-login:key:${employeeId.toLowerCase()}`, KEY_LIMIT, WINDOW_MS);
@@ -71,6 +71,6 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[auth/employee-login POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

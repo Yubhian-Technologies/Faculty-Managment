@@ -79,7 +79,7 @@ function BankPaperGenerator({ levels }: { levels: BloomLevel[] }) {
     fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}`)
       .then((r) => r.json() as Promise<PlanDetail>)
       .then((d) => { if (!cancelled) setDetail(d); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the timetable" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the timetable" }));
     return () => { cancelled = true; };
   }, [planId]);
 
@@ -100,12 +100,12 @@ function BankPaperGenerator({ levels }: { levels: BloomLevel[] }) {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId, date, startLevel: start }),
       });
       const json = (await res.json()) as GeneratedPapers & { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Could not generate");
+      if (!res.ok) throw new Error(json.error ?? "Unable to generate");
       setResult(json);
       const ok = json.papers.filter((p) => !p.error).length;
       toast({ variant: ok ? "success" : "destructive", title: `${ok} of ${json.papers.length} paper${json.papers.length === 1 ? "" : "s"} generated` });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not generate" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to generate" });
     } finally {
       setBusy(null);
     }
@@ -130,7 +130,7 @@ function BankPaperGenerator({ levels }: { levels: BloomLevel[] }) {
       if (papers.length === 1) await renderHtmlToPdf(htmls[0], paperFileName(result.header, papers[0]));
       else await renderMultiHtmlToPdf(htmls, `MID${result.header.midNumber}_${result.header.date}_question-papers.pdf`);
     } catch {
-      toast({ variant: "destructive", title: "Could not make the PDF" });
+      toast({ variant: "destructive", title: "Unable to make the PDF" });
     } finally {
       setBusy(null);
     }

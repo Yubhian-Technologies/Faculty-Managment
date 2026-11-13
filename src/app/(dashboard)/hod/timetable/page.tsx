@@ -86,7 +86,7 @@ function SectionTimetable() {
           }
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load courses" }))
       .finally(() => setIsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -193,7 +193,7 @@ function SectionTimetable() {
         const d = (await res.json()) as { sections: Section[] };
         if (!cancelled) setSections((d.sections ?? []).sort((a, b) => a.name.localeCompare(b.name)));
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load sections" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         if (!cancelled) setIsLoadingSections(false);
       }
@@ -222,7 +222,7 @@ function SectionTimetable() {
         ] as const);
         if (!cancelled) setTimings(Object.fromEntries(entries));
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load semesters" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load semesters" });
       } finally {
         if (!cancelled) setIsLoadingTimings(false);
       }

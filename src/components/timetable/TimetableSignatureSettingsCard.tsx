@@ -47,7 +47,7 @@ export function TimetableSignatureSettingsCard({
       .then((d) => setGroups(d.groups ?? []))
       .catch((err) => {
         if ((err as Error)?.name === "AbortError") return;
-        toast({ variant: "destructive", title: "Failed to load signature authority" });
+        toast({ variant: "destructive", title: "Unable to load signature authority" });
       })
       .finally(() => setIsLoading(false));
     return () => ctrl.abort();
@@ -90,12 +90,12 @@ export function TimetableSignatureSettingsCard({
         body: JSON.stringify({ groups }),
       });
       const d = (await res.json().catch(() => ({}))) as { error?: string; groups?: SignatureGroup[] };
-      if (!res.ok) throw new Error(d.error || "Failed to save");
+      if (!res.ok) throw new Error(d.error || "Unable to save");
       if (d.groups) setGroups(d.groups);
       await queryClient.invalidateQueries({ queryKey: ["college-info"] });
       toast({ variant: "success", title: `${title} saved`, description: `Ticked groups print on ${printsOn} from now on.` });
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to save", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to save", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }

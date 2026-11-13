@@ -60,7 +60,7 @@ export default function PurchasePendingPage() {
           }));
         setRows([...indentRows, ...clearanceRows].sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt)));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load pending requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load pending requests" }))
       .finally(() => setIsLoading(false));
   }, []);
 

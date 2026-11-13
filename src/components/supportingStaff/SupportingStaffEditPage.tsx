@@ -136,7 +136,7 @@ export function SupportingStaffEditPage({
         setExtraPhones((m.additionalPhoneNumbers as { label?: string; number: string }[]) ?? []);
         setPhotoUrl((m.profilePhotoUrl as string) || undefined);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff record" }))
       .finally(() => setLoading(false));
   }, [staffId, router, loadFailPath]);
 
@@ -189,7 +189,7 @@ export function SupportingStaffEditPage({
       toast({ variant: "success", title: "Staff record updated" });
       router.push(afterSavePath);
     } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
+      toast({ variant: "destructive", title: "Unable to update" });
     } finally {
       setSaving(false);
     }
@@ -215,7 +215,7 @@ export function SupportingStaffEditPage({
       if (!res.ok) throw new Error();
       toast({ variant: "success", title: "Saved" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSavingModule(null);
     }

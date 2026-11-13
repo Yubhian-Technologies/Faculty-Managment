@@ -62,7 +62,7 @@ export function AcademicYearSettingsCard() {
       setSaved({ month: start.month, day: start.day, endMonth: end.month, endDay: end.day });
       setPinned((sessionsRes.academicSessions ?? []).find((s) => s.isCurrent) ?? null);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load the academic year" });
+      toast({ variant: "destructive", title: "Unable to load the academic year" });
     } finally {
       setIsLoading(false);
     }
@@ -104,14 +104,14 @@ export function AcademicYearSettingsCard() {
         }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to save the academic year");
+      if (!res.ok) throw new Error(json.error ?? "Unable to save the academic year");
       toast({
         variant: "success",
         title: `Academic year now runs ${day} ${MONTHS[month - 1]} to ${endDay} ${MONTHS[endMonth - 1]} - currently ${preview.label}`,
       });
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -128,11 +128,11 @@ export function AcademicYearSettingsCard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: pinned.id, isCurrent: false }),
       });
-      if (!res.ok) throw new Error("Failed to clear the pinned session");
+      if (!res.ok) throw new Error("Unable to clear the pinned session");
       toast({ variant: "success", title: `Now calculated from the start date - currently ${preview.label}` });
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }

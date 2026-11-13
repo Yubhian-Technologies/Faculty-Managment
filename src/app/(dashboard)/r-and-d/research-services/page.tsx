@@ -40,7 +40,7 @@ export default function RAndDResearchServicesPage() {
       const data = await res.json() as { records: ResearchServiceRow[] };
       setRecords(data.records ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load records" });
+      toast({ variant: "destructive", title: "Unable to load records" });
     } finally {
       setIsLoading(false);
     }
@@ -60,7 +60,7 @@ export default function RAndDResearchServicesPage() {
       setDeleteTarget(null);
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete record" });
+      toast({ variant: "destructive", title: "Unable to delete record" });
     } finally {
       setDeleting(false);
     }
@@ -78,7 +78,7 @@ export default function RAndDResearchServicesPage() {
       toast({ variant: "success", title: "Record approved" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to approve record" });
+      toast({ variant: "destructive", title: "Unable to approve record" });
     } finally {
       setApproving(null);
     }
@@ -99,7 +99,7 @@ export default function RAndDResearchServicesPage() {
       setRejectReason("");
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to reject record" });
+      toast({ variant: "destructive", title: "Unable to reject record" });
     } finally {
       setRejecting(false);
     }

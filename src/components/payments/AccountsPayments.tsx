@@ -71,11 +71,11 @@ function CcavenueCard({ collegeId, onProxy }: { collegeId: string; onProxy: (on:
     try {
       const res = await fetch(`/api/college/payments/settings${qs}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, apiKeys: apiKeys.map((k) => ({ label: k.label, accessCode: k.accessCode, workingKey: k.workingKey })) }) });
       const d = (await res.json()) as { settings?: CcavenueSettingsView; error?: string };
-      if (!res.ok || !d.settings) throw new Error(d.error ?? "Couldn't save");
+      if (!res.ok || !d.settings) throw new Error(d.error ?? "Unable to save");
       setS(d.settings); setForm((f) => ({ ...f, workingKey: "" }));
       setApiKeys((d.settings.apiKeys ?? []).map((k) => ({ ...k, workingKey: "" })));
       toast({ variant: "success", title: d.settings.enabled ? "Online payment is on" : "Saved - online payment is off" });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
 
@@ -136,10 +136,10 @@ function PaymentsList({ collegeId, proxyConfigured }: { collegeId: string; proxy
     try {
       const res = await fetch(`/api/college/payments/${encodeURIComponent(p.id)}/check?collegeId=${encodeURIComponent(collegeId)}`, { method: "POST" });
       const d = (await res.json()) as { payment?: Payment; changed?: boolean; error?: string };
-      if (!res.ok || !d.payment) throw new Error(d.error ?? "Couldn't check");
+      if (!res.ok || !d.payment) throw new Error(d.error ?? "Unable to check");
       toast({ variant: d.changed ? "success" : "default", title: d.changed ? `Now: ${PAYMENT_STATUS_LABEL[d.payment.status]}` : "No change from CCAvenue" });
       setRows((cur) => cur && cur.map((x) => (x.id === p.id ? d.payment! : x)));
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't check" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to check" }); }
     finally { setChecking(""); }
   }
   const [rows, setRows] = useState<Payment[] | null>(null);
@@ -210,7 +210,7 @@ function PaymentsList({ collegeId, proxyConfigured }: { collegeId: string; proxy
                   <td className="py-1.5 pr-3 text-xs">{p.trackingId ?? "-"}{p.bankRefNo ? <><br /><span className="text-muted-foreground">bank {p.bankRefNo}</span></> : null}</td>
                   <td className="py-1.5 whitespace-nowrap">
                     {(p.status === "SUCCESS" || p.status === "PARTIALLY_REFUNDED" || p.status === "REFUNDED") && (
-                      <Button size="sm" variant="ghost" title="Print the fee receipt" onClick={() => void printFeeReceipt(`/api/college/payments/${encodeURIComponent(p.id)}/receipt?collegeId=${encodeURIComponent(collegeId)}`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't print" }))}><Printer className="mr-1 h-3.5 w-3.5" />Receipt</Button>
+                      <Button size="sm" variant="ghost" title="Print the fee receipt" onClick={() => void printFeeReceipt(`/api/college/payments/${encodeURIComponent(p.id)}/receipt?collegeId=${encodeURIComponent(collegeId)}`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to print" }))}><Printer className="mr-1 h-3.5 w-3.5" />Receipt</Button>
                     )}
                     {(p.status === "SUCCESS" || p.status === "PARTIALLY_REFUNDED") && <Button size="sm" variant="outline" onClick={() => setRefunding(p)}><Undo2 className="mr-1 h-3.5 w-3.5" />Refund</Button>}
                     {proxyConfigured && (p.status === "INITIATED" || p.status === "FAILED" || p.status === "ABORTED") && (
@@ -242,10 +242,10 @@ function RefundDialog({ collegeId, payment, proxyConfigured, onClose, onDone }: 
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ via, amount, reference, reason }),
       });
       const d = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(d.error ?? "Couldn't record the refund");
+      if (!res.ok) throw new Error(d.error ?? "Unable to record the refund");
       toast({ variant: "success", title: via === "CCAVENUE" ? "Refunded through CCAvenue - the student is told" : "Refund recorded - the student is told" });
       onDone();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't record the refund" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to record the refund" }); }
     finally { setBusy(false); }
   }
   return (

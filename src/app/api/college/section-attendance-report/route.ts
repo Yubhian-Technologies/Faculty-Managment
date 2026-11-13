@@ -163,7 +163,7 @@ export async function GET(request: Request) {
     };
 
     if (!sectionId) {
-      return NextResponse.json({ error: "sectionId is required" }, { status: 400 });
+      return NextResponse.json({ error: "Select a section." }, { status: 400 });
     }
     // A reversed range wouldn't error out below - the date filter would
     // just never match anything, silently returning an empty (not wrong,
@@ -171,7 +171,7 @@ export async function GET(request: Request) {
     // here as a backstop even though the picker page itself already
     // validates this, since this route is reachable directly by URL too.
     if (fromParam && toParam && fromParam > toParam) {
-      return NextResponse.json({ error: "From date must be before the To date" }, { status: 400 });
+      return NextResponse.json({ error: "The From date must be before the To date." }, { status: 400 });
     }
     // From/to without a valid bound must never reach an unbounded
     // Firebase `.where("date", ...).get()` scan - be explicit and fail
@@ -188,7 +188,7 @@ export async function GET(request: Request) {
 
     const sectionSnap = await collegeRef.collection("sections").doc(sectionId).get();
     if (!sectionSnap.exists) {
-      return NextResponse.json({ error: "Section not found" }, { status: 404 });
+      return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
     }
     const section = sectionSnap.data() as Section;
 
@@ -198,7 +198,7 @@ export async function GET(request: Request) {
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!canHodEditDepartment(scope, section.department)) {
-        return NextResponse.json({ error: "This section isn't in your department" }, { status: 403 });
+        return NextResponse.json({ error: "This section is not in your department." }, { status: 403 });
       }
     }
 
@@ -737,9 +737,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ subjects, students, classwork, meta: { absentOnly, shortage, threshold, dailyPercent } });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/section-attendance-report GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

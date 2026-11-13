@@ -49,7 +49,7 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
     fetch("/api/college/mid-bank-deadlines")
       .then((r) => r.json() as Promise<{ deadlines?: Row[] }>)
       .then((d) => setRows(d.deadlines ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load question bank deadlines" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load question bank deadlines" }));
   }, []);
   useEffect(() => {
     load();
@@ -77,12 +77,12 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
         body: JSON.stringify({ courseKey, year: Number(year), semester: Number(semester), midNumber: Number(mid), deadline }),
       });
       const data = (await res.json()) as { error?: string; notified?: number };
-      if (!res.ok) throw new Error(data.error ?? "Could not publish");
+      if (!res.ok) throw new Error(data.error ?? "Unable to publish");
       toast({ variant: "success", title: "Question bank deadline published", description: `${data.notified ?? 0} faculty member(s) notified.` });
       setDeadline("");
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not publish" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to publish" });
     } finally {
       setSaving(false);
     }
@@ -97,7 +97,7 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deadline: editing.date }),
       });
       const data = (await res.json()) as { error?: string; notified?: number };
-      if (!res.ok) { toast({ variant: "destructive", title: data.error ?? "Could not change the date" }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: data.error ?? "Unable to change the date" }); return; }
       toast({ variant: "success", title: "Deadline changed", description: `${data.notified ?? 0} faculty member(s) notified.` });
       setEditing(null);
       load();
@@ -112,7 +112,7 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
     if (!deleting) return;
     const res = await fetch(`/api/college/mid-bank-deadlines/${encodeURIComponent(deleting.id)}`, { method: "DELETE" });
     const data = (await res.json()) as { error?: string };
-    if (!res.ok) toast({ variant: "destructive", title: data.error ?? "Could not delete" });
+    if (!res.ok) toast({ variant: "destructive", title: data.error ?? "Unable to delete" });
     setDeleting(null);
     load();
   }

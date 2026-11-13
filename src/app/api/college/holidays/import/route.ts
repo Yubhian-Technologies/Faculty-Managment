@@ -39,10 +39,10 @@ export async function POST(request: Request) {
     const records = body.records;
 
     if (!records || !Array.isArray(records) || records.length === 0) {
-      return NextResponse.json({ error: "No records provided" }, { status: 400 });
+      return NextResponse.json({ error: "The file has no records to import." }, { status: 400 });
     }
     if (records.length > 500) {
-      return NextResponse.json({ error: "Maximum 500 records per import" }, { status: 400 });
+      return NextResponse.json({ error: "A file can have at most 500 records. Split the file and import each part." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -117,9 +117,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/holidays/import POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

@@ -64,7 +64,7 @@ export async function GET(request: Request) {
     // here as a backstop even though the picker page itself already
     // validates this, since this route is reachable directly by URL too.
     if (fromParam && toParam && fromParam > toParam) {
-      return NextResponse.json({ error: "From date must be before the To date" }, { status: 400 });
+      return NextResponse.json({ error: "The From date must be before the To date." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
 
     const studentSnap = await collegeRef.collection("students").doc(studentId).get();
     if (!studentSnap.exists) {
-      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
     }
     const student = { id: studentSnap.id, ...studentSnap.data() } as StudentRecord;
 
@@ -173,9 +173,9 @@ export async function GET(request: Request) {
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/student-attendance-history GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

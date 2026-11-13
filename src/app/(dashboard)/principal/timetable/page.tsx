@@ -112,7 +112,7 @@ export default function PrincipalTimetablePage() {
       .catch(() => {
         if (!cancelled) {
           setOptionsError(true);
-          toast({ variant: "destructive", title: "Failed to load the timetable filters" });
+          toast({ variant: "destructive", title: "Unable to load the timetable filters" });
         }
       });
     return () => { cancelled = true; };
@@ -182,7 +182,7 @@ export default function PrincipalTimetablePage() {
       setAppliedKey(draftKey);
       setVisibleCount(PAGE_STEP);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load timetables" });
+      toast({ variant: "destructive", title: "Unable to load timetables" });
     } finally {
       setIsLoadingTimetables(false);
     }
@@ -237,7 +237,7 @@ export default function PrincipalTimetablePage() {
       toast({ title: "Downloaded", description: `${shownSections.length} sections combined into one PDF` });
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Download failed", description: "Failed to generate the combined PDF" });
+      toast({ variant: "destructive", title: "Download failed", description: "Unable to generate the combined PDF" });
     } finally {
       setIsExportingAllPdf(false);
     }
@@ -272,7 +272,7 @@ export default function PrincipalTimetablePage() {
       toast({ title: "Downloaded", description: `${shownSections.length} section workbooks zipped` });
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Export failed", description: "Failed to build the Excel ZIP" });
+      toast({ variant: "destructive", title: "Export failed", description: "Unable to build the Excel ZIP" });
     } finally {
       setIsExportingAllZip(false);
     }
@@ -316,7 +316,7 @@ export default function PrincipalTimetablePage() {
         {optionsLoading ? (
           <div className="h-20 rounded-md border bg-muted/30 animate-pulse" />
         ) : optionsError || optionSections === null ? (
-          <p className="text-sm text-muted-foreground">Could not load.</p>
+          <p className="text-sm text-muted-foreground">Unable to load.</p>
         ) : optionSections.length === 0 ? (
           <p className="text-sm text-muted-foreground">No sections have been created yet.</p>
         ) : (

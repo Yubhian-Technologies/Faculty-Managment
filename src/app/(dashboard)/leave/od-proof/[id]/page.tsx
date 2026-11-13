@@ -35,9 +35,9 @@ export default function ODProofPage() {
       .then((r) => r.json() as Promise<{ request?: LeaveRequest; error?: string }>)
       .then((d) => {
         if (d.request) setRequest(d.request);
-        else toast({ variant: "destructive", title: d.error ?? "Couldn't load this leave request" });
+        else toast({ variant: "destructive", title: d.error ?? "Unable to load this leave request" });
       })
-      .catch(() => toast({ variant: "destructive", title: "Couldn't load this leave request" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load this leave request" }))
       .finally(() => setIsLoading(false));
   }, [id]);
 
@@ -51,7 +51,7 @@ export default function ODProofPage() {
         body: JSON.stringify({ action: "SUBMIT_OD_PROOF", odProofUrl: proofUrl }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to submit proof");
+      if (!res.ok) throw new Error(json.error ?? "Unable to submit proof");
       toast({
         variant: "success",
         title: "Proof submitted",
@@ -59,7 +59,7 @@ export default function ODProofPage() {
       });
       router.back();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to submit proof" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to submit proof" });
     } finally {
       setIsSubmitting(false);
     }

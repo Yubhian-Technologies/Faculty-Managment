@@ -41,7 +41,7 @@ export default function HRCandidatesPage() {
     fetch("/api/location/candidates")
       .then((r) => r.json() as Promise<{ candidates: LocationCandidate[] }>)
       .then((d) => setCandidates(d.candidates ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load candidates" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load candidates" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -90,7 +90,7 @@ export default function HRCandidatesPage() {
       setPostInterviewRejectTarget(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update status" });
+      toast({ variant: "destructive", title: "Unable to update status" });
     } finally {
       setActionLoading(false);
     }

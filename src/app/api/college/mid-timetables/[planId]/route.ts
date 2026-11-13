@@ -22,7 +22,7 @@ export async function GET(_request: Request, { params }: Params) {
     const { planId } = await params;
     const db = getAdminDb();
     const plan = await loadPlan(db, session.collegeId, planId);
-    if (!plan) return NextResponse.json({ error: "Timetable not found" }, { status: 404 });
+    if (!plan) return NextResponse.json({ error: "Timetable not found. It may have been deleted." }, { status: 404 });
     const [window, subjects, tts, exam] = await Promise.all([
       midWindow(db, session.collegeId, plan),
       branchSubjects(db, session.collegeId, plan),
@@ -50,7 +50,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const db = getAdminDb();
     const refs = midTimetableRefs(db, session.collegeId);
     const plan = await loadPlan(db, session.collegeId, planId);
-    if (!plan) return NextResponse.json({ error: "Timetable not found" }, { status: 404 });
+    if (!plan) return NextResponse.json({ error: "Timetable not found. It may have been deleted." }, { status: 404 });
     const d = cleanDays(body.days);
     if (d.error) return NextResponse.json({ error: d.error }, { status: 400 });
     const s = cleanSessions(body.sessions);

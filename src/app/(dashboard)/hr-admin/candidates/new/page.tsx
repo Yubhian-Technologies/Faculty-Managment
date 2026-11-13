@@ -42,7 +42,7 @@ export default function NewHRCandidatePage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to add candidate", description: json.error });
+        toast({ variant: "destructive", title: "Unable to add candidate", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Candidate added" });

@@ -38,7 +38,7 @@ export default function MidTimetableListPage() {
 
   const load = useCallback(() => {
     fetch("/api/college/mid-timetables").then((r) => r.json() as Promise<{ plans?: Plan[] }>).then((d) => setPlans(d.plans ?? []))
-      .catch(() => { setPlans([]); toast({ variant: "destructive", title: "Failed to load the Mid timetables" }); });
+      .catch(() => { setPlans([]); toast({ variant: "destructive", title: "Unable to load the Mid timetables" }); });
   }, []);
   useEffect(() => {
     load();
@@ -89,10 +89,10 @@ export default function MidTimetableListPage() {
       });
       const data = (await res.json()) as { error?: string; id?: string; plan?: { id: string } };
       if (res.status === 409 && data.id) { router.push(`/exam-cell/mid-timetable/${encodeURIComponent(data.id)}`); return; }
-      if (!res.ok || !data.plan) throw new Error(data.error ?? "Could not create");
+      if (!res.ok || !data.plan) throw new Error(data.error ?? "Unable to create");
       router.push(`/exam-cell/mid-timetable/${encodeURIComponent(data.plan.id)}`);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not create" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to create" });
     } finally {
       setCreating(false);
     }

@@ -64,7 +64,7 @@ export default function CollegeOfficeOffersPage() {
       setAppointmentLetterCandidateIds(new Set(appointmentLetters.map((l) => l.candidateId)));
       setAccountRequestsByOfferId(Object.fromEntries(accountRequests.map((r) => [r.offerId, r])));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load" });
+      toast({ variant: "destructive", title: "Unable to load" });
     } finally {
       setIsLoading(false);
     }
@@ -149,7 +149,7 @@ export default function CollegeOfficeOffersPage() {
         letter.candidateName ?? letter.id
       );
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to generate PDF", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to generate PDF", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloadingId(null);
     }
@@ -203,7 +203,7 @@ Greetings from ${institution}.
 
 We are pleased to offer you the position of ${letter.designation} in the ${letter.department} department, effective from ${formatDate(letter.joiningDate as Parameters<typeof formatDate>[0])}.
 
-The offer letter PDF has just been downloaded to your computer - please attach it to this email before sending.
+The offer letter PDF has just been downloaded to your computer - attach it to this email before sending.
 ${coordinatorBlock}
 Please review the Terms & Conditions and confirm your acceptance and date of joining here:
 ${acceptanceUrl}
@@ -218,7 +218,7 @@ ${institution}`;
       else window.open(gmailUrl, "_blank");
     } catch (err) {
       mailWindow?.close();
-      toast({ variant: "destructive", title: "Failed to prepare email", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to prepare email", description: err instanceof Error ? err.message : undefined });
     } finally {
       setDownloadingId(null);
     }

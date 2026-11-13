@@ -75,7 +75,7 @@ export default function NewSalaryStructurePage() {
       toast({ variant: "success", title: "Salary structure added" });
       router.push("/accounts/salary-structures");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSubmitting(false);
     }

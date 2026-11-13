@@ -21,7 +21,7 @@ export async function GET(
 
     const letterSnap = await db.collection("colleges").doc(session.collegeId).collection("offerLetters").doc(id).get();
     if (!letterSnap.exists) {
-      return NextResponse.json({ error: "Offer letter not found" }, { status: 404 });
+      return NextResponse.json({ error: "Offer letter not found. It may have been deleted." }, { status: 404 });
     }
     const batchId = (letterSnap.data() as { batchId?: string }).batchId ?? "";
     const { ccEmails } = await resolveOfferLetterCcEmails(db, session.collegeId, batchId);
@@ -31,10 +31,10 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[offer-letters/[id] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -66,7 +66,7 @@ export async function PATCH(
         confirmedDateOfJoining: body.status === "ACCEPTED" ? body.confirmedDateOfJoining : undefined,
       });
       if (result === "not_found") {
-        return NextResponse.json({ error: "Offer letter not found" }, { status: 404 });
+        return NextResponse.json({ error: "Offer letter not found. It may have been deleted." }, { status: 404 });
       }
       if (result === "already_responded") {
         return NextResponse.json({ error: "This offer has already been responded to" }, { status: 409 });
@@ -88,9 +88,9 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[offer-letters/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

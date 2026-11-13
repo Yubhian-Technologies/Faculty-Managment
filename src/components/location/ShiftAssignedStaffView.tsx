@@ -80,7 +80,7 @@ export function ShiftAssignedStaffView({
         setStaffList(staff.filter((s) => s.shiftId === shiftId));
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shift details" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shift details" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -104,7 +104,7 @@ export function ShiftAssignedStaffView({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to switch shift");
+      if (!res.ok) throw new Error(data.error || "Unable to switch shift");
 
       toast({
         title: "Shift Updated",
@@ -112,7 +112,7 @@ export function ShiftAssignedStaffView({
       });
       reload();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to switch shift";
+      const msg = err instanceof Error ? err.message : "Unable to switch shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsRotatingId(null);

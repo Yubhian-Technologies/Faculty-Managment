@@ -70,7 +70,7 @@ function ApplyDialog({ entry, request, onClose, onDone, onlineEnabled }: { entry
       }
       onDone();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't submit" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to submit" });
     } finally { setBusy(false); }
   }
 
@@ -143,12 +143,12 @@ function MyRequest({ request, entry, onChanged, onCorrect, onlineEnabled }: { re
   async function pay() {
     setBusy(true);
     try { await payCertificateFeeOnline(request.id); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't start the payment" }); setBusy(false); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to start the payment" }); setBusy(false); }
   }
   async function cancel() {
     setBusy(true);
     try { await cancelRequest(request.id); toast({ variant: "success", title: "Request cancelled" }); onChanged(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't cancel" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to cancel" }); }
     finally { setBusy(false); }
   }
   async function download() {
@@ -156,7 +156,7 @@ function MyRequest({ request, entry, onChanged, onCorrect, onlineEnabled }: { re
     try {
       if (request.issuedCertificateId) await downloadIssued(request.issuedCertificateId);
       else if (request.certificateUrl) window.open(request.certificateUrl, "_blank", "noopener");
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't open the certificate" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to open the certificate" }); }
     finally { setBusy(false); }
   }
   return (
@@ -201,7 +201,7 @@ export function StudentCertificates() {
 
   const load = useCallback(async () => {
     try { setData(await loadCatalog()); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't load certificates" }); setData({ entries: [], linked: true, requests: [] }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load certificates" }); setData({ entries: [], linked: true, requests: [] }); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -212,7 +212,7 @@ export function StudentCertificates() {
   }, [data, query]);
 
   if (!data) return <p className="text-sm text-muted-foreground">Loading…</p>;
-  if (!data.linked) return <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="Your login isn't linked to a student record yet" description="Please contact your College Office." /></Card>;
+  if (!data.linked) return <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="Your login isn't linked to a student record yet" description="Contact your College Office." /></Card>;
   if (data.entries.length === 0 && data.requests.length === 0) {
     return <Card><EmptyState icon={<FileText className="h-6 w-6" />} title="No certificates available yet" description="Your college hasn't set up any certificates yet." /></Card>;
   }

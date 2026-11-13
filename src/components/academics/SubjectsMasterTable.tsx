@@ -89,7 +89,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
         body: JSON.stringify({ subjectIds: [...selected], mode: bulkMode, departmentIds }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; updated?: number };
-      if (!res.ok) { toast({ variant: "destructive", title: j.error ?? "Couldn't change the Subject Department" }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: j.error ?? "Unable to change the Subject Department" }); return; }
       const did = none ? "cleared" : bulkMode === "ADD" ? "added" : bulkMode === "REMOVE" ? "removed" : "set";
       toast({ variant: "success", title: `Subject Department ${did} for ${j.updated ?? 0} subject${j.updated === 1 ? "" : "s"}` });
       setSelected(new Set());
@@ -116,7 +116,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
     setSyllabusBusy(s.id);
     try {
       const res = await fetch(`/api/college/subjects/${s.id}/syllabus`, { method: "DELETE" });
-      if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string }; toast({ variant: "destructive", title: j.error ?? "Couldn't remove it" }); return; }
+      if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string }; toast({ variant: "destructive", title: j.error ?? "Unable to remove it" }); return; }
       toast({ variant: "success", title: `Syllabus removed from ${s.code}` });
       await load();
     } finally { setSyllabusBusy(""); }
@@ -131,7 +131,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
       setSubjects(json.subjects ?? []);
       setPage(0);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load subjects" });
+      toast({ variant: "destructive", title: "Unable to load subjects" });
     } finally {
       setIsLoading(false);
     }
@@ -161,7 +161,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
     try {
       const res = await fetch(`/api/college/subjects/${editForm.id}/rename`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: editForm.name, code: editForm.code, preview: true }) });
       const j = (await res.json()) as { counts?: { key: string; label: string; count: number | null }[]; error?: string };
-      if (!res.ok || !j.counts) { setEditError(j.error ?? "Couldn't check the rename"); return; }
+      if (!res.ok || !j.counts) { setEditError(j.error ?? "Unable to check the rename"); return; }
       setRenamePreview({ counts: j.counts });
     } finally { setIsSaving(false); }
   }
@@ -173,7 +173,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
     try {
       const res = await fetch(`/api/college/subjects/${editForm.id}/rename`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: editForm.name, code: editForm.code }) });
       const j = (await res.json()) as { jobId?: string; error?: string };
-      if (!res.ok || !j.jobId) throw new Error(j.error ?? "Couldn't rename");
+      if (!res.ok || !j.jobId) throw new Error(j.error ?? "Unable to rename");
       // Work through the job until every copy is updated (each call does a part; safe to repeat).
       for (let i = 0; i < 500; i++) {
         const r = await fetch(`/api/college/subjects/rename-jobs/${j.jobId}`, { method: "POST" });
@@ -185,7 +185,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
       toast({ variant: "success", title: "Subject renamed everywhere" });
       await handleSave(true);
     } catch (e) {
-      setEditError(e instanceof Error ? e.message : "Couldn't rename");
+      setEditError(e instanceof Error ? e.message : "Unable to rename");
     } finally { setRenaming(null); }
   }
 
@@ -208,7 +208,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
           credits: editForm.credits, type: editForm.type,
         }),
       });
-      if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string }; setEditError(j.error ?? "Failed to save"); return; }
+      if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string }; setEditError(j.error ?? "Unable to save"); return; }
       toast({ variant: "success", title: "Subject updated" });
       setEditForm(null);
       await load();
@@ -237,7 +237,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
     if (!deleting) return;
     try {
       const res = await fetch(`/api/college/subjects/${deleting.id}`, { method: "DELETE" });
-      if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string }; toast({ variant: "destructive", title: j.error ?? "Failed to delete" }); return; }
+      if (!res.ok) { const j = (await res.json().catch(() => ({}))) as { error?: string }; toast({ variant: "destructive", title: j.error ?? "Unable to delete" }); return; }
       toast({ variant: "success", title: "Subject deleted" });
       await load();
     } finally {

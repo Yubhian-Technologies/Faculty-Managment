@@ -421,14 +421,14 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
             for (const list of grouped.values()) list.sort((a, b) => a.name.localeCompare(b.name));
             setDepartmentsByCatalogId(grouped);
           })
-          .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
+          .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }))
       : Promise.resolve();
 
     return Promise.all([
       fetch("/api/college/course-catalog")
         .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>)
         .then((d) => setItems(d.items ?? []))
-        .catch(() => toast({ variant: "destructive", title: "Failed to load course catalog" })),
+        .catch(() => toast({ variant: "destructive", title: "Unable to load course catalog" })),
       departmentsLoad,
     ]).finally(() => setIsLoading(false));
   }
@@ -463,14 +463,14 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to add course");
+        throw new Error(j.error ?? "Unable to add course");
       }
       setNewDraft(EMPTY_DRAFT);
       setShowAddForm(false);
       toast({ variant: "success", title: "Course added to catalog" });
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to add course" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to add course" });
     } finally {
       setIsAdding(false);
     }
@@ -509,13 +509,13 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to update course");
+        throw new Error(j.error ?? "Unable to update course");
       }
       setEditingId(null);
       toast({ variant: "success", title: "Course updated" });
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to update course" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to update course" });
     } finally {
       setBusyId(null);
     }
@@ -536,7 +536,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
       setToggleTarget(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update status" });
+      toast({ variant: "destructive", title: "Unable to update status" });
     } finally {
       setIsToggling(false);
       setBusyId(null);
@@ -550,13 +550,13 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
       const res = await fetch(`/api/college/course-catalog/${deleteTarget.id}`, { method: "DELETE" });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to delete course");
+        throw new Error(j.error ?? "Unable to delete course");
       }
       toast({ variant: "success", title: "Course removed from catalog" });
       setDeleteTarget(null);
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to delete course" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to delete course" });
     } finally {
       setIsDeleting(false);
     }

@@ -128,7 +128,7 @@ function PrincipalStudentsContent() {
       const configured = (yearsRes.academicYears ?? []).map((y) => y.yearNumber).filter(Boolean);
       setYears(selectableYears(configured, loadedCourses));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load filter options" });
+      toast({ variant: "destructive", title: "Unable to load filter options" });
     } finally {
       setIsMetadataLoading(false);
     }
@@ -158,7 +158,7 @@ function PrincipalStudentsContent() {
       const res = await fetch(`/api/college/students?${params.toString()}`);
       const json = await res.json() as { students?: StudentListItem[]; total?: number; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load students" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load students" });
         return;
       }
       const data = json.students ?? [];
@@ -171,7 +171,7 @@ function PrincipalStudentsContent() {
       setStudents(data);
       setTotal(grandTotal);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load students" });
+      toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       setIsFetching(false);
     }

@@ -85,14 +85,14 @@ export function IndentForm({ editingRequest, onCancel, onSaved }: IndentFormProp
 
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to submit indent request");
+        throw new Error(err.error ?? "Unable to submit indent request");
       }
 
       toast({ variant: "success", title: editingRequest ? "Indent resubmitted" : "Indent submitted" });
       resetForm();
       onSaved();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }

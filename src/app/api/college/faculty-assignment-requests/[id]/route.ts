@@ -49,7 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const collegeRef = db.collection("colleges").doc(session.collegeId);
     const reqRef = collegeRef.collection("facultyAssignmentRequests").doc(id);
     const reqSnap = await reqRef.get();
-    if (!reqSnap.exists) return NextResponse.json({ error: "Request not found" }, { status: 404 });
+    if (!reqSnap.exists) return NextResponse.json({ error: "Request not found. It may have been withdrawn or deleted." }, { status: 404 });
     const reqData = reqSnap.data() as FacultyAssignmentRequest;
 
     // Full scope (not narrowed to "Working as"): a request sent to any department
@@ -245,7 +245,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const facultySnap = await collegeRef.collection("facultyMembers").doc(body.facultyId).get();
-    if (!facultySnap.exists) return NextResponse.json({ error: "Faculty not found" }, { status: 404 });
+    if (!facultySnap.exists) return NextResponse.json({ error: "Faculty record not found. It may have been deleted." }, { status: 404 });
     const faculty = facultySnap.data() as { legalName?: string; department?: string; status?: string };
     const allocatedName = facultyDisplayName(faculty);
     // Defense-in-depth: the lending department's own picker already filters
@@ -399,9 +399,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/faculty-assignment-requests/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

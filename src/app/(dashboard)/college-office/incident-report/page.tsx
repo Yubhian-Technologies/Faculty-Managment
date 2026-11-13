@@ -87,7 +87,7 @@ export default function IncidentReportPage() {
         const configured = (yearsRes.academicYears ?? []).map((y) => y.yearNumber).filter(Boolean);
         setYears(selectableYears(configured, loadedCourses));
       } catch {
-        toast({ variant: "destructive", title: "Failed to load filter options" });
+        toast({ variant: "destructive", title: "Unable to load filter options" });
       }
     })();
   }, []);
@@ -98,12 +98,12 @@ export default function IncidentReportPage() {
       const res = await fetch("/api/college/incident-reports");
       const json = await res.json() as { reports?: IncidentReport[]; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to load incident reports" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to load incident reports" });
         return;
       }
       setReports(json.reports ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load incident reports" });
+      toast({ variant: "destructive", title: "Unable to load incident reports" });
     } finally {
       setHistoryLoading(false);
     }
@@ -170,14 +170,14 @@ export default function IncidentReportPage() {
       });
       const json = await res.json().catch(() => ({})) as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to save incident report" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to save incident report" });
         return;
       }
       toast({ variant: "success", title: "Incident report saved" });
       reset();
       setReports(null); // History re-reads on next open
     } catch {
-      toast({ variant: "destructive", title: "Failed to save incident report" });
+      toast({ variant: "destructive", title: "Unable to save incident report" });
     } finally {
       setIsSaving(false);
     }

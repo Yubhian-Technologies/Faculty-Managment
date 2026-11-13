@@ -399,7 +399,7 @@ export function PrincipalPipelineBoard({ scope, department }: { scope: "active" 
         );
         setEntries(built);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring requests" }))
       .finally(() => setIsLoading(false));
   }
 

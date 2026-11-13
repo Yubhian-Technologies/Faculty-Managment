@@ -31,9 +31,9 @@ export async function GET(request: Request) {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (isAuthError(err)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[college/financial-years GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -77,9 +77,9 @@ export async function POST(request: Request) {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (isAuthError(err)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[college/financial-years POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -87,12 +87,12 @@ export async function DELETE(request: Request) {
   try {
     const session = await requireCollegeContext(request, ...WRITE_ROLES);
     const id = new URL(request.url).searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "The record to update is missing. Reload the page and try again." }, { status: 400 });
 
     const db = getAdminDb();
     const ref = db.collection("colleges").doc(session.collegeId).collection("financialYears").doc(id);
     const snap = await ref.get();
-    if (!snap.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!snap.exists) return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
 
     // A budget cycle already opened against this year keeps pointing at its label.
     const label = (snap.data() as { label: string }).label;
@@ -105,8 +105,8 @@ export async function DELETE(request: Request) {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (isAuthError(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (isAuthError(err)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[college/financial-years DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

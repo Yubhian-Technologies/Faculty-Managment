@@ -63,7 +63,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
         setSeatOf(Object.fromEntries(sorted.map((g, i) => [g.key, i === 0 ? 0 : 1])));
         setOrder(sorted.map((g) => g.key));
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the branches for that date" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the branches for that date" }));
     return () => { cancelled = true; };
   }, [planIds, seatTime, needTime]);
 
@@ -94,11 +94,11 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
         body: JSON.stringify({ planIds, time: seatTime || undefined, streams: usedStreams, roomIds }),
       });
       const data = (await res.json()) as { id?: string; unplaced?: number; error?: string };
-      if (!res.ok || !data.id) throw new Error(data.error ?? "Could not build the plan");
+      if (!res.ok || !data.id) throw new Error(data.error ?? "Unable to build the plan");
       toast({ variant: data.unplaced ? "default" : "success", title: data.unplaced ? `Plan built - ${data.unplaced} student(s) need a seat (add rooms)` : "Plan built - review it next" });
       router.push(`/exam-cell/seating/${data.id}`);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not build the plan" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to build the plan" });
     } finally {
       setCreating(false);
     }

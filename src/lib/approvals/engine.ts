@@ -128,7 +128,7 @@ export function createApprovalEngine<P, C, Tx = unknown>(deps: EngineDeps<P, C, 
       const updated = await store.update<P, ApprovalRequest<P>>(input.collegeId, input.id, async (current) => {
         if (current.requesterUid !== input.actor.uid) {
           if (!(await kind.canCancel?.(ctx, current, input.actor))) throw new ApprovalError("FORBIDDEN", "Only the person who raised a request, or an approver who oversees it, can withdraw it", 403);
-          if (!input.remark?.trim()) throw new ApprovalError("REMARK_REQUIRED", "Please give a reason for withdrawing this request");
+          if (!input.remark?.trim()) throw new ApprovalError("REMARK_REQUIRED", "Give a reason for withdrawing this request");
         }
         const next = cancel(current, input.actor, iso(), input.remark);
         return { next, result: next };

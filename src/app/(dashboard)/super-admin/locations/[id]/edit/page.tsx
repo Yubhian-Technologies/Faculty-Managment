@@ -37,7 +37,7 @@ export default function EditLocationPage() {
         setState(loc.state ?? "");
         setAddress(loc.address ?? "");
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load location" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load location" }))
       .finally(() => setLoading(false));
   }, [locationId, router]);
 
@@ -57,7 +57,7 @@ export default function EditLocationPage() {
       toast({ variant: "success", title: "Location updated" });
       router.push("/super-admin/locations");
     } catch {
-      toast({ variant: "destructive", title: "Failed to update location" });
+      toast({ variant: "destructive", title: "Unable to update location" });
     } finally {
       setSaving(false);
     }

@@ -52,7 +52,7 @@ export default function LeaveAdjustmentsPage() {
     fetch("/api/leave/adjustment-requests")
       .then((r) => r.json() as Promise<{ items?: AdjustmentItem[] }>)
       .then((d) => setItems(d.items ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load adjustment requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load adjustment requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -83,11 +83,11 @@ export default function LeaveAdjustmentsPage() {
         }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to respond");
+      if (!res.ok) throw new Error(data.error ?? "Unable to respond");
       toast({ variant: "success", title: declined.size === 0 ? "Accepted" : "Response sent" });
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to respond" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to respond" });
     } finally {
       setBusyId(null);
     }
@@ -102,11 +102,11 @@ export default function LeaveAdjustmentsPage() {
         body: JSON.stringify({ response, declineReason: reasonByRequest[requestId] }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to respond");
+      if (!res.ok) throw new Error(data.error ?? "Unable to respond");
       toast({ variant: "success", title: response === "ACCEPT" ? "Accepted" : "Declined" });
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to respond" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to respond" });
     } finally {
       setBusyId(null);
     }

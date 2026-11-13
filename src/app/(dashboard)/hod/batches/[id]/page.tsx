@@ -227,7 +227,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
         );
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load batch" });
+      toast({ variant: "destructive", title: "Unable to load batch" });
     } finally {
       setIsLoading(false);
     }
@@ -258,15 +258,15 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
     const isOnline = batch?.hiringMode === "ONLINE";
     const isSupportingStaff = batch?.positionCategory === "SUPPORTING_STAFF";
     if (!isOnline && !isSupportingStaff && !coordinatorFacultyId) {
-      toast({ variant: "destructive", title: "Please assign a coordinator" });
+      toast({ variant: "destructive", title: "Assign a coordinator" });
       return;
     }
     if (!isOnline && !interviewVenue.trim()) {
-      toast({ variant: "destructive", title: "Please enter the interview venue" });
+      toast({ variant: "destructive", title: "Enter the interview venue" });
       return;
     }
     if (isOnline && (!meetingPlatform || !meetingLink.trim())) {
-      toast({ variant: "destructive", title: "Please select a platform and enter a meeting link" });
+      toast({ variant: "destructive", title: "Select a platform and enter a meeting link" });
       return;
     }
     setIsSaving(true);
@@ -294,7 +294,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setIsSaving(false);
     }
@@ -312,7 +312,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       toast({ variant: "success", title: "Panel scoring opened", description: "Panel members have been notified to submit their assessments." });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to release" });
+      toast({ variant: "destructive", title: "Unable to release" });
     } finally {
       setIsReleasingToPanel(false);
     }
@@ -330,7 +330,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       toast({ variant: "success", title: "Submitted for Principal review", description: "The Principal has been notified to make final hiring decisions." });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to submit for review" });
+      toast({ variant: "destructive", title: "Unable to submit for review" });
     } finally {
       setIsSubmittingForReview(false);
     }
@@ -371,7 +371,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       setEditingCommittee(false);
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update committee" });
+      toast({ variant: "destructive", title: "Unable to update committee" });
     } finally {
       setIsSavingCommittee(false);
     }
@@ -395,7 +395,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       toast({ variant: "success", title: "Interview session opened", description: "Panel members can now join the meeting and evaluate." });
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
+      toast({ variant: "destructive", title: "Unable to update" });
     } finally {
       setIsMarkingComplete(false);
     }
@@ -413,7 +413,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       if (!res.ok) throw new Error();
       setCandidates((prev) => prev.map((c) => c.id === applicationId ? { ...c, hasArrived: true } : c));
     } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
+      toast({ variant: "destructive", title: "Unable to update" });
     } finally {
       setArrivingId(null);
     }
@@ -449,7 +449,7 @@ export default function HODBatchDetailPage({ params }: { params: Promise<{ id: s
       coordinator?.email ? `Email: ${coordinator.email}` : "",
     ].filter(Boolean);
     const coordinatorBlock = coordinatorLines.length > 0
-      ? `\n\nFor any queries, please contact your Interview Coordinator:\n${coordinatorLines.join("\n")}`
+      ? `\n\nFor any queries contact your Interview Coordinator:\n${coordinatorLines.join("\n")}`
       : "";
     const docs = (batch.requiredDocuments ?? []).length > 0
       ? (batch.requiredDocuments ?? []).map((d) => `• ${d}`).join("\n")
@@ -467,7 +467,7 @@ INTERVIEW DETAILS:
 • Time: ${time}
 • Mode: ${mode}${mode === "Online"
       ? `${platform ? `\n• Platform: ${platform}` : ""}${meetLink ? `\n• Meeting Link: ${meetLink}` : ""}\n• Please join a few minutes before the scheduled time`
-      : `\n• Venue: ${venue}\n• Reporting Time: Please arrive 15 minutes before the scheduled time`}${coordinatorBlock}
+      : `\n• Venue: ${venue}\n• Reporting Time: Arrive 15 minutes before the scheduled time`}${coordinatorBlock}
 
 Kindly bring the following documents for verification:
 

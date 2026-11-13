@@ -140,7 +140,7 @@ export default function EditSectionPage() {
           classroomNumber: loaded.classroomNumber,
         });
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load section" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load section" }))
       .finally(() => setLoading(false));
   }, [sectionId, router, listHref]);
 
@@ -151,7 +151,7 @@ export default function EditSectionPage() {
     fetch(`/api/college/courses${qs}`)
       .then((r) => r.json() as Promise<{ courses: Course[] }>)
       .then((d) => setCourses((d.courses ?? []).sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load courses" }));
   }, [ownerDept, departments]);
 
   function setF(patch: Partial<SectionForm>) {
@@ -229,14 +229,14 @@ export default function EditSectionPage() {
       });
       if (!res.ok) {
         const json = await res.json() as { error?: string };
-        toast({ variant: "destructive", title: json.error ?? "Failed to save" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to save" });
         return;
       }
 
       toast({ variant: "success", title: "Section updated" });
       router.push(listHref);
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setSaving(false);
     }

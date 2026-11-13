@@ -47,7 +47,7 @@ export default function LibraryReservationsPage() {
       setBooks(booksJson.books ?? []);
       setStudents(studentsJson.students ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load reservations" });
+      toast({ variant: "destructive", title: "Unable to load reservations" });
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +73,7 @@ export default function LibraryReservationsPage() {
       });
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to join queue" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to join queue" });
         return;
       }
       toast({ variant: "success", title: "Added to reservation queue" });
@@ -82,7 +82,7 @@ export default function LibraryReservationsPage() {
       setSelectedBookId("");
       void loadAll();
     } catch {
-      toast({ variant: "destructive", title: "Network error - please try again" });
+      toast({ variant: "destructive", title: "Network error - try again" });
     } finally {
       setIsSaving(false);
     }

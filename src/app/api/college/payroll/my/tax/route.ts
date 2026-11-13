@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     void _h;
     return NextResponse.json({ ...s, profile });
   } catch (err) {
-    if (err instanceof Error && err.message === "BAD_FY") return NextResponse.json({ error: "Financial year must look like 2026-27" }, { status: 400 });
+    if (err instanceof Error && err.message === "BAD_FY") return NextResponse.json({ error: "Enter the financial year as YYYY-YY, for example 2026-27." }, { status: 400 });
     return payrollErrorResponse(err, "[college/payroll/my/tax GET]");
   }
 }

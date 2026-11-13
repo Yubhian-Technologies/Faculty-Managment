@@ -133,7 +133,7 @@ export default function HRInterviewDetailPage() {
           setCandidateStatuses(statusMap);
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -176,7 +176,7 @@ export default function HRInterviewDetailPage() {
       toast({ variant: "success", title: "Score submitted", description: `Feedback saved for ${candidateName}` });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to submit score" });
+      toast({ variant: "destructive", title: "Unable to submit score" });
     } finally {
       setSubmittingFor(null);
     }
@@ -194,7 +194,7 @@ export default function HRInterviewDetailPage() {
       toast({ variant: "success", title: "Call letters sent" });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to send" });
+      toast({ variant: "destructive", title: "Unable to send" });
     } finally {
       setSending(false);
     }
@@ -235,7 +235,7 @@ export default function HRInterviewDetailPage() {
         description: status === "SELECTED" ? "You can now create an offer letter for this candidate." : undefined,
       });
     } catch {
-      toast({ variant: "destructive", title: "Failed to update candidate" });
+      toast({ variant: "destructive", title: "Unable to update candidate" });
     } finally {
       setFinalizingFor(null);
     }

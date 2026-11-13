@@ -34,7 +34,7 @@ export function StudentAttendanceByStudentView({ title = "Student Attendance His
     try {
       const params = new URLSearchParams({ section: section.name, year: String(section.year) });
       const res = await fetch(`/api/college/students?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed to load students");
+      if (!res.ok) throw new Error("Unable to load students");
       const json = (await res.json()) as { students?: StudentRow[] };
       // Section names repeat across departments/courses, so narrow the
       // year+name match to this exact section.
@@ -47,7 +47,7 @@ export function StudentAttendanceByStudentView({ title = "Student Attendance His
       setStudents(rows);
       setLoadedSectionId(section.id);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load students" });
+      toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       setIsLoading(false);
     }

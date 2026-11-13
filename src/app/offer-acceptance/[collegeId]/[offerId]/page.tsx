@@ -67,11 +67,11 @@ export default function OfferAcceptancePage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null) as { error?: string } | null;
-        throw new Error(data?.error ?? "Failed to submit");
+        throw new Error(data?.error ?? "Unable to submit");
       }
       setResponded(decision);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSubmitting(null);
     }

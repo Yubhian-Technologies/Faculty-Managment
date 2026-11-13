@@ -52,7 +52,7 @@ export default function PrincipalPurchaseClearanceDetailPage() {
         const found = (d.requests ?? []).find((r) => r.id === params.id) ?? null;
         setItem(found);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load request" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load request" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -75,13 +75,13 @@ export default function PrincipalPurchaseClearanceDetailPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to resubmit");
+        throw new Error(err.error ?? "Unable to resubmit");
       }
       toast({ variant: "success", title: "Request resubmitted" });
       setResubmitForm(emptyResubmitForm());
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to resubmit", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to resubmit", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsResubmitting(false);
     }
@@ -115,7 +115,7 @@ export default function PrincipalPurchaseClearanceDetailPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to save GRN");
+        throw new Error(err.error ?? "Unable to save GRN");
       }
 
       toast({ variant: "success", title: "GRN uploaded — goods receipt confirmed" });
@@ -123,7 +123,7 @@ export default function PrincipalPurchaseClearanceDetailPage() {
       setGrnFile(null);
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to upload GRN", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to upload GRN", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsUploading(false);
     }

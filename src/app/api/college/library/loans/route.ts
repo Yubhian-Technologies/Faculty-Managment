@@ -23,10 +23,10 @@ export async function GET(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/library/loans GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
     const [studentSnap, settings] = await Promise.all([studentRef.get(), loadCollegeSettings(db, session.collegeId)]);
     if (!studentSnap.exists) {
-      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      return NextResponse.json({ error: "Student not found. The record may have been deleted." }, { status: 404 });
     }
     const student = studentSnap.data() as StudentRecord;
 
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
       });
     } catch (txErr) {
       if (txErr instanceof Error && txErr.message === "BOOK_NOT_FOUND") {
-        return NextResponse.json({ error: "Book not found" }, { status: 404 });
+        return NextResponse.json({ error: "Book not found. It may have been deleted." }, { status: 404 });
       }
       if (txErr instanceof Error && txErr.message === "NO_COPIES_AVAILABLE") {
         return NextResponse.json(
@@ -118,9 +118,9 @@ export async function POST(request: Request) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/library/loans POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

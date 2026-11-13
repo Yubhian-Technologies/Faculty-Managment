@@ -62,7 +62,7 @@ export default function StudentsPage() {
     fetch("/api/college/sections")
       .then((r) => r.json() as Promise<{ sections: Section[] }>)
       .then((d) => setSections(d.sections ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load students" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load students" }))
       .finally(() => setSectionsLoading(false));
   }, []);
 
@@ -110,7 +110,7 @@ export default function StudentsPage() {
       if (cursor) params.set("cursor", cursor);
       const res = await fetch(`/api/college/students?${params}`);
       const d = await res.json() as { students?: StudentRecord[]; nextCursor?: string | null; total?: number | null; error?: string };
-      if (!res.ok) throw new Error(d.error ?? "Failed to load students");
+      if (!res.ok) throw new Error(d.error ?? "Unable to load students");
       if (seq !== requestSeq.current) return; // a newer Load / page request superseded this one
       const incoming = d.students ?? [];
       if (typeof d.total !== "number") {
@@ -126,7 +126,7 @@ export default function StudentsPage() {
       const labels = incoming.map((s) => s.labBatch?.trim()).filter((v): v is string => !!v);
       if (labels.length > 0) setBatchLabels((prev) => Array.from(new Set([...prev, ...labels])).sort());
     } catch {
-      if (seq === requestSeq.current) toast({ variant: "destructive", title: "Failed to load students" });
+      if (seq === requestSeq.current) toast({ variant: "destructive", title: "Unable to load students" });
     } finally {
       if (seq === requestSeq.current) setIsLoading(false);
     }
@@ -205,7 +205,7 @@ export default function StudentsPage() {
         body: JSON.stringify({ labBatch: editLabBatch.trim() }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to update lab batch");
+      if (!res.ok) throw new Error(json.error ?? "Unable to update lab batch");
       toast({ title: "Lab batch updated" });
       // Patched in place - re-fetching the roster for one field is a page of
       // reads for nothing. A row that no longer matches the applied batch
@@ -228,7 +228,7 @@ export default function StudentsPage() {
       if (newBatch) setBatchLabels((prev) => (prev.includes(newBatch) ? prev : [...prev, newBatch].sort()));
       setEditTarget(null);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to update lab batch", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to update lab batch", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }

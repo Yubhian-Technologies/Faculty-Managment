@@ -59,7 +59,7 @@ export default function EditLocationUserPage() {
         setLocationDeptIds((found as unknown as { locationDeptIds?: string[] }).locationDeptIds ?? []);
         setAllLocationDepts(!!(found as unknown as { allLocationDepts?: boolean }).allLocationDepts);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff member" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff member" }))
       .finally(() => setLoading(false));
   }, [uid, locationId, router]);
 
@@ -81,7 +81,7 @@ export default function EditLocationUserPage() {
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Couldn't save", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Saved" });

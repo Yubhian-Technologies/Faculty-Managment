@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     try {
       workbook = await loadWorkbook(await file.arrayBuffer());
     } catch {
-      throw new PayrollError("Could not read the Excel file. Make sure it is a valid .xlsx file.");
+      throw new PayrollError("Unable to read the Excel file. Make sure it is a valid .xlsx file.");
     }
     const sheet = workbook.worksheets[0];
     return NextResponse.json(sheet ? readSheet(sheet) : { rows: [], rowNumbers: [] });

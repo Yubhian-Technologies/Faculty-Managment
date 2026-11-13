@@ -22,7 +22,7 @@ export async function GET(
       collegeRef.get(),
     ]);
     if (!letterSnap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const letter = letterSnap.data() as OfferLetter;
@@ -47,7 +47,7 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[public/offer-acceptance GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -58,7 +58,7 @@ export async function POST(
 
   const limited = rateLimit(`offer-accept:${clientIp(request)}`, 30, 3600000);
   if (!limited.ok) {
-    return NextResponse.json({ error: "Too many requests - please try again later" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+    return NextResponse.json({ error: "Too many requests. Wait a moment and try again." }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
   }
   try {
     const { collegeId, offerId } = await params;
@@ -84,7 +84,7 @@ export async function POST(
     });
 
     if (result === "not_found") {
-      return NextResponse.json({ error: "Offer letter not found" }, { status: 404 });
+      return NextResponse.json({ error: "Offer letter not found. It may have been deleted." }, { status: 404 });
     }
     if (result === "already_responded") {
       return NextResponse.json({ error: "This offer has already been responded to" }, { status: 409 });
@@ -129,6 +129,6 @@ export async function POST(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[public/offer-acceptance POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

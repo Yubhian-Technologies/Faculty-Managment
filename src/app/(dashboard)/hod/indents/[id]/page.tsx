@@ -49,7 +49,7 @@ export default function HODIndentDetailPage() {
         if (!d.request) throw new Error(d.error ?? "Not found");
         setRequest(d.request);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load indent" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load indent" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -88,7 +88,7 @@ export default function HODIndentDetailPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to save GRN");
+        throw new Error(err.error ?? "Unable to save GRN");
       }
 
       toast({ variant: "success", title: "GRN uploaded - goods receipt confirmed" });
@@ -96,7 +96,7 @@ export default function HODIndentDetailPage() {
       setGrnFile(null);
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to upload GRN", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to upload GRN", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsUploadingGrn(false);
     }

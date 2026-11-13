@@ -36,7 +36,7 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
     fetch("/api/college/mid-bank-deadlines")
       .then(async (r) => {
         const d = (await r.json()) as { deadlines?: Row[]; error?: string };
-        if (!r.ok) throw new Error(d.error ?? "Failed to load");
+        if (!r.ok) throw new Error(d.error ?? "Unable to load");
         const list = d.deadlines ?? [];
         setRows(list);
         // Each deadline's progress, loaded side by side.
@@ -47,7 +47,7 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
             .catch(() => setSummaries((m) => ({ ...m, [row.id]: "error" })));
         }
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unable to load"));
   }, []);
 
   const shown = useMemo(() => (rows ?? []).filter((r) => show === "all" || !r.locked), [rows, show]);

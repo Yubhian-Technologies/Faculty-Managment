@@ -20,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const body = (await readJsonBody(request)) as { slotKey?: string; facultyIds?: string[]; reason?: string; auto?: boolean };
     const db = getAdminDb();
     const schedule = await loadSchedule(db, session.collegeId, id);
-    if (!schedule) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    if (!schedule) return NextResponse.json({ error: "Schedule not found. It may have been deleted." }, { status: 404 });
     if (schedule.status !== "ACTIVE") return NextResponse.json({ error: "This schedule is closed" }, { status: 409 });
     const ctx = await slotContext(db, session.collegeId, schedule, { slotKey: String(body.slotKey ?? "") });
     if (!ctx) return NextResponse.json({ error: "That duty is no longer in the schedule - reload" }, { status: 404 });

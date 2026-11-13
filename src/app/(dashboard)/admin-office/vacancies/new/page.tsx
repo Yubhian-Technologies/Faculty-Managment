@@ -30,7 +30,7 @@ export default function NewAdminOfficeVacancyPage() {
     fetch("/api/location/departments")
       .then((r) => r.json() as Promise<{ departments: LocationDept[] }>)
       .then((d) => setDepartments(d.departments ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }));
   }, []);
 
   const isValid = !!department && !!qualification && requiredCount >= 1 && justification.trim().length >= 10;
@@ -47,7 +47,7 @@ export default function NewAdminOfficeVacancyPage() {
       });
       const json = await res.json() as { id?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to submit", description: json.error });
+        toast({ variant: "destructive", title: "Unable to submit", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Request submitted to HR Admin" });

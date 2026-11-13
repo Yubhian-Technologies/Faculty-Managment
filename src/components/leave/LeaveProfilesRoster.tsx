@@ -67,7 +67,7 @@ export function LeaveProfilesRoster({ editHrefBase, title = "Leave Profiles" }: 
     fetch("/api/leave/profiles")
       .then((r) => r.json() as Promise<{ roster: RosterEntry[] }>)
       .then((data) => setRoster(data.roster ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave profiles" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave profiles" }))
       .finally(() => setIsLoading(false));
   }, []);
 

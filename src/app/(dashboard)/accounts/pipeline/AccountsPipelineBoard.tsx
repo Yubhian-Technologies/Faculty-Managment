@@ -329,7 +329,7 @@ export function AccountsPipelineBoard({ scope }: { scope: "active" | "closed" })
         );
         setEntries(built);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring pipeline" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring pipeline" }))
       .finally(() => setIsLoading(false));
   }
 

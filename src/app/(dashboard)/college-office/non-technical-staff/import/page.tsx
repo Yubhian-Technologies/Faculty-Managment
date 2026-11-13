@@ -107,7 +107,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      setTemplateError("Couldn't build the Excel template. Please try again.");
+      setTemplateError("Unable to build the Excel template. Try again.");
     } finally {
       setIsBuildingTemplate(false);
     }
@@ -124,7 +124,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
     const name = file.name.toLowerCase();
     const isExcel = name.endsWith(".xlsx");
     if (name.endsWith(".xls")) {
-      setParseError("Legacy .xls files aren't supported - please re-save as .xlsx or .csv and try again.");
+      setParseError("Legacy .xls files aren't supported - re-save as .xlsx or .csv and try again.");
       e.target.value = "";
       return;
     }
@@ -142,7 +142,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
         return;
       }
       if (!Object.values(keyMap).includes("employeeId") && !Object.values(keyMap).includes("name")) {
-        setParseError("Couldn't find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
+        setParseError("Unable to find an \"Employee ID\" or \"Name\" column. Check your file's header row against the template.");
         return;
       }
       const unmatched = getUnmatchedHeaders(headers, keyMap);
@@ -164,7 +164,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
 
       setRows(dataRows);
     } catch {
-      setParseError(isExcel ? "Failed to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Failed to parse the file. Ensure it is a valid CSV.");
+      setParseError(isExcel ? "Unable to parse the Excel file. Ensure it is a valid, uncorrupted .xlsx file." : "Unable to parse the file. Ensure it is a valid CSV.");
     } finally {
       e.target.value = "";
     }
@@ -193,7 +193,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
       // needs them, and this is the only place they still exist.
       setFailedRows(json.failed.map((f) => ({ ...f, data: rows[f.row - 2] ?? {}, status: "failed" as const })));
       if (json.created > 0 && stoppedAt === null) {
-        toast({ variant: "success", title: `${json.created} staff member${json.created !== 1 ? "s" : ""} imported successfully` });
+        toast({ variant: "success", title: `${json.created} staff member${json.created !== 1 ? "s" : ""} imported` });
         setRows([]);
       }
     } catch {
@@ -234,7 +234,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
         body: JSON.stringify({ records: [fixTarget.form] }),
       });
       const json = await res.json() as ImportResult & { error?: string };
-      if (!res.ok) { setFixError(json.error ?? "Failed to save"); return; }
+      if (!res.ok) { setFixError(json.error ?? "Unable to save"); return; }
       if (json.created >= 1) {
         toast({ variant: "success", title: `${fixTarget.form.name || "Staff member"} imported` });
         setFailedRows((prev) => prev.map((r) => (r.row === fixTarget.row ? { ...r, status: "fixed" as const } : r)));
@@ -243,9 +243,9 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
       }
       // Still failed (or only produced a warning, no created row) - surface
       // the specific reason and let them keep correcting in place.
-      setFixError(json.failed?.[0]?.error ?? "Failed to save - please check the fields and try again");
+      setFixError(json.failed?.[0]?.error ?? "Unable to save - check the fields and try again");
     } catch {
-      setFixError("Network error - please try again");
+      setFixError("Network error - try again");
     } finally {
       setFixSaving(false);
     }
@@ -309,7 +309,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
           )}
           {rows.length > 0 && (
             <p className="text-sm text-green-700 flex items-center gap-1">
-              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed successfully
+              <CheckCircle2 className="h-4 w-4" />{rows.length} row{rows.length !== 1 ? "s" : ""} parsed
             </p>
           )}
         </CardContent>

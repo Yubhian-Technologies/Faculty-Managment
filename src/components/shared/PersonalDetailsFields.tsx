@@ -268,7 +268,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <Input
               value={value.gender === "Other" ? "" : value.gender}
               onChange={(e) => set("gender", e.target.value || "Other")}
-              placeholder="Please specify"
+              placeholder="Specify"
             />
           )}
         </div>
@@ -310,7 +310,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <Input
               value={value.religion === "OTHER" ? "" : value.religion}
               onChange={(e) => set("religion", e.target.value || "OTHER")}
-              placeholder="Please specify"
+              placeholder="Specify"
             />
           )}
         </div>
@@ -334,7 +334,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <Input
               value={value.caste === "OTHER" ? "" : value.caste}
               onChange={(e) => set("caste", e.target.value || "OTHER")}
-              placeholder="Please specify"
+              placeholder="Specify"
             />
           )}
         </div>
@@ -356,7 +356,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
                 <Input
                   value={value.subCaste === "OTHER" ? "" : value.subCaste}
                   onChange={(e) => set("subCaste", e.target.value || "OTHER")}
-                  placeholder="Please specify"
+                  placeholder="Specify"
                 />
               )}
             </>
@@ -445,7 +445,7 @@ export function PersonalDetailsFields({ value: rawValue, onChange, requiredField
             <Input
               value={value.motherTongue === "OTHER" ? "" : value.motherTongue}
               onChange={(e) => set("motherTongue", e.target.value || "OTHER")}
-              placeholder="Please specify"
+              placeholder="Specify"
             />
           )}
         </div>

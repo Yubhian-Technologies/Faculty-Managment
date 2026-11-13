@@ -105,7 +105,7 @@ export default function CollegeOfficeDepartmentVacanciesPage() {
         built.sort((a, b) => (toDate(b.vacancy.createdAt)?.getTime() ?? 0) - (toDate(a.vacancy.createdAt)?.getTime() ?? 0));
         setEntries(built);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring requests" }))
       .finally(() => setIsLoading(false));
   }
 

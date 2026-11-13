@@ -34,7 +34,7 @@ export default function InvigilationPage() {
     fetch("/api/college/invigilation/schedules", { cache: "no-store" })
       .then((r) => r.json() as Promise<{ schedules?: InvigilationSchedule[]; mids?: Mid[]; error?: string }>)
       .then((d) => { setSchedules(d.schedules ?? []); setMids(d.mids ?? []); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load invigilation schedules" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load invigilation schedules" }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -43,10 +43,10 @@ export default function InvigilationPage() {
     try {
       const res = await fetch("/api/college/invigilation/schedules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, midPlanIds: picked }) });
       const data = (await res.json()) as { id?: string; error?: string };
-      if (!res.ok || !data.id) throw new Error(data.error ?? "Failed to create");
+      if (!res.ok || !data.id) throw new Error(data.error ?? "Unable to create");
       router.push(`/exam-cell/invigilation/${data.id}?tab=config`);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to create" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to create" });
     } finally {
       setSaving(false);
     }

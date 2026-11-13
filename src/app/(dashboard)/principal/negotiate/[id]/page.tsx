@@ -86,7 +86,7 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
         return [c.id, Object.fromEntries(entries)];
       })));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load batch" });
+      toast({ variant: "destructive", title: "Unable to load batch" });
     } finally {
       setIsLoading(false);
     }
@@ -135,7 +135,7 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
       setSavedIds((prev) => new Set(prev).add(applicationId));
       toast({ variant: "success", title: "Saved" });
     } catch {
-      toast({ variant: "destructive", title: "Failed to save" });
+      toast({ variant: "destructive", title: "Unable to save" });
     } finally {
       setSavingId(null);
     }

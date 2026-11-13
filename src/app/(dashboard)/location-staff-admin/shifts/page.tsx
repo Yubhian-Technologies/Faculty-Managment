@@ -58,7 +58,7 @@ export default function LocationStaffAdminShiftsPage() {
         setStaffList(staffData);
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shifts" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shifts" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -77,12 +77,12 @@ export default function LocationStaffAdminShiftsPage() {
       const res = await fetch(`/api/location/shifts/${shiftId}`, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error("Failed to delete shift");
+      if (!res.ok) throw new Error("Unable to delete shift");
 
       toast({ title: "Deleted", description: `Removed shift ${shiftName}` });
       reload();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to delete shift";
+      const msg = err instanceof Error ? err.message : "Unable to delete shift";
       toast({ variant: "destructive", title: "Error", description: msg });
     }
   };

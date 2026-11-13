@@ -23,7 +23,7 @@ export function HiringTermsSettingsCard() {
     fetch("/api/college/hiring-terms?includeInactive=true")
       .then((r) => r.json() as Promise<{ templates: HiringTermsTemplate[] }>)
       .then((d) => setTemplates(d.templates ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load terms & conditions" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load terms & conditions" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -43,7 +43,7 @@ export function HiringTermsSettingsCard() {
       setNewText("");
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to add term" });
+      toast({ variant: "destructive", title: "Unable to add term" });
     } finally {
       setIsAdding(false);
     }
@@ -63,7 +63,7 @@ export function HiringTermsSettingsCard() {
       setEditingId(null);
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to save changes" });
+      toast({ variant: "destructive", title: "Unable to save changes" });
     } finally {
       setBusyId(null);
     }
@@ -80,7 +80,7 @@ export function HiringTermsSettingsCard() {
       if (!res.ok) throw new Error();
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update" });
+      toast({ variant: "destructive", title: "Unable to update" });
     } finally {
       setBusyId(null);
     }

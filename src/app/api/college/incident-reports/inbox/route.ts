@@ -72,9 +72,9 @@ export async function GET(request: Request) {
     const unreadCount = reports.filter((r) => r.unread).length;
     return NextResponse.json(countOnly ? { unreadCount } : { reports, unreadCount });
   } catch (err) {
-    if (unauthorized(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (unauthorized(err)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[college/incident-reports/inbox GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "ACADEMICS", "HOD");
     const body = (await readJsonBody(request)) as { id?: string };
     const id = typeof body.id === "string" ? body.id.trim() : "";
-    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+    if (!id) return NextResponse.json({ error: "The record to update is missing. Reload the page and try again." }, { status: 400 });
 
     const ref = getAdminDb()
       .collection("colleges").doc(session.collegeId).collection("incidentReports").doc(id);
@@ -95,8 +95,8 @@ export async function POST(request: Request) {
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
-    if (unauthorized(err)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (unauthorized(err)) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[college/incident-reports/inbox POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

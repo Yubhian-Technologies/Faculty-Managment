@@ -29,7 +29,7 @@ export default function HODIndentsPage() {
         .then((r) => r.json() as Promise<{ requests: IndentRequest[] }>);
       setRequests(d.requests ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load indent requests" });
+      toast({ variant: "destructive", title: "Unable to load indent requests" });
     } finally {
       setIsLoading(false);
     }

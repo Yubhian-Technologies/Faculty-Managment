@@ -64,7 +64,7 @@ export function LabAttendanceAllocation({ loadAssignments }: { loadAssignments: 
         setAllocations({});
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load labs" });
+      toast({ variant: "destructive", title: "Unable to load labs" });
     } finally {
       setIsLoading(false);
     }
@@ -122,7 +122,7 @@ export function LabAttendanceAllocation({ loadAssignments }: { loadAssignments: 
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; ranges?: LabAttendanceDateRange[] };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Could not save", description: json.error });
+        toast({ variant: "destructive", title: "Unable to save", description: json.error });
         return false;
       }
       toast({
@@ -133,7 +133,7 @@ export function LabAttendanceAllocation({ loadAssignments }: { loadAssignments: 
       await load();
       return true;
     } catch {
-      toast({ variant: "destructive", title: "Could not save" });
+      toast({ variant: "destructive", title: "Unable to save" });
       return false;
     } finally {
       setSaving(false);

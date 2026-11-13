@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ empl
     const { settings } = await loadPayrollSettings(db, session.collegeId);
     return NextResponse.json(await buildTaxStatement(db, session.collegeId, employee, fy, settings));
   } catch (err) {
-    if (err instanceof Error && err.message === "BAD_FY") return NextResponse.json({ error: "Financial year must look like 2026-27" }, { status: 400 });
+    if (err instanceof Error && err.message === "BAD_FY") return NextResponse.json({ error: "Enter the financial year as YYYY-YY, for example 2026-27." }, { status: 400 });
     return payrollErrorResponse(err, "[college/payroll/tax/statement/[employeeKey] GET]");
   }
 }

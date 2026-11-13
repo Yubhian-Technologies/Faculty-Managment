@@ -39,7 +39,7 @@ export function ParentDetailsEditor({ studentId, onSaved }: { studentId: string;
       setOpen(false);
       onSaved();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }

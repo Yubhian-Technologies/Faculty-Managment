@@ -45,7 +45,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
         if (cancelled) return;
         setDepartments(d.departments ?? []);
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load the free-faculty filter" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load the free-faculty filter" });
       }
     })();
     return () => { cancelled = true; };
@@ -75,7 +75,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
       setLoadedSlot(describeSlot());
     } catch (err) {
       setFaculty(null);
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to load free faculty" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to load free faculty" });
     } finally {
       setIsLoading(false);
     }

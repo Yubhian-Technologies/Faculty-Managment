@@ -36,7 +36,7 @@ export default function HodSupportingStaffCredentialsPage() {
         setStaffName(supportingStaffDisplayName({ legalName: s.legalName as string, nameAsPerPan: s.nameAsPerPan as string }));
         setEmail(((s.collegeEmail as string) || (s.email as string)) ?? "");
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff record" }))
       .finally(() => setLoading(false));
   }, [staffId, router]);
 
@@ -59,13 +59,13 @@ export default function HodSupportingStaffCredentialsPage() {
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to create login" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to create login" });
         return;
       }
       toast({ variant: "success", title: `Login created for ${staffName}` });
       router.push("/hod/supporting-staff");
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setSaving(false);
     }

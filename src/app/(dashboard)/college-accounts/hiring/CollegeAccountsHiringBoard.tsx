@@ -335,7 +335,7 @@ export function CollegeAccountsHiringBoard({ scope }: { scope: "active" | "close
         );
         setEntries(built);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load hiring pipeline" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load hiring pipeline" }))
       .finally(() => setIsLoading(false));
   }
 

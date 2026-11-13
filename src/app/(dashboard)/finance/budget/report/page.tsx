@@ -35,7 +35,7 @@ export default function FinanceBudgetReportPage() {
     collegeFetch("/api/college/budget-requests")
       .then((r) => r.json() as Promise<{ requests: BudgetRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budget requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budget requests" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -62,7 +62,7 @@ export default function FinanceBudgetReportPage() {
         .then((r) => r.json() as Promise<{ requests: OverviewRequest[] }>);
       setOverviewRequests(data.requests ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load budget requests" });
+      toast({ variant: "destructive", title: "Unable to load budget requests" });
     } finally {
       setIsLoading(false);
     }

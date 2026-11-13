@@ -21,7 +21,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const body = (await readJsonBody(request)) as { deadline?: string };
     const db = getAdminDb();
     const d = await loadDeadline(db, session.collegeId, id);
-    if (!d) return NextResponse.json({ error: "Deadline not found" }, { status: 404 });
+    if (!d) return NextResponse.json({ error: "Deadline not found. It may have been deleted." }, { status: 404 });
     const next = String(body.deadline ?? "").trim();
     if (next === d.deadline) return NextResponse.json({ deadline: d });
     const err = deadlineError(next, istDateKey(), await midStartDate(db, session.collegeId, d.courseIds, d.courseName, d.semester, d.midNumber));

@@ -114,7 +114,7 @@ function ImportSemesterResults() {
         if (d.batch.status !== "DRAFT") { toast({ variant: "destructive", title: "These results are published and can no longer be added to" }); return; }
         setDraft(d.batch);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the draft" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the draft" }));
   }, [appendTo]);
 
   useEffect(() => {
@@ -122,7 +122,7 @@ function ImportSemesterResults() {
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
     ])
       .then(([c]) => { setCourses(c.courses ?? []); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load courses" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load courses" }));
   }, []);
 
   const groups = useMemo(() => buildCourseGroups(courses), [courses]);
@@ -276,7 +276,7 @@ function ImportSemesterResults() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast({ variant: "destructive", title: "Couldn't build the template" });
+      toast({ variant: "destructive", title: "Unable to build the template" });
     } finally {
       setBusy(null);
     }
@@ -316,7 +316,7 @@ function ImportSemesterResults() {
       setIgnored(extra);
       setFileName(file.name);
     } catch {
-      setParseError("Couldn't read the file. Check it is a valid .xlsx or .csv.");
+      setParseError("Unable to read the file. Check it is a valid .xlsx or .csv.");
     }
   }
 

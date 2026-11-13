@@ -52,7 +52,7 @@ export async function PATCH(
     const ref = collegeRef.collection("studentAttendance").doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     const existing = snap.data() as StudentAttendanceSession;
     // A SUBMITTED record may be corrected here (HOD/dept office only); it stays
@@ -127,7 +127,7 @@ export async function PATCH(
       const fresh = freshSnap.data() as StudentAttendanceSession;
       const serverMs = (fresh.updatedAt as unknown as { toDate?: () => Date })?.toDate?.()?.getTime?.() ?? 0;
       if (!Number.isNaN(expectedMs) && serverMs !== 0 && expectedMs !== serverMs) {
-        return { error: { message: "This attendance was updated elsewhere. Please reload and try again.", status: 409 } };
+        return { error: { message: "This attendance was updated elsewhere. Reload and try again.", status: 409 } };
       }
       const freshSubmitted = fresh.status === "SUBMITTED";
       // ON_DUTY is locked here too: the Office can correct a mark, but not
@@ -141,7 +141,7 @@ export async function PATCH(
 
       if (body.submit || freshSubmitted) {
         if (markedCount < fresh.totalStudents || fresh.totalStudents === 0) {
-          return { error: { message: "Please mark attendance for all students before submitting", status: 400 } };
+          return { error: { message: "Mark attendance for all students before submitting", status: 400 } };
         }
         const classNotes = ((update.classNotes as string | undefined) ?? fresh.classNotes ?? "").trim();
         if (!classNotes) {
@@ -190,9 +190,9 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/student-attendance/office-correction/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

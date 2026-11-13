@@ -34,7 +34,7 @@ export default function StudentHolidaysPage() {
         setSemBreaks((s as { semBreaks?: SemBreak[] }).semBreaks ?? []);
         setSummer((v as { summerHolidays?: SummerHoliday[] }).summerHolidays ?? []);
       })
-      .catch(() => toast({ title: "Could not load holidays", variant: "destructive" }))
+      .catch(() => toast({ title: "Unable to load holidays", variant: "destructive" }))
       .finally(() => setIsLoading(false));
   }, []);
 

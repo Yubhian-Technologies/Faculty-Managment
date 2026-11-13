@@ -120,13 +120,13 @@ function AddSubjects({ category, all, onDone }: { category: ExamMarksCategory; a
     try {
       const res = await fetch(`/api/college/exam-marks-categories/${encodeURIComponent(category.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = (await res.json()) as { error?: string; category?: ExamMarksCategory; skipped?: { subject: string; reason: string }[] };
-      if (!res.ok || !data.category) throw new Error(data.error ?? "Could not add");
+      if (!res.ok || !data.category) throw new Error(data.error ?? "Unable to add");
       const added = data.category.subjectIds.length - category.subjectIds.length;
       toast({ variant: added > 0 ? "success" : "destructive", title: `${added} subject${added === 1 ? "" : "s"} added`, description: data.skipped?.length ? `Skipped: ${data.skipped.map((x) => `${x.subject} (${x.reason})`).join("; ")}` : undefined });
       setPicked(new Set()); setCodes("");
       onDone(data.category);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not add" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to add" });
     } finally {
       setBusy(false);
     }
@@ -189,7 +189,7 @@ export function ExamMarksCategoriesCard() {
 
   function load() {
     fetch("/api/college/exam-marks-categories").then((r) => r.json() as Promise<{ categories?: ExamMarksCategory[] }>).then((d) => setCategories(d.categories ?? []))
-      .catch(() => { setCategories([]); toast({ variant: "destructive", title: "Failed to load the marks categories" }); });
+      .catch(() => { setCategories([]); toast({ variant: "destructive", title: "Unable to load the marks categories" }); });
   }
   useEffect(load, []);
   const replace = (c: ExamMarksCategory) => setCategories((list) => (list ?? []).map((x) => (x.id === c.id ? c : x)));
@@ -199,11 +199,11 @@ export function ExamMarksCategoriesCard() {
     try {
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = (await res.json()) as { error?: string; category?: ExamMarksCategory; skipped?: { subject: string; reason: string }[] };
-      if (!res.ok || !data.category) throw new Error(data.error ?? "Could not save");
+      if (!res.ok || !data.category) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: ok, description: data.skipped?.length ? `Not removed: ${data.skipped.map((x) => `${x.subject} (${x.reason})`).join("; ")}` : undefined });
       return data.category;
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
       return null;
     } finally {
       setSaving(false);
@@ -214,7 +214,7 @@ export function ExamMarksCategoriesCard() {
     if (!deleting) return;
     const res = await fetch(`/api/college/exam-marks-categories/${encodeURIComponent(deleting.id)}`, { method: "DELETE" });
     const data = (await res.json()) as { error?: string };
-    if (!res.ok) toast({ variant: "destructive", title: data.error ?? "Could not delete" });
+    if (!res.ok) toast({ variant: "destructive", title: data.error ?? "Unable to delete" });
     setDeleting(null);
     load();
   }

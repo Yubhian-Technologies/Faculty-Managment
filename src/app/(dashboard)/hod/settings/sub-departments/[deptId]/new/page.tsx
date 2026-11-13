@@ -56,7 +56,7 @@ export default function NewSubDepartmentPage() {
       // A RESIGNED/RETIRED person (flagged by the API in read-only-access colleges) can no longer be a Sub-HOD.
       setHods((hodsRes.users ?? []).filter((u) => !u.facultyExited));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sub-departments" });
+      toast({ variant: "destructive", title: "Unable to load sub-departments" });
     } finally {
       setIsLoading(false);
     }
@@ -96,7 +96,7 @@ export default function NewSubDepartmentPage() {
         }),
       });
       const json = (await res.json()) as { error?: string; deptId?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to add sub-department");
+      if (!res.ok) throw new Error(json.error ?? "Unable to add sub-department");
 
       // The sub-department comes with its own HOD seat; put the chosen faculty
       // member in it.
@@ -119,7 +119,7 @@ export default function NewSubDepartmentPage() {
       toast({ variant: "success", title: "Sub-department added" });
       router.push(listHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add sub-department" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to add sub-department" });
     } finally {
       setIsSubmitting(false);
     }

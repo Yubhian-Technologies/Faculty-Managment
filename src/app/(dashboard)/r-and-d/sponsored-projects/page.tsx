@@ -36,7 +36,7 @@ export default function RAndDSponsoredProjectsPage() {
       const data = await res.json() as { projects: SponsoredProjectRow[] };
       setProjects(data.projects ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sponsored projects" });
+      toast({ variant: "destructive", title: "Unable to load sponsored projects" });
     } finally {
       setIsLoading(false);
     }
@@ -56,7 +56,7 @@ export default function RAndDSponsoredProjectsPage() {
       setDeleteTarget(null);
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to delete sponsored project" });
+      toast({ variant: "destructive", title: "Unable to delete sponsored project" });
     } finally {
       setDeleting(false);
     }
@@ -74,7 +74,7 @@ export default function RAndDSponsoredProjectsPage() {
       toast({ variant: "success", title: "Sponsored project approved" });
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to approve sponsored project" });
+      toast({ variant: "destructive", title: "Unable to approve sponsored project" });
     } finally {
       setApproving(null);
     }
@@ -95,7 +95,7 @@ export default function RAndDSponsoredProjectsPage() {
       setRejectReason("");
       await load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to reject sponsored project" });
+      toast({ variant: "destructive", title: "Unable to reject sponsored project" });
     } finally {
       setRejecting(false);
     }

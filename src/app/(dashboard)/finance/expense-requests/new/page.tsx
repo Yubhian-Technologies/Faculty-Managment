@@ -29,7 +29,7 @@ export default function NewExpenseRequestPage() {
     collegeFetch("/api/college/finance-budgets?status=ACTIVE")
       .then((r) => r.json() as Promise<{ budgets: FinanceBudget[] }>)
       .then((d) => setBudgets(d.budgets ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budgets" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budgets" }));
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -49,7 +49,7 @@ export default function NewExpenseRequestPage() {
       toast({ variant: "success", title: "Expense request logged" });
       router.push("/finance/expense-requests");
     } catch {
-      toast({ variant: "destructive", title: "Failed to log request" });
+      toast({ variant: "destructive", title: "Unable to log request" });
     } finally {
       setSaving(false);
     }

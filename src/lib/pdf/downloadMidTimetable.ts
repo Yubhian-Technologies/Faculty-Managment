@@ -20,7 +20,7 @@ async function toCanvas(html: string): Promise<HTMLCanvasElement> {
   document.body.appendChild(holder);
   try {
     const doc = iframe.contentDocument;
-    if (!doc) throw new Error("Could not prepare the PDF");
+    if (!doc) throw new Error("Unable to prepare the PDF");
     doc.open(); doc.write(html); doc.close();
     await Promise.all(Array.from(doc.images).map((img) => (img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = img.onerror = () => r(); }))));
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));

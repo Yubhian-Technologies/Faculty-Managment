@@ -89,7 +89,7 @@ export default function FinanceBudgetPage() {
       const data = (await res.json()) as { request: BudgetRequest };
       setSourceRequest(data.request);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load original request" });
+      toast({ variant: "destructive", title: "Unable to load original request" });
     } finally {
       setIsLoadingSource(false);
     }
@@ -100,7 +100,7 @@ export default function FinanceBudgetPage() {
     collegeFetch("/api/college/finance-budgets")
       .then((r) => r.json() as Promise<{ budgets: BudgetRow[] }>)
       .then((d) => setBudgets(d.budgets ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load budgets" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load budgets" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -120,7 +120,7 @@ export default function FinanceBudgetPage() {
       if (!res2.ok) throw new Error(d2.error ?? `Request failed (${res2.status})`);
       setCycleRequests(d2.requests ?? []);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to load budget cycle", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to load budget cycle", description: err instanceof Error ? err.message : undefined });
     }
   }
 
@@ -140,7 +140,7 @@ export default function FinanceBudgetPage() {
       toast({ variant: "success", title: "Budget closed" });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to close budget" });
+      toast({ variant: "destructive", title: "Unable to close budget" });
     }
   }
 

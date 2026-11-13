@@ -64,7 +64,7 @@ export default function PurchaseIndentsPage() {
         setRequests(d.indents ?? []);
         setClearanceRequests(d.clearances ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load indent requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load indent requests" }))
       .finally(() => {
         setIsLoading(false);
         setIsLoadingClearance(false);

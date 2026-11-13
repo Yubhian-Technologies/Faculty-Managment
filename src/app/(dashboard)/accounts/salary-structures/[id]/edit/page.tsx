@@ -86,7 +86,7 @@ export default function EditSalaryStructurePage() {
         });
       })
       .catch(() => {
-        toast({ variant: "destructive", title: "Failed to load salary structure" });
+        toast({ variant: "destructive", title: "Unable to load salary structure" });
         router.push("/accounts/salary-structures");
       })
       .finally(() => setLoading(false));
@@ -110,7 +110,7 @@ export default function EditSalaryStructurePage() {
       toast({ variant: "success", title: "Salary structure updated" });
       router.push("/accounts/salary-structures");
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setIsSubmitting(false);
     }

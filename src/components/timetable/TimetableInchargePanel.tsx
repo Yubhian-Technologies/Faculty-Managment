@@ -131,7 +131,7 @@ export function TimetableInchargePanel({
         : { kind: "MIXED" };
       setHolders((h) => ({ ...h, [unit.key]: holder }));
     } catch {
-      toast({ variant: "destructive", title: "Failed to load Timetable Incharge" });
+      toast({ variant: "destructive", title: "Unable to load Timetable Incharge" });
     }
   }, []);
 
@@ -182,7 +182,7 @@ export function TimetableInchargePanel({
           if (current) setSelectedKey(`${current.personType}_${current.id}`);
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty" }));
   }
 
   async function submitAssign() {
@@ -197,7 +197,7 @@ export function TimetableInchargePanel({
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to assign Timetable Incharge", description: json.error });
+        toast({ variant: "destructive", title: "Unable to assign Timetable Incharge", description: json.error });
         return;
       }
       toast({ variant: "success", title: "Timetable Incharge assigned" });
@@ -222,7 +222,7 @@ export function TimetableInchargePanel({
       toast({ variant: "success", title: "Timetable Incharge removed" });
       await loadHolder(revokeUnit);
     } catch {
-      toast({ variant: "destructive", title: "Failed to remove Timetable Incharge" });
+      toast({ variant: "destructive", title: "Unable to remove Timetable Incharge" });
     } finally {
       setRevoking(false);
       setRevokeUnit(null);

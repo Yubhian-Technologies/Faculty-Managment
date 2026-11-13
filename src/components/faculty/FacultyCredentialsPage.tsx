@@ -37,7 +37,7 @@ export function FacultyCredentialsPage({ facultyId, listHref }: { facultyId: str
         setFacultyName(facultyDisplayName(m as { legalName?: string }));
         setEmail(((m.collegeEmail as string) || (m.email as string)) ?? "");
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty record" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty record" }))
       .finally(() => setLoading(false));
   }, [facultyId, listHref, router]);
 
@@ -60,13 +60,13 @@ export function FacultyCredentialsPage({ facultyId, listHref }: { facultyId: str
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to create login" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to create login" });
         return;
       }
       toast({ variant: "success", title: `Login created for ${facultyName}` });
       router.push(listHref);
     } catch {
-      toast({ variant: "destructive", title: "Network error, please try again" });
+      toast({ variant: "destructive", title: "Network error try again" });
     } finally {
       setSaving(false);
     }

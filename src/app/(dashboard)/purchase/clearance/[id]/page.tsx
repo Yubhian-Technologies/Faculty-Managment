@@ -51,7 +51,7 @@ export default function PurchaseClearanceDetailPage() {
         setQuotations(found?.quotations?.length ? found.quotations : []);
         setSelectedQuotationId(found?.selectedQuotationId ?? "");
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load request" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load request" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -91,12 +91,12 @@ export default function PurchaseClearanceDetailPage() {
       });
       if (!res.ok) {
         const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "Failed to send to Finance");
+        throw new Error(err.error ?? "Unable to send to Finance");
       }
       toast({ variant: "success", title: "Sent to Finance" });
       load();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to send to Finance", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to send to Finance", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSending(false);
     }
@@ -115,7 +115,7 @@ export default function PurchaseClearanceDetailPage() {
       toast({ variant: "success", title: "Marked as goods purchased", description: "The requesting HOD has been notified to upload a GRN." });
       load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update status" });
+      toast({ variant: "destructive", title: "Unable to update status" });
     } finally {
       setIsMarking(false);
     }

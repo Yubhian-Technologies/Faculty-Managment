@@ -121,7 +121,7 @@ export default function RAndDDashboard() {
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{m.label}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {m.failed ? "Couldn't load" : `${m.pending} awaiting verification`}
+                        {m.failed ? "Unable to load" : `${m.pending} awaiting verification`}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">

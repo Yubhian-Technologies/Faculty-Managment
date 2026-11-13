@@ -127,7 +127,7 @@ export default function EditDepartmentPage() {
         }
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load department" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load department" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -253,9 +253,9 @@ export default function EditDepartmentPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update department");
+      if (!res.ok) throw new Error(data.error || "Unable to update department");
 
-      toast({ title: "Department Updated", description: `Successfully updated "${name}".` });
+      toast({ title: "Department Updated", description: `Updated "${name}".` });
 
       if (data.credentialsCreated) {
         setCreatedCredentials({
@@ -268,7 +268,7 @@ export default function EditDepartmentPage() {
         router.push("/location-staff-admin/departments");
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update department";
+      const msg = err instanceof Error ? err.message : "Unable to update department";
       toast({ variant: "destructive", title: "Update Failed", description: msg });
     } finally {
       setIsSubmitting(false);

@@ -103,7 +103,7 @@ export function ExportFacultyDialog({ faculty, isSelection }: Props) {
       exportFacultyCsv(faculty, teachingSummaries, Array.from(selected));
       setOpen(false);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to export faculty details" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to export faculty details" });
     } finally {
       setExporting(false);
     }

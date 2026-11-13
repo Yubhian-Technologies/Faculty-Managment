@@ -97,7 +97,7 @@ export default function PrincipalInternalMarksPage() {
       setStats(batchJson.stats ?? null);
     } catch {
       setLoadError(true);
-      toast({ variant: "destructive", title: "Failed to load internal marks data" });
+      toast({ variant: "destructive", title: "Unable to load internal marks data" });
     } finally {
       setIsLoadingData(false);
     }
@@ -135,7 +135,7 @@ export default function PrincipalInternalMarksPage() {
           return next;
         });
       } catch {
-        if (!cancelled) { setLoadError(true); toast({ variant: "destructive", title: "Failed to load internal marks" }); }
+        if (!cancelled) { setLoadError(true); toast({ variant: "destructive", title: "Unable to load internal marks" }); }
       } finally {
         if (!cancelled) setIsLoadingBatches(false);
       }
@@ -230,7 +230,7 @@ export default function PrincipalInternalMarksPage() {
         const json = (await res.json()) as { sections?: Section[] };
         setSections((json.sections ?? []).filter((s) => matchingCourseIds.has(s.courseId)));
       } catch {
-        toast({ variant: "destructive", title: "Failed to load sections" });
+        toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         setIsLoadingSections(false);
       }
@@ -270,7 +270,7 @@ export default function PrincipalInternalMarksPage() {
         );
         setSemesterAssignments(lists.flat());
       } catch {
-        toast({ variant: "destructive", title: "Failed to load subjects" });
+        toast({ variant: "destructive", title: "Unable to load subjects" });
       }
     })();
   }, [courseName, year, matchingCourses]);
@@ -351,7 +351,7 @@ export default function PrincipalInternalMarksPage() {
         return json.configuration;
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load marks breakdown" });
+      toast({ variant: "destructive", title: "Unable to load marks breakdown" });
     }
     return null;
   }
@@ -450,7 +450,7 @@ export default function PrincipalInternalMarksPage() {
         body: JSON.stringify({ entries: [{ studentId: editTarget.entry.studentId, componentMarks }] }),
       });
       const json = (await res.json()) as { batch?: Batch; error?: string };
-      if (!res.ok || !json.batch) throw new Error(json.error ?? "Failed to save changes");
+      if (!res.ok || !json.batch) throw new Error(json.error ?? "Unable to save changes");
       // PATCH returns the raw Firestore document — it never carries
       // courseId/courseName, since those are synthesized client-side only by
       // the initial list load (joined from the Exam Cell's ExamConfiguration,
@@ -465,7 +465,7 @@ export default function PrincipalInternalMarksPage() {
       toast({ variant: "success", title: `Marks updated for ${editTarget.entry.name}` });
       setEditTarget(null);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to save changes" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save changes" });
     } finally {
       setIsSaving(false);
     }
@@ -494,7 +494,7 @@ export default function PrincipalInternalMarksPage() {
         <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           <span className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            Failed to load Internal Marks data — this is a connection/loading problem, not an indication that no marks exist.
+            Unable to load Internal Marks data — this is a connection/loading problem, not an indication that no marks exist.
           </span>
           <Button variant="outline" size="sm" onClick={() => void loadData()}>Retry</Button>
         </div>

@@ -51,7 +51,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
     fetch("/api/college/mid-bank-rules")
       .then((r) => r.json() as Promise<{ rules?: MidBankRules[]; regulationsByCourse?: Record<string, string[]> }>)
       .then((d) => { setRules(d.rules ?? []); setRegulationsByCourse(d.regulationsByCourse ?? {}); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load the question bank rules" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the question bank rules" }));
   }
   useEffect(() => {
     load();
@@ -96,12 +96,12 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
     try {
       const res = await fetch("/api/college/mid-bank-rules", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: `Rules saved for ${group.name}${payload.regulation === "ALL" ? "" : ` (${payload.regulation})`}` });
       reset();
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -110,7 +110,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
   async function remove() {
     if (!deleting) return;
     const res = await fetch(`/api/college/mid-bank-rules?id=${encodeURIComponent(deleting.id)}`, { method: "DELETE" });
-    if (!res.ok) toast({ variant: "destructive", title: "Failed to delete" });
+    if (!res.ok) toast({ variant: "destructive", title: "Unable to delete" });
     setDeleting(null);
     load();
   }

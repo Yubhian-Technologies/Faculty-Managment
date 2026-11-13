@@ -121,7 +121,7 @@ function HODSectionsContent() {
       setCourses((coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));
       setDepartments(deptsRes.departments ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load sections" });
+      toast({ variant: "destructive", title: "Unable to load sections" });
     } finally {
       setIsLoading(false);
     }
@@ -324,7 +324,7 @@ function HODSectionsContent() {
       const res = await fetch(`/api/college/sections/${deleteTarget.id}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to delete" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to delete" });
         return;
       }
       toast({ variant: "success", title: `Section ${deleteTarget.name} deleted` });

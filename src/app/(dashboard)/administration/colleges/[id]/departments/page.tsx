@@ -40,7 +40,7 @@ export default function CollegeDepartmentsBrowsePage() {
         setCollegeName(d.collegeName ?? "");
         setDepartments(d.departments ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load departments" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }))
       .finally(() => setIsLoading(false));
   }, [collegeId, router]);
 

@@ -53,7 +53,7 @@ export default function FinanceReportsPage() {
     collegeFetch(`/api/college/finance-reports?${params.toString()}`)
       .then((r) => r.json() as Promise<FinanceReportSummary>)
       .then(setReport)
-      .catch(() => toast({ variant: "destructive", title: "Failed to load report" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load report" }))
       .finally(() => setIsLoading(false));
   }, [period]);
 
@@ -77,7 +77,7 @@ export default function FinanceReportsPage() {
       link.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to export PDF", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to export PDF", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsExportingPdf(false);
     }
@@ -89,7 +89,7 @@ export default function FinanceReportsPage() {
     try {
       await exportFinanceReportExcel(report);
     } catch {
-      toast({ variant: "destructive", title: "Failed to export Excel" });
+      toast({ variant: "destructive", title: "Unable to export Excel" });
     } finally {
       setIsExportingExcel(false);
     }

@@ -27,7 +27,7 @@ export function FinancialYearSettingsCard() {
       const json = await res.json() as { financialYears?: FinancialYearItem[] };
       setYears(json.financialYears ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load financial years" });
+      toast({ variant: "destructive", title: "Unable to load financial years" });
     } finally {
       setIsLoading(false);
     }
@@ -46,13 +46,13 @@ export function FinancialYearSettingsCard() {
         body: JSON.stringify({ startDate, endDate }),
       });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to add the financial year");
+      if (!res.ok) throw new Error(json.error ?? "Unable to add the financial year");
       toast({ variant: "success", title: "Financial year added" });
       setStartDate("");
       setEndDate("");
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to add" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to add" });
     } finally {
       setIsSaving(false);
     }
@@ -62,10 +62,10 @@ export function FinancialYearSettingsCard() {
     try {
       const res = await fetch(`/api/college/financial-years?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       const json = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to remove");
+      if (!res.ok) throw new Error(json.error ?? "Unable to remove");
       await load();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to remove" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to remove" });
     }
   }
 

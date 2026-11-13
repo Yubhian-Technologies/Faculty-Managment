@@ -145,7 +145,7 @@ export function FacultyAttendanceReportView({ sections }: { sections: FacultySec
     try {
       const res = await fetch(`/api/college/class-work-records?${params.toString()}`);
       const json = (await res.json()) as Record<string, unknown> & { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Failed to load report");
+      if (!res.ok) throw new Error(json.error ?? "Unable to load report");
       if (view === "day") {
         setDayData({
           classWork: (json.classWork as ClassWorkEntry[]) ?? [],
@@ -161,7 +161,7 @@ export function FacultyAttendanceReportView({ sections }: { sections: FacultySec
       }
       setLoaded({ view, label });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load report" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load report" });
     } finally {
       setIsLoading(false);
     }

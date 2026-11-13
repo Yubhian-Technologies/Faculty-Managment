@@ -186,7 +186,7 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
       if (!confirmed) {
         const pre = await fetch("/api/college/mid-bank-assignments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload(ids), dryRun: true }) });
         const pj = (await pre.json()) as { error?: string; changes?: StartedChange[] };
-        if (!pre.ok) throw new Error(pj.error ?? "Could not save");
+        if (!pre.ok) throw new Error(pj.error ?? "Unable to save");
         if (pj.changes?.length) { setConfirmChanges({ ids, changes: pj.changes }); return; }
       }
       setConfirmChanges(null);
@@ -195,11 +195,11 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
         body: JSON.stringify(payload(ids)),
       });
       const j = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Could not save");
+      if (!res.ok) throw new Error(j.error ?? "Unable to save");
       toast({ variant: "success", title: ids.length ? "Setters assigned - they are told" : "Assignment removed" });
       setEditing(false);
       onSaved();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
 

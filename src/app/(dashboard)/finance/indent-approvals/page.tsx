@@ -67,7 +67,7 @@ export default function FinanceIndentApprovalsPage() {
         setRequests(d.indents ?? []);
       }
     } catch {
-      toast({ variant: "destructive", title: "Failed to load incoming indents" });
+      toast({ variant: "destructive", title: "Unable to load incoming indents" });
     } finally {
       setIsLoading(false);
     }

@@ -34,7 +34,7 @@ export function LocationBrowserList({ basePath, description = "Select a location
     fetch("/api/admin/locations")
       .then((r) => r.json() as Promise<{ locations: Location[] }>)
       .then((d) => setLocations(d.locations ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load locations" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load locations" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -98,7 +98,7 @@ export function CollegeBrowserList({ basePath, description = "Select a college t
         setLocation(locations.find((l) => l.id === params.locationId) ?? null);
         setColleges(colleges);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load colleges" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load colleges" }))
       .finally(() => setIsLoading(false));
   }, [params.locationId]);
 

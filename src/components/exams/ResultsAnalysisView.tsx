@@ -145,7 +145,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
         const list = d.classes ?? [];
         setClasses(list);
       })
-      .catch(() => { if (!cancelled) toast({ variant: "destructive", title: "Failed to load results" }); })
+      .catch(() => { if (!cancelled) toast({ variant: "destructive", title: "Unable to load results" }); })
       .finally(() => { if (!cancelled) setIsLoadingClasses(false); });
     return () => { cancelled = true; };
   }, []);
@@ -187,10 +187,10 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
         const res = await fetch(`/api/college/exam-results/analytics?${q}`);
         const json = (await res.json()) as { analytics?: ExamAnalytics; sheets?: { id: string; title: string }[]; sections?: string[]; exams?: { key: string; label: string; examType: string }[]; error?: string };
         if (cancelled) return;
-        if (!res.ok || !json.analytics) { toast({ variant: "destructive", title: json.error ?? "Failed to load results" }); setData(null); }
+        if (!res.ok || !json.analytics) { toast({ variant: "destructive", title: json.error ?? "Unable to load results" }); setData(null); }
         else { setData({ analytics: json.analytics, sheets: json.sheets ?? [] }); setSections(json.sections ?? []); setExams(json.exams ?? []); }
       } catch {
-        if (!cancelled) toast({ variant: "destructive", title: "Failed to load results" });
+        if (!cancelled) toast({ variant: "destructive", title: "Unable to load results" });
       } finally {
         if (!cancelled) setIsLoading(false);
       }

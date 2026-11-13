@@ -31,7 +31,7 @@ export default function PrincipalStaffViewPage() {
         }
         setStaff(d.user);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load staff account" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load staff account" }))
       .finally(() => setIsLoading(false));
   }, [uid, router]);
 
@@ -50,13 +50,13 @@ export default function PrincipalStaffViewPage() {
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to reset face registration" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to reset face registration" });
         return;
       }
       toast({ title: `${staff?.name ?? "Staff member"} can now register their face again from My Attendance` });
       setConfirmingReRegister(false);
     } catch {
-      toast({ variant: "destructive", title: "Failed to reset face registration" });
+      toast({ variant: "destructive", title: "Unable to reset face registration" });
     } finally {
       setIsResetting(false);
     }

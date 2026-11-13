@@ -79,7 +79,7 @@ export async function authorizeMentoringStudent(
   studentId: string
 ): Promise<MentoringAccess> {
   const snap = await db.collection("colleges").doc(session.collegeId).collection("students").doc(studentId).get();
-  if (!snap.exists) return { ok: false, status: 404, error: "Student not found" };
+  if (!snap.exists) return { ok: false, status: 404, error: "Student not found. The record may have been deleted." };
   const student = { ...(snap.data() as StudentRecord), id: snap.id };
 
   if (student.mentorUid && student.mentorUid === session.uid) return { ok: true, via: "MENTOR", student };

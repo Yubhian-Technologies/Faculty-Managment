@@ -32,7 +32,7 @@ export default function StudentLibraryPage() {
         setLoans(d.loans ?? []);
         setReservations(d.reservations ?? []);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load library info" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load library info" }))
       .finally(() => setIsLoading(false));
   }, []);
 

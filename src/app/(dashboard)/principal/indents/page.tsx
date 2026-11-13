@@ -23,7 +23,7 @@ export default function PrincipalIndentsPage() {
     fetch("/api/college/indent-requests")
       .then((r) => r.json() as Promise<{ requests: IndentRequest[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load indent requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load indent requests" }))
       .finally(() => setIsLoading(false));
   }
 

@@ -113,7 +113,7 @@ export function ShiftWiseAttendanceView({
         }
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shifts" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shifts" });
       });
 
     return () => {
@@ -136,7 +136,7 @@ export function ShiftWiseAttendanceView({
         setRoster(d.roster ?? []);
       })
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load attendance" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load attendance" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -257,7 +257,7 @@ export function ShiftWiseAttendanceView({
       }
       reload();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to check in";
+      const msg = err instanceof Error ? err.message : "Unable to check in";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setActionLoadingId(null);
@@ -294,7 +294,7 @@ export function ShiftWiseAttendanceView({
       }
       reload();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to check out";
+      const msg = err instanceof Error ? err.message : "Unable to check out";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setActionLoadingId(null);
@@ -316,7 +316,7 @@ export function ShiftWiseAttendanceView({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update status");
+      if (!res.ok) throw new Error(data.error || "Unable to update status");
 
       toast({ title: "Status Updated", description: `Marked as ${status}` });
       reload();
@@ -376,7 +376,7 @@ export function ShiftWiseAttendanceView({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to entry emergency duty");
+      if (!res.ok) throw new Error(data.error || "Unable to entry emergency duty");
 
       toast({
         title: "Emergency Duty Recorded",
@@ -388,7 +388,7 @@ export function ShiftWiseAttendanceView({
       setSelectedShiftId("EMERGENCY");
       reload();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to record emergency duty";
+      const msg = err instanceof Error ? err.message : "Unable to record emergency duty";
       toast({ variant: "destructive", title: "Error", description: msg });
     } finally {
       setIsSubmittingEmergency(false);

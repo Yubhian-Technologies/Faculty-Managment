@@ -28,7 +28,7 @@ export function describeLoginFailure(err: unknown): LoginFailure {
     return { code, status: 503, message: "Firebase is rate- or quota-limited right now - wait a few minutes and try again" };
   }
   if (code === "auth/internal-error" || code === "14" || text.includes("unavailable") || text.includes("econn") || text.includes("etimedout")) {
-    return { code, status: 503, message: "Couldn't reach Firebase - try again in a moment" };
+    return { code, status: 503, message: "Unable to reach Firebase - try again in a moment" };
   }
-  return { code, status: 500, message: `Couldn't complete the login request (code: ${code})` };
+  return { code, status: 500, message: `Unable to complete the login request (code: ${code})` };
 }

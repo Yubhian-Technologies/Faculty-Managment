@@ -36,12 +36,12 @@ export async function PATCH(
     // used further down, after the ownership checks).
     const [snap, facultyMemberId] = await Promise.all([ref.get(), resolveFacultyMemberId(db, session.collegeId, session.uid)]);
     if (!snap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const existing = snap.data() as StudentAttendanceSession;
     if (existing.facultyId !== session.uid) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
     }
     if (existing.status === "SUBMITTED") {
       return NextResponse.json({ error: "Attendance has already been submitted and cannot be edited" }, { status: 409 });
@@ -68,7 +68,7 @@ export async function PATCH(
         : clientMs === serverMs;
       if (!Number.isNaN(clientMs) && serverMs !== 0 && !sameVersion) {
         return NextResponse.json(
-          { error: "This attendance was updated elsewhere. Please reload and try again.", session: { ...existing, id } },
+          { error: "This attendance was updated elsewhere. Reload and try again.", session: { ...existing, id } },
           { status: 409 }
         );
       }
@@ -156,7 +156,7 @@ export async function PATCH(
           return { error: { message: "This class has no students on its roster, so there is nothing to submit. Contact your HOD.", status: 400 } };
         }
         if (markedCount < fresh.totalStudents) {
-          return { error: { message: "Please mark attendance for all students before submitting", status: 400 } };
+          return { error: { message: "Mark attendance for all students before submitting", status: 400 } };
         }
         const classNotes = ((update.classNotes as string | undefined) ?? fresh.classNotes ?? "").trim();
         if (!classNotes) {
@@ -186,9 +186,9 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[college/student-attendance/[id] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

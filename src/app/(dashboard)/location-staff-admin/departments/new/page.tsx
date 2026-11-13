@@ -98,7 +98,7 @@ export default function NewDepartmentPage() {
         }),
     ])
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load directory for head selection" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load directory for head selection" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);
@@ -224,11 +224,11 @@ export default function NewDepartmentPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create department");
+      if (!res.ok) throw new Error(data.error || "Unable to create department");
 
       toast({
         title: "Department Created",
-        description: `Successfully created "${name}".`,
+        description: `Created "${name}".`,
       });
 
       if (data.credentialsCreated) {
@@ -242,7 +242,7 @@ export default function NewDepartmentPage() {
         router.push("/location-staff-admin/departments");
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to create department";
+      const msg = err instanceof Error ? err.message : "Unable to create department";
       toast({ variant: "destructive", title: "Creation Failed", description: msg });
     } finally {
       setIsSubmitting(false);

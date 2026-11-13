@@ -27,13 +27,13 @@ export async function GET(
     ]);
 
     if (!candidateSnap.exists || !applicationSnap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const candidateData = candidateSnap.data() as Candidate;
     const applicationData = applicationSnap.data() as CandidateApplication;
     if (applicationData.candidateId !== candidateId) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     let requiredDocuments: string[] = [];
@@ -57,7 +57,7 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[public/candidate-form GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -68,7 +68,7 @@ export async function PATCH(
 
   const limited = rateLimit(`candidate-form:${clientIp(request)}`, 60, 3600000);
   if (!limited.ok) {
-    return NextResponse.json({ error: "Too many requests - please try again later" }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+    return NextResponse.json({ error: "Too many requests. Wait a moment and try again." }, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
   }
   try {
     const { collegeId, candidateId } = await params;
@@ -90,11 +90,11 @@ export async function PATCH(
       collegeRef.collection("candidateApplications").doc(applicationId).get(),
     ]);
     if (!snap.exists || !applicationSnap.exists) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
     const applicationData = applicationSnap.data() as CandidateApplication;
     if (applicationData.candidateId !== candidateId) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: "Record not found. It may have been deleted." }, { status: 404 });
     }
 
     const candidateData = snap.data() as Candidate;
@@ -128,6 +128,6 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     console.error("[public/candidate-form PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

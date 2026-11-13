@@ -96,7 +96,7 @@ export default function StudentTimetablePage() {
         setMyLabBatch(d.myLabBatch ?? "");
         if (selectedSemester == null && d.resolvedSemester != null) setSelectedSemester(d.resolvedSemester);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load timetable" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load timetable" }))
       .finally(() => setIsLoading(false));
   }, [weekStart, selectedSemester]);
 
@@ -170,7 +170,7 @@ export default function StudentTimetablePage() {
       ) : !section ? (
         <div className="rounded-2xl border border-dashed bg-muted/10 p-8 text-center text-sm text-muted-foreground">
           <p className="text-base font-semibold text-foreground">No class linked</p>
-          <p className="mt-1 text-xs">No class or section is linked to your login yet. Please contact your College Office.</p>
+          <p className="mt-1 text-xs">No class or section is linked to your login yet. Contact your College Office.</p>
         </div>
       ) : !timing ? (
         <div className="rounded-2xl border border-dashed bg-muted/10 p-8 text-center text-sm text-muted-foreground">

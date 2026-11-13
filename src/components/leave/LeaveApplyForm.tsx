@@ -397,7 +397,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     fetch("/api/leave/balances")
       .then((r) => r.json() as Promise<{ leaveTypes: BalanceEntry[] }>)
       .then((data) => setTypes(data.leaveTypes ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load leave types" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load leave types" }))
       .finally(() => setIsLoadingTypes(false));
   }, []);
 
@@ -406,7 +406,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     fetch(`/api/leave/applications/${extendId}`)
       .then((r) => r.json() as Promise<{ request?: LeaveRequest; error?: string }>)
       .then((data) => {
-        if (!data.request) { toast({ variant: "destructive", title: "Couldn't load the leave you're extending" }); return; }
+        if (!data.request) { toast({ variant: "destructive", title: "Unable to load the leave you're extending" }); return; }
         setExtendSource(data.request);
         // Extend picks its own From (day after the original ends) and, for
         // SH, its own To below - both independent of the one-day/range
@@ -423,7 +423,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           setFromDate(dayAfterISO > todayISODate() ? dayAfterISO : todayISODate());
         }
       })
-      .catch(() => toast({ variant: "destructive", title: "Couldn't load the leave you're extending" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load the leave you're extending" }));
   }, [extendId]);
 
   const [editSource, setEditSource] = useState<LeaveRequest | null>(null);
@@ -432,7 +432,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     fetch(`/api/leave/applications/${editId}`)
       .then((r) => r.json() as Promise<{ request?: LeaveRequest; error?: string }>)
       .then((data) => {
-        if (!data.request) { toast({ variant: "destructive", title: "Couldn't load this leave request" }); return; }
+        if (!data.request) { toast({ variant: "destructive", title: "Unable to load this leave request" }); return; }
         const r = data.request;
         setEditSource(r);
         setFullDayMode("RANGE");
@@ -444,7 +444,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
         setReason(r.reason ?? "");
         setPlaceOfVisit(r.placeOfVisit ?? "");
       })
-      .catch(() => toast({ variant: "destructive", title: "Couldn't load this leave request" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load this leave request" }));
   }, [editId]);
 
   // Once this edit's own periods load for the pre-filled dates (the effect
@@ -559,11 +559,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
             }),
           });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to submit");
+      if (!res.ok) throw new Error(data.error ?? "Unable to submit");
       toast({ variant: "success", title: editId ? "Leave request updated" : "Leave request submitted" });
       router.push(backHref);
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to submit" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to submit" });
     } finally {
       setIsSubmitting(false);
     }

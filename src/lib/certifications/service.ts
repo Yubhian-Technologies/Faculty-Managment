@@ -44,7 +44,7 @@ export async function submitRequest(
   }
 
   const student = await loadStudentByUid(db, user.collegeId, user.uid);
-  if (!student) throw new CertificationError("INVALID", "Your login isn't linked to a student record yet. Please contact your College Office.", 400);
+  if (!student) throw new CertificationError("INVALID", "Your login isn't linked to a student record yet. Contact your College Office.", 400);
 
   const col = CERTIFICATE_REQUESTS_COL(db, user.collegeId);
   const existingSnap = await col.where("studentId", "==", student.id).where("certificateTypeKey", "==", "NO_DUE").get();

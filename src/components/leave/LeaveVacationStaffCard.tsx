@@ -29,7 +29,7 @@ export function LeaveVacationStaffCard() {
         for (const role of ROUTABLE_REQUESTER_ROLES) full[role] = saved[role] ?? defaultIsVacation(role, true);
         setConfig(full);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load vacation staff settings" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load vacation staff settings" }))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -50,11 +50,11 @@ export function LeaveVacationStaffCard() {
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to save");
+        throw new Error(j.error ?? "Unable to save");
       }
       toast({ variant: "success", title: "Vacation / non-vacation staff saved" });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setIsSaving(false);
     }

@@ -69,7 +69,7 @@ export default function PurchaseLatestPage() {
             .slice(0, LIMIT)
         );
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load recent requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load recent requests" }))
       .finally(() => setIsLoading(false));
   }, []);
 

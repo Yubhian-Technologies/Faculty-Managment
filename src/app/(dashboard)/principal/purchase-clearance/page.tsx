@@ -33,7 +33,7 @@ export default function PrincipalPurchaseClearancePage() {
     fetch("/api/college/finance-purchase-clearance")
       .then((r) => r.json() as Promise<{ requests: FinancePurchaseClearance[] }>)
       .then((d) => setRequests(d.requests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load purchase clearance requests" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load purchase clearance requests" }))
       .finally(() => setIsLoading(false));
   }
 

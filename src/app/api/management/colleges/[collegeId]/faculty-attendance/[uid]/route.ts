@@ -31,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
 
     const userSnap = await collegeRef.collection("users").doc(uid).get();
     if (!userSnap.exists) {
-      return NextResponse.json({ error: "Person not found" }, { status: 404 });
+      return NextResponse.json({ error: "Person not found. The record may have been deleted." }, { status: 404 });
     }
     const user = userSnap.data() as { name?: string; department?: string; role?: string };
     if (user.role !== "HOD" && user.role !== "PANEL_MEMBER") {
@@ -80,9 +80,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
     });
   } catch (err) {
     if (err instanceof Error && err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     console.error("[management/colleges/faculty-attendance GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

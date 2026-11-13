@@ -106,7 +106,7 @@ export function AttendanceAssigneeDialog({ onOpenChange, sectionId, semesterBody
       });
       const json = (await res.json().catch(() => ({}))) as { slots?: DraftSlot[]; error?: string };
       if (!res.ok || !json.slots) {
-        toast({ variant: "destructive", title: "Could not assign", description: json.error });
+        toast({ variant: "destructive", title: "Unable to assign", description: json.error });
         return;
       }
       onApplied(json.slots);

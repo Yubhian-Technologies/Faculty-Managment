@@ -29,7 +29,7 @@ export function AllotSectionPanel({ plan, onAllotted }: { plan: ExamSeatingPlan;
     fetch("/api/college/exam-seating/sections")
       .then((r) => r.json() as Promise<{ sections?: SeatingSectionRef[] }>)
       .then((d) => setSections(d.sections ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load sections" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load sections" }));
   }, []);
 
   const section = sections.find((s) => s.id === sectionId);
@@ -42,7 +42,7 @@ export function AllotSectionPanel({ plan, onAllotted }: { plan: ExamSeatingPlan;
     fetch(`/api/college/exam-seating/sections?sectionId=${encodeURIComponent(sectionId)}`)
       .then((r) => r.json() as Promise<{ students?: SeatingStudent[] }>)
       .then((d) => { if (!cancelled) setStudents(d.students ?? []); })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load students" }));
+      .catch(() => toast({ variant: "destructive", title: "Unable to load students" }));
     return () => { cancelled = true; };
   }, [sectionId]);
 
@@ -91,12 +91,12 @@ export function AllotSectionPanel({ plan, onAllotted }: { plan: ExamSeatingPlan;
         }),
       });
       const data = (await res.json()) as { seated?: number; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to allot");
+      if (!res.ok) throw new Error(data.error ?? "Unable to allot");
       toast({ variant: "success", title: `${data.seated} student(s) seated` });
       setRows([]);
       onAllotted();
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Failed to allot" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to allot" });
     } finally {
       setBusy(false);
     }

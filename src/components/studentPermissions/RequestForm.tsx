@@ -94,7 +94,7 @@ export function RequestForm({
       .then(setOptions)
       .catch((e) =>
         setOptionsError(
-          e instanceof Error ? e.message : "Couldn't load the form",
+          e instanceof Error ? e.message : "Unable to load the form",
         ),
       );
   }, []);
@@ -229,7 +229,7 @@ export function RequestForm({
     } catch (e) {
       toast({
         variant: "destructive",
-        title: e instanceof Error ? e.message : "Couldn't send the request",
+        title: e instanceof Error ? e.message : "Unable to send the request",
       });
     } finally {
       setSubmitting(false);
@@ -240,7 +240,7 @@ export function RequestForm({
     return (
       <EmptyState
         icon={Inbox}
-        headline="Couldn't load the request form."
+        headline="Unable to load the request form."
         hint={optionsError}
       />
     );

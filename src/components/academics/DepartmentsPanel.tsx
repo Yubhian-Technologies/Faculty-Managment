@@ -559,7 +559,7 @@ function DepartmentDrillDown({ departments, courses, rootId, onExit }: {
         const res = await fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections?: Section[] }>);
         setSections(res.sections ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load sections" });
+        toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         setIsLoading(false);
       }
@@ -811,7 +811,7 @@ export function DepartmentsPanel() {
       setDepartments(deptRes.departments ?? []);
       setCourses(coursesRes.courses ?? []);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load departments" });
+      toast({ variant: "destructive", title: "Unable to load departments" });
     } finally {
       setIsLoading(false);
     }
@@ -838,11 +838,11 @@ export function DepartmentsPanel() {
       // The server refuses a delete that would orphan data and says exactly
       // what is in the way ("still has sub-departments", "still has students
       // or sections", ...). That message was being swallowed here, leaving
-      // "Failed to remove department" with no way to tell what to clear first.
+      // "Unable to remove department" with no way to tell what to clear first.
       toast({
         variant: "destructive",
-        title: `Couldn't remove ${dept.name}`,
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: `Unable to remove ${dept.name}`,
+        description: err instanceof Error ? err.message : "Try again.",
       });
     } finally {
       setDeletingDept(null);

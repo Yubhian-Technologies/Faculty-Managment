@@ -75,7 +75,7 @@ export default function LocationStaffBulkImportPage() {
         .then((r) => (r.ok ? r.json() : Promise.resolve({ shifts: [] })))
         .then((d) => setShifts(d.shifts ?? [])),
     ])
-      .catch(() => toast({ variant: "destructive", title: "Failed to load campus departments and shifts" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load campus departments and shifts" }))
       .finally(() => setLoadingLookups(false));
   }, [userLocationId]);
 
@@ -148,7 +148,7 @@ export default function LocationStaffBulkImportPage() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: "Failed to generate Excel template" });
+      toast({ variant: "destructive", title: "Unable to generate Excel template" });
     } finally {
       setIsBuildingExcel(false);
     }
@@ -219,7 +219,7 @@ export default function LocationStaffBulkImportPage() {
       setRows(parsed);
     } catch (err) {
       console.error(err);
-      setParseError(err instanceof Error ? err.message : "Failed to parse file.");
+      setParseError(err instanceof Error ? err.message : "Unable to parse file.");
       setRows([]);
     } finally {
       setIsParsing(false);
@@ -280,7 +280,7 @@ export default function LocationStaffBulkImportPage() {
       const data = (await res.json()) as ImportResult & { error?: string };
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to process bulk staff import");
+        throw new Error(data.error || "Unable to process bulk staff import");
       }
 
       setImportResult(data);
@@ -291,7 +291,7 @@ export default function LocationStaffBulkImportPage() {
             : "";
         toast({
           title: "Import Complete",
-          description: `Successfully registered ${data.created} staff member(s)${extraMsg}.`,
+          description: `Registered ${data.created} staff member(s)${extraMsg}.`,
         });
       }
     } catch (err) {

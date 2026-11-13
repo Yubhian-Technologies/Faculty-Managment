@@ -16,7 +16,7 @@ interface MyDuty { id: string; date: string; from: string; to: string; category:
 
 const STATUS: Record<DutyStatus, { label: string; tone: "pending" | "approved" | "secondary" | "rejected" | "outline" }> = {
   DRAFT: { label: "Draft", tone: "outline" },
-  PUBLISHED: { label: "New - please acknowledge", tone: "pending" },
+  PUBLISHED: { label: "New - acknowledge", tone: "pending" },
   ACKNOWLEDGED: { label: "Acknowledged", tone: "secondary" },
   COMPLETED: { label: "Done", tone: "approved" },
   CANCELLED: { label: "Cancelled", tone: "rejected" },
@@ -33,7 +33,7 @@ export default function MyInvigilationPage() {
     fetch("/api/college/invigilation/my", { cache: "no-store" })
       .then((r) => r.json() as Promise<{ duties?: MyDuty[] }>)
       .then((d) => setDuties(d.duties ?? []))
-      .catch(() => { setDuties([]); toast({ variant: "destructive", title: "Failed to load your duties" }); });
+      .catch(() => { setDuties([]); toast({ variant: "destructive", title: "Unable to load your duties" }); });
   }
   useEffect(load, []);
 
@@ -42,11 +42,11 @@ export default function MyInvigilationPage() {
     try {
       const res = await fetch(`/api/college/invigilation/duties/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "acknowledge" }) });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Could not acknowledge");
+      if (!res.ok) throw new Error(data.error ?? "Unable to acknowledge");
       toast({ variant: "success", title: "Acknowledged" });
       load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not acknowledge" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to acknowledge" });
     } finally {
       setBusy(null);
     }

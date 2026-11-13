@@ -26,7 +26,7 @@ export default function ClassRepresentativesSettingsPage() {
         const json = await res.json() as { sections?: SectionListItem[] };
         setSections((json.sections ?? []).filter((s) => s.accessLevel !== "secondary"));
       } catch {
-        toast({ variant: "destructive", title: "Failed to load sections" });
+        toast({ variant: "destructive", title: "Unable to load sections" });
       } finally {
         setIsLoading(false);
       }
@@ -48,14 +48,14 @@ export default function ClassRepresentativesSettingsPage() {
         body: JSON.stringify({ department, count }),
       });
       const json = await res.json() as { error?: string; sections?: { id: string; classRepresentatives: SectionListItem["classRepresentatives"] }[] };
-      if (!res.ok) throw new Error(json.error ?? "Could not save");
+      if (!res.ok) throw new Error(json.error ?? "Unable to save");
       const picksById = new Map((json.sections ?? []).map((x) => [x.id, x.classRepresentatives]));
       setSections((prev) => prev.map((s) => (s.department === department
         ? { ...s, classRepresentativeCount: count, classRepresentatives: picksById.get(s.id) ?? s.classRepresentatives }
         : s)));
       toast({ variant: "success", title: `${department}: ${count} Class Representative${count === 1 ? "" : "s"} per section` });
     } catch (err) {
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Could not save" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
     } finally {
       setSavingDept(null);
     }

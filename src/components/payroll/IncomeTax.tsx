@@ -141,7 +141,7 @@ function RulesDialog({ url, fy, onClose, onSaved }: { url: string; fy: string; o
     try {
       await payrollFetch(url, { method: "PUT", body: JSON.stringify({ rules: r, version: d.saved ? d.rules.version : 0 }) });
       toast({ variant: "success", title: `FY ${fy} tax rules saved` }); onSaved();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
   return (
@@ -197,7 +197,7 @@ function ProfileDialog({ url, row, fy, onClose, onSaved }: { url: string; row: R
       void _o;
       await payrollFetch(url, { method: "PUT", body: JSON.stringify({ rev: p0.rev, profile: { ...rest, ...(hasOpening ? { opening } : {}) } }) });
       toast({ variant: "success", title: "Saved - open months pick it up on Recalculate" }); onSaved();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't save" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
     finally { setBusy(false); }
   }
   const d = p.declarations;
@@ -345,7 +345,7 @@ function OpeningImport({ url, parseUrl, fy, people, onClose, onDone }: { url: st
       if (rows.length === 0) throw new Error("No rows with a 'Paid up to' month");
       setFile({ headers, rows });
       await run("preview", { headers, rows });
-    } catch (err) { toast({ variant: "destructive", title: err instanceof Error ? err.message : "Couldn't read the file" }); }
+    } catch (err) { toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to read the file" }); }
   }
   async function run(mode: "preview" | "apply", body = file) {
     if (!body) return;
@@ -357,7 +357,7 @@ function OpeningImport({ url, parseUrl, fy, people, onClose, onDone }: { url: st
     } catch (err) {
       const data = (err as { data?: Plan }).data;
       if (data?.rows) setPlan(data);
-      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Couldn't import" });
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to import" });
     } finally { setBusy(false); }
   }
   const bad = plan?.rows.filter((r) => r.status === "ERROR") ?? [];

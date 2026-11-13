@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     }
     // The certificates the student may apply for (with their own requests below them).
     if (view === "catalog") {
-      if (session.role !== "STUDENT") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      if (session.role !== "STUDENT") return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
       const [catalog, requests] = await Promise.all([studentCatalog(db, user), listMine(db, user)]);
       return NextResponse.json({ ...catalog, requests });
     }

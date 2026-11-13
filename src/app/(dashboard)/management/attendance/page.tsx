@@ -378,7 +378,7 @@ export default function ManagementAttendancePage() {
       const res = await fetch(`/api/management/colleges/${selectedCollegeId}/monthly-export?${params.toString()}`);
       const d = await res.json() as { rows?: MonthlySummaryRow[]; department?: string; error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: d.error ?? "Failed to export" });
+        toast({ variant: "destructive", title: d.error ?? "Unable to export" });
         return;
       }
       if (!d.rows || d.rows.length === 0) {
@@ -389,7 +389,7 @@ export default function ManagementAttendancePage() {
       const label = scope === "college" ? collegeName : (d.department || selectedDepartmentName);
       exportRosterMonthlyCSV(d.rows, `attendance-${label}-${exportMonth}`);
     } catch {
-      toast({ variant: "destructive", title: "Failed to export" });
+      toast({ variant: "destructive", title: "Unable to export" });
     } finally {
       setExportingScope(null);
     }

@@ -35,7 +35,7 @@ async function loadTargetInScope(
     .doc(uid)
     .get();
 
-  if (!targetSnap.exists) return { targetSnap: null, error: "User not found" as const, status: 404 };
+  if (!targetSnap.exists) return { targetSnap: null, error: "User not found. The account may have been deleted." as const, status: 404 };
 
   const target = targetSnap.data() as { role: string; department?: string };
 
@@ -143,12 +143,12 @@ export async function GET(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[college/users/[uid] GET]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -178,7 +178,7 @@ export async function PATCH(
     }> & PersonalDetailsInput;
 
     if (body.newPassword !== undefined && body.newPassword.length < 6) {
-      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+      return NextResponse.json({ error: "The password must be at least 6 characters." }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -258,7 +258,7 @@ export async function PATCH(
             return NextResponse.json({ error: "That email is already used by another account" }, { status: 409 });
           }
           if (code === "auth/invalid-email") {
-            return NextResponse.json({ error: "Enter a valid email address" }, { status: 400 });
+            return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
           }
           throw e;
         }
@@ -279,7 +279,7 @@ export async function PATCH(
       (!body.profilePhotoUrl.startsWith("https://firebasestorage.googleapis.com/") ||
         !body.profilePhotoUrl.includes(encodeURIComponent(`profile-photos/${uid}_`)))
     ) {
-      return NextResponse.json({ error: "Invalid photo URL" }, { status: 400 });
+      return NextResponse.json({ error: "The photo link is not valid. Upload the photo again." }, { status: 400 });
     }
 
     const now = new Date();
@@ -406,12 +406,12 @@ export async function PATCH(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[college/users/[uid] PATCH]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }
 
@@ -514,11 +514,11 @@ export async function DELETE(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[college/users/[uid] DELETE]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

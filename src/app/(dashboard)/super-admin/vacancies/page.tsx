@@ -40,7 +40,7 @@ export default function SuperAdminVacanciesPage() {
     fetch("/api/admin/general-admin-vacancies")
       .then((r) => r.json() as Promise<{ vacancyRequests: GeneralAdminVacancy[] }>)
       .then((d) => setVacancies(d.vacancyRequests ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load vacancies" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load vacancies" }))
       .finally(() => setIsLoading(false));
   }
 

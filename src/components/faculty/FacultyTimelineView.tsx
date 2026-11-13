@@ -113,7 +113,7 @@ export function FacultyTimelineView({ fetchUrl, backHref, backLabel = "Back to F
     fetch(fetchUrl)
       .then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>)
       .then((d) => setFaculty(d.faculty ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load faculty" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load faculty" }))
       .finally(() => setIsLoading(false));
   }, [fetchUrl]);
 

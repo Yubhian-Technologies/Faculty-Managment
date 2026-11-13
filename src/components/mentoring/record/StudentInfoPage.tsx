@@ -197,7 +197,7 @@ export function StudentInfoPage({ api, entries, editor, readOnly }: { api: strin
       setDrafts({});
       toast({ title: "Details saved" });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }

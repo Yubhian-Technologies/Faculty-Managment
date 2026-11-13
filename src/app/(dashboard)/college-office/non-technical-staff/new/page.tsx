@@ -168,14 +168,14 @@ export default function NewNonTechnicalStaffPage() {
         return;
       }
       if (!res.ok) {
-        toast({ variant: "destructive", title: "Failed to add staff member", description: json.error });
+        toast({ variant: "destructive", title: "Unable to add staff member", description: json.error });
         return;
       }
 
       toast({ variant: "success", title: isLibrary ? "Library staff added" : "Supporting staff added", description: `${record.legalName || "The staff member"} has been added.` });
       router.push(listPath);
     } catch {
-      toast({ variant: "destructive", title: "Network error", description: "Please try again." });
+      toast({ variant: "destructive", title: "Network error", description: "Try again." });
     } finally {
       setSubmitting(false);
     }

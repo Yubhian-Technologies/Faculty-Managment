@@ -89,7 +89,7 @@ export default function ExamCellAttendanceReportPage() {
         setCourses(courseJson.courses ?? []);
         setDepartments(deptJson.departments ?? []);
       } catch {
-        toast({ variant: "destructive", title: "Failed to load courses/departments" });
+        toast({ variant: "destructive", title: "Unable to load courses/departments" });
       } finally {
         setIsLoadingData(false);
       }
@@ -141,10 +141,10 @@ export default function ExamCellAttendanceReportPage() {
         });
         const res = await fetch(`/api/college/attendance-percentage-report?${params}`);
         const data = (await res.json()) as { sections?: SectionOption[]; error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Failed to load sections");
+        if (!res.ok) throw new Error(data.error ?? "Unable to load sections");
         setSectionOptions(data.sections ?? []);
       } catch (e) {
-        toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to load sections" });
+        toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to load sections" });
       } finally {
         setIsLoadingSections(false);
       }
@@ -179,7 +179,7 @@ export default function ExamCellAttendanceReportPage() {
       const data = (await res.json()) as {
         students?: ReportRow[]; totalStudents?: number; matchedCount?: number; sectionsCount?: number; error?: string;
       };
-      if (!res.ok) throw new Error(data.error ?? "Failed to generate report");
+      if (!res.ok) throw new Error(data.error ?? "Unable to generate report");
       setRows(data.students ?? []);
       setMeta({
         totalStudents: data.totalStudents ?? 0,
@@ -187,7 +187,7 @@ export default function ExamCellAttendanceReportPage() {
         sectionsCount: data.sectionsCount ?? 0,
       });
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to generate report" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to generate report" });
     } finally {
       setIsRunning(false);
     }

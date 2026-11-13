@@ -49,7 +49,7 @@ export function MonthlyRuns({ collegeId }: { collegeId?: string }) {
       await payrollFetch(`/api/college/payroll/runs${collegeQs(collegeId)}`, { method: "POST", body: JSON.stringify({ month: prepMonth }) });
       toast({ variant: "success", title: `${monthLabel(prepMonth)} prepared` });
       setOpen(prepMonth); load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't prepare" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to prepare" }); }
     finally { setBusy(false); }
   }
 
@@ -59,7 +59,7 @@ export function MonthlyRuns({ collegeId }: { collegeId?: string }) {
       if (r.rows.length === 0) { toast({ title: `Nothing released in FY ${fy} yet` }); return; }
       const name = (await payrollFetch<{ collegeName?: string }>(`/api/college/payroll/runs/${r.rows[0].month}${collegeQs(collegeId)}`).catch(() => ({ collegeName: "College" }))).collegeName ?? "College";
       await downloadAnnualRegister(fy, r.rows, name);
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't build the register" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to build the register" }); }
   }
 
   if (open) return <RunView collegeId={collegeId} month={open} onBack={() => { setOpen(null); load(); }} />;
@@ -148,7 +148,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
       await payrollFetch(url, { method: "POST", body: JSON.stringify({ action, rev: run.rev, ...extra }) });
       toast({ variant: "success", title: { SUBMIT: "Sent to Accounts", RETURN: "Returned to the College Office", APPROVE: "Approved", REOPEN: "Reopened", RELEASE: "Released - the month is locked" }[action] ?? "Done" });
       setDialog(null); load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't do that" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to do that" }); }
     finally { setBusy(false); }
   }
   async function recalc() {
@@ -157,19 +157,19 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
       const r = await payrollFetch<{ changed: number; removed: number; added: number }>(`/api/college/payroll/runs/${month}/recalculate${collegeQs(collegeId)}`, { method: "POST", body: JSON.stringify({ rev: run.rev }) });
       toast({ variant: "success", title: `Recalculated: ${r.changed} changed, ${r.added} added, ${r.removed} removed` });
       load();
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't recalculate" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to recalculate" }); }
     finally { setBusy(false); }
   }
   async function remove() {
     if (!window.confirm(`Remove the ${monthLabel(month)} draft? You can prepare it again.`)) return;
     try { await payrollFetch(url, { method: "DELETE" }); onBack(); }
-    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Couldn't remove" }); }
+    catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to remove" }); }
   }
   async function statutory() {
     try {
       const problems = await downloadStatutory(run, d!.lines, d!.collegeName);
       if (problems.length) toast({ variant: "destructive", title: "Check before filing", description: problems.join(" · ") });
-    } catch { toast({ variant: "destructive", title: "Couldn't build the files" }); }
+    } catch { toast({ variant: "destructive", title: "Unable to build the files" }); }
   }
   function bank() {
     const missing = downloadBankFile(run, d!.lines);

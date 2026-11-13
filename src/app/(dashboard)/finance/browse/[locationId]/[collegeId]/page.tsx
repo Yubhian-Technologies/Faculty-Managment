@@ -65,7 +65,7 @@ export default function FinanceBrowseDepartmentsPage() {
           }))
         );
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load college activity" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load college activity" }))
       .finally(() => setIsLoading(false));
   }, [params.collegeId, params.locationId, setSelectedCollegeId]);
 

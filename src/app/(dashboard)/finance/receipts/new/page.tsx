@@ -52,7 +52,7 @@ export default function NewReceiptPage() {
       toast({ variant: "success", title: "Receipt recorded" });
       router.push("/finance/receipts");
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to record receipt", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to record receipt", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSaving(false);
     }

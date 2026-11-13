@@ -61,7 +61,7 @@ export function DesignationCatalogCard({ category }: DesignationCatalogCardProps
     return fetch(`/api/college/designations?category=${category}`)
       .then((r) => r.json() as Promise<{ items: DesignationCatalogItem[] }>)
       .then((d) => setItems(d.items ?? []))
-      .catch(() => toast({ variant: "destructive", title: "Failed to load designations" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load designations" }))
       .finally(() => setIsLoading(false));
   }
 
@@ -91,13 +91,13 @@ export function DesignationCatalogCard({ category }: DesignationCatalogCardProps
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to add designation");
+        throw new Error(j.error ?? "Unable to add designation");
       }
       setNewDraft(EMPTY_DRAFT);
       toast({ variant: "success", title: "Designation added" });
       void load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to add designation" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to add designation" });
     } finally {
       setIsAdding(false);
     }
@@ -120,13 +120,13 @@ export function DesignationCatalogCard({ category }: DesignationCatalogCardProps
       });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to update designation");
+        throw new Error(j.error ?? "Unable to update designation");
       }
       setEditingId(null);
       toast({ variant: "success", title: "Designation updated" });
       void load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to update designation" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to update designation" });
     } finally {
       setBusyId(null);
     }
@@ -143,7 +143,7 @@ export function DesignationCatalogCard({ category }: DesignationCatalogCardProps
       if (!res.ok) throw new Error();
       void load();
     } catch {
-      toast({ variant: "destructive", title: "Failed to update status" });
+      toast({ variant: "destructive", title: "Unable to update status" });
     } finally {
       setBusyId(null);
     }
@@ -156,13 +156,13 @@ export function DesignationCatalogCard({ category }: DesignationCatalogCardProps
       const res = await fetch(`/api/college/designations/${deleteTarget.id}`, { method: "DELETE" });
       if (!res.ok) {
         const j = await res.json() as { error?: string };
-        throw new Error(j.error ?? "Failed to delete designation");
+        throw new Error(j.error ?? "Unable to delete designation");
       }
       toast({ variant: "success", title: "Designation removed" });
       setDeleteTarget(null);
       void load();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Failed to delete designation" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to delete designation" });
     } finally {
       setIsDeleting(false);
     }

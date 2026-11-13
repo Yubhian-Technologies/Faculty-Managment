@@ -29,10 +29,10 @@ const PURPOSE_LABEL_BY_CODE = new Map(CERTIFICATE_PURPOSE_OPTIONS.map((p) => [p.
 export function resolvePurpose(code: unknown, otherText?: unknown): { purposeCode: string; purpose: string } {
   const purposeCode = typeof code === "string" ? code.trim() : "";
   const label = PURPOSE_LABEL_BY_CODE.get(purposeCode as CertificatePurposeCode);
-  if (!label) throw new Error("Please select a valid purpose");
+  if (!label) throw new Error("Select a valid purpose");
   if (purposeCode === "OTHER") {
     const custom = typeof otherText === "string" ? otherText.trim() : "";
-    if (!custom) throw new Error("Please describe the purpose");
+    if (!custom) throw new Error("Describe the purpose");
     return { purposeCode, purpose: custom };
   }
   return { purposeCode, purpose: label };

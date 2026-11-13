@@ -232,7 +232,7 @@ export function EntrySectionView({
       }
       setEditing(null);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setSaving(false);
     }
@@ -244,7 +244,7 @@ export function EntrySectionView({
       await sendJson(`${api}/record/entries/${id}`, "DELETE");
       editor.remove(id);
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not remove" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to remove" });
     }
   }
 

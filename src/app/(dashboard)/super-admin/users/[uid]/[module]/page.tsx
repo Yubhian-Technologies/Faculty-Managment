@@ -43,7 +43,7 @@ export default function SuperAdminUserModulePage() {
           .then((c) => setCollegeType(c.colleges?.find((x) => x.id === d.user?.collegeId)?.type))
           .catch(() => {});
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load user" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load user" }))
       .finally(() => setIsLoading(false));
   }, [uid, moduleDef, router]);
 

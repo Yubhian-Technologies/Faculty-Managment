@@ -39,7 +39,7 @@ export default function RejectInterviewPage() {
         }
         setInterview(data.interview);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load interview" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load interview" }))
       .finally(() => setLoading(false));
   }, [interviewId, router]);
 

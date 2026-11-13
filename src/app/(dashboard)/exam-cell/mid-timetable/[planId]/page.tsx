@@ -67,9 +67,9 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
 
   const load = useCallback(() => {
     fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}`)
-      .then(async (r) => { const d = (await r.json()) as Data & { error?: string }; if (!r.ok) throw new Error(d.error ?? "Failed to load"); return d; })
+      .then(async (r) => { const d = (await r.json()) as Data & { error?: string }; if (!r.ok) throw new Error(d.error ?? "Unable to load"); return d; })
       .then((d) => { setData(d); setDays(d.plan.days); setSessions(d.plan.sessions); setMaxPerDay(String(d.plan.maxPerDay ?? DEFAULT_MAX_PER_DAY)); setSetupDirty(false); })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Unable to load"));
   }, [planId]);
   useEffect(() => { load(); }, [load]);
 
@@ -102,12 +102,12 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order: ordering.map((b) => b.key) }),
       });
       const j = (await res.json()) as { branchOrder?: string[]; error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Could not save the order");
+      if (!res.ok) throw new Error(j.error ?? "Unable to save the order");
       const rank = new Map(ordering.map((b, i) => [b.key, i]));
       setData((d) => d && ({ ...d, plan: { ...d.plan, branchOrder: j.branchOrder }, branches: [...d.branches].sort((a, b) => (rank.get(a.key) ?? 999) - (rank.get(b.key) ?? 999)) }));
       setOrdering(null);
       toast({ variant: "success", title: "Branch order saved - the sheet and every PDF follow it" });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save the order" }); }
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save the order" }); }
     finally { setSavingOrder(false); }
   }
 
@@ -208,7 +208,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
       const sessions = onlySession ? plan.sessions.filter((x) => x.id === onlySession) : plan.sessions;
       const label = onlySession ? sessions[0]?.label ?? "session" : mode === "sessions" ? "session-wise" : "timetable";
       await downloadMidTimetablePdf({ ...plan, sessions, rows, exam: data.exam }, `mid${plan.midNumber}-${plan.courseName}-year${plan.year}-${label}`, mode);
-    } catch { toast({ variant: "destructive", title: "Could not make the PDF" }); }
+    } catch { toast({ variant: "destructive", title: "Unable to make the PDF" }); }
     finally { setBusy(null); }
   }
 
@@ -218,7 +218,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
       body: JSON.stringify({ action, slots: rowsOf(b), baseRev: b.timetable?.rev ?? 0 }),
     });
     const json = (await res.json()) as { error?: string; timetable?: MidTimetable };
-    return res.ok && json.timetable ? json.timetable : json.error ?? "Could not save";
+    return res.ok && json.timetable ? json.timetable : json.error ?? "Unable to save";
   }
 
   /** Save every changed branch - as a draft, or (publish) published when it is complete. */
@@ -268,7 +268,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days, sessions, maxPerDay: Number(maxPerDay) }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Could not save" }); return; }
+      if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Unable to save" }); return; }
       toast({ variant: "success", title: "Exam days and time saved" });
       setEdits({});
       load();
@@ -285,7 +285,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...move, dryRun: !apply }),
       });
       const json = (await res.json()) as { error?: string; preview?: { branch: string; subjects: string[]; status: string }[]; notified?: number };
-      if (!res.ok) { setMovePreview(null); setMoveError(json.error ?? "Could not reschedule"); return; }
+      if (!res.ok) { setMovePreview(null); setMoveError(json.error ?? "Unable to reschedule"); return; }
       if (!apply) { setMovePreview(json.preview ?? []); return; }
       toast({ variant: "success", title: `Rescheduled to ${dayLabel(move.toDate)}`, description: json.notified ? `${json.notified} faculty member(s) and student(s) notified.` : undefined });
       setMoveOpen(false);
@@ -299,7 +299,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
   async function removePlan() {
     const res = await fetch(`/api/college/mid-timetables/${encodeURIComponent(planId)}`, { method: "DELETE" });
     const json = (await res.json()) as { error?: string };
-    if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Could not delete" }); setDeleting(false); return; }
+    if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Unable to delete" }); setDeleting(false); return; }
     router.push("/exam-cell/mid-timetable");
   }
 

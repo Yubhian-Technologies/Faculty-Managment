@@ -63,7 +63,7 @@ export async function bulkChangeCollegeEmails(
         results.push(bulkFailure(fileRow, employeeId, err.code, err.message, { newEmail }));
       } else {
         console.error("[bulkChangeCollegeEmails] row failed", employeeId, err);
-        results.push(bulkFailure(fileRow, employeeId, "ERROR", "Could not be updated - nothing was changed for this row, try it again", { newEmail }));
+        results.push(bulkFailure(fileRow, employeeId, "ERROR", "Unable to be updated - nothing was changed for this row, try it again", { newEmail }));
       }
     }
   }

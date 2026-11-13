@@ -59,12 +59,12 @@ export function RequestFacultyAccountDialog({
         }),
       });
       const data = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to submit request");
+      if (!res.ok) throw new Error(data.error ?? "Unable to submit request");
       toast({ variant: "success", title: "Faculty account requested", description: "The Webmaster has been notified." });
       onOpenChange(false);
       onSubmitted();
     } catch (err) {
-      toast({ variant: "destructive", title: "Failed to submit request", description: err instanceof Error ? err.message : undefined });
+      toast({ variant: "destructive", title: "Unable to submit request", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSubmitting(false);
     }

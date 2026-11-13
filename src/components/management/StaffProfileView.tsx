@@ -67,13 +67,13 @@ export function StaffProfileView({ collegeId, role, title, department, backHref 
       const res = await fetch(`/api/management/colleges/${collegeId}/principal-attendance/reset`, { method: "POST" });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
-        toast({ variant: "destructive", title: json.error ?? "Failed to reset face registration" });
+        toast({ variant: "destructive", title: json.error ?? "Unable to reset face registration" });
         return;
       }
       toast({ title: `${profile?.name ?? "Principal"} can now register their face again from My Attendance` });
       setConfirmingReRegister(false);
     } catch {
-      toast({ variant: "destructive", title: "Failed to reset face registration" });
+      toast({ variant: "destructive", title: "Unable to reset face registration" });
     } finally {
       setIsResetting(false);
     }

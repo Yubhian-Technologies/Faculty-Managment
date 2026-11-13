@@ -42,7 +42,7 @@ export default function LocationDeptHeadCandidatesPage() {
           : all;
         setCandidates(filtered);
       })
-      .catch(() => toast({ variant: "destructive", title: "Failed to load candidates" }))
+      .catch(() => toast({ variant: "destructive", title: "Unable to load candidates" }))
       .finally(() => setIsLoading(false));
   }
 

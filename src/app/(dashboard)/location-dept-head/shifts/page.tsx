@@ -44,7 +44,7 @@ export default function LocationShiftsPage() {
         }),
     ])
       .catch(() => {
-        if (!isCancelled) toast({ variant: "destructive", title: "Failed to load shifts" });
+        if (!isCancelled) toast({ variant: "destructive", title: "Unable to load shifts" });
       })
       .finally(() => {
         if (!isCancelled) setIsLoading(false);

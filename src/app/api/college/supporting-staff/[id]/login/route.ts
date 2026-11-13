@@ -55,7 +55,7 @@ export async function POST(
 
     const snap = await ref.get();
     if (!snap.exists) {
-      return NextResponse.json({ error: "Staff record not found" }, { status: 404 });
+      return NextResponse.json({ error: "Staff record not found. It may have been deleted." }, { status: 404 });
     }
 
     const data = migrateSupportingStaffDoc(snap.data() ?? {}) as {
@@ -66,16 +66,16 @@ export async function POST(
 
     const requiredCategory = SUPPORTING_STAFF_ROLE_CATEGORY[session.role];
     if (requiredCategory && data.staffCategory !== requiredCategory) {
-      return NextResponse.json({ error: "Staff record not found" }, { status: 404 });
+      return NextResponse.json({ error: "Staff record not found. It may have been deleted." }, { status: 404 });
     }
     if (session.role === "HOD") {
       const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
       if (!canHodManageFacultyDepartment(scope, data.department ?? "")) {
-        return NextResponse.json({ error: "Staff record not found" }, { status: 404 });
+        return NextResponse.json({ error: "Staff record not found. It may have been deleted." }, { status: 404 });
       }
     }
     if (session.role === "LIBRARY" && data.department !== unitLabelForHeadRole("LIBRARY")) {
-      return NextResponse.json({ error: "Staff record not found" }, { status: 404 });
+      return NextResponse.json({ error: "Staff record not found. It may have been deleted." }, { status: 404 });
     }
 
     if (data.userUid) {
@@ -132,14 +132,14 @@ export async function POST(
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     }
     if (err && typeof err === "object" && "code" in err && err.code === "auth/email-already-exists") {
-      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+      return NextResponse.json({ error: "An account with this email address already exists." }, { status: 409 });
     }
     const authErr = firebaseAuthErrorResponse(err);
     if (authErr) return authErr;
     console.error("[supporting-staff/[id]/login POST]", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Unable to complete the request. Try again; if it continues, contact the administrator." }, { status: 500 });
   }
 }

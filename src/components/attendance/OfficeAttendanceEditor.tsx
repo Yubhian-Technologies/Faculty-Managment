@@ -58,7 +58,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
             body: JSON.stringify({ facultyId, assignmentId: p.assignmentId, date, periodNumber: p.periodNumber }),
           });
           const json = (await res.json()) as { session?: StudentAttendanceSession; error?: string };
-          if (!res.ok || !json.session) throw new Error(json.error ?? `Failed to open period ${p.periodNumber}`);
+          if (!res.ok || !json.session) throw new Error(json.error ?? `Unable to open period ${p.periodNumber}`);
           return [p.periodNumber, json.session] as const;
         }));
         if (cancelled) return;
@@ -77,7 +77,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
         setDraft(nextDraft);
         setClassNotes(first.classNotes ?? "");
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to open attendance");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Unable to open attendance");
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -135,7 +135,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ entries, classNotes: classNotes.trim(), reason: reason.trim(), submit: true }),
         });
-        if (!res.ok) failed.push(`Period ${n}: ${((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Failed to save"}`);
+        if (!res.ok) failed.push(`Period ${n}: ${((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Unable to save"}`);
       } catch {
         failed.push(`Period ${n}: Network error`);
       }

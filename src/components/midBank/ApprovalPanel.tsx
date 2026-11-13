@@ -36,12 +36,12 @@ export function ApprovalPanel({ bank, isOwner, isHod, onChanged, editHref }: { b
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: confirm, remarks }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Could not save");
+      if (!res.ok) throw new Error(data.error ?? "Unable to save");
       toast({ variant: "success", title: { submit: "Submitted to the HOD", withdraw: "Submission withdrawn", approve: "Approved - the Exam Cell can now use it", return: "Returned to the faculty" }[confirm] });
       setConfirm(null); setRemarks("");
       onChanged();
     } catch (e) {
-      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Could not save" });
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" });
     } finally {
       setBusy(false);
     }
