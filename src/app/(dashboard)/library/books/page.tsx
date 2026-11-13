@@ -184,7 +184,7 @@ export default function LibraryBooksPage() {
     <div className="space-y-6">
       <PageHeader
         title="Book Catalog"
-        description="Manage the library's books and copy counts"
+        description="Manage the library's books and number of copies."
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
@@ -222,7 +222,7 @@ export default function LibraryBooksPage() {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="isbn">ISBN</Label>
-              <Input id="isbn" value={form.isbn} onChange={(e) => setForm({ ...form, isbn: e.target.value })} onBlur={handleIsbnBlur} placeholder="Optional - autofills title/author" />
+              <Input id="isbn" value={form.isbn} onChange={(e) => setForm({ ...form, isbn: e.target.value })} onBlur={handleIsbnBlur} placeholder="Optional, autofills title/author" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="title">Title</Label>

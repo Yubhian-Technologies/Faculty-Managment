@@ -188,7 +188,7 @@ export default function PrincipalSettingsPage() {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <PageHeader title="Settings" description="College configuration, period rules, and module settings" />
+      <PageHeader title="Settings" description="College configuration, period rules and module settings." />
 
       {settings?.updatedAt && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border bg-muted/40 px-3 py-2">
@@ -204,7 +204,7 @@ export default function PrincipalSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">College Information</CardTitle>
-          <CardDescription>Managed by Super Admin - shown here for reference</CardDescription>
+          <CardDescription>Managed by the Super Admin; shown here for reference.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -233,9 +233,7 @@ export default function PrincipalSettingsPage() {
             <Clock className="h-4 w-4 text-primary" />
             Timetable Period Rules & Continuous Slots
           </CardTitle>
-          <CardDescription>
-            Set weekly limits and continuous slot allocation (block sizes) for Theory and Practical subjects. When placing a subject on the timetable grid, Theory and Practical automatically allocate these continuous periods (e.g. Lab: 3 continuous slots). Other subject types (Tutorial, Seminar, Project, etc.) are unrestricted.
-          </CardDescription>
+          <CardDescription>Set the weekly limits and the number of consecutive periods for theory and practical subjects. When a subject is placed on the timetable, these consecutive periods are allocated automatically (for example, three periods for a lab). Other subject types (tutorial, seminar, project and others) have no limit.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -369,7 +367,7 @@ export default function PrincipalSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Faculty Norms</CardTitle>
-          <CardDescription>Core ratios used to validate vacancy requests for your college</CardDescription>
+          <CardDescription>Core ratios used to validate vacancy requests for your college.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-2">
@@ -429,7 +427,7 @@ export default function PrincipalSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Student Permissions</CardTitle>
-          <CardDescription>Who approves permission requests, per department and type</CardDescription>
+          <CardDescription>Who approves permission requests, for each department and type.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild variant="outline">
@@ -441,9 +439,7 @@ export default function PrincipalSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Leave Module</CardTitle>
-          <CardDescription>
-            A new-joining employee automatically converts into their vacation / non-vacation leave category after this many years of service.
-          </CardDescription>
+          <CardDescription>A newly joined employee moves to their vacation or non-vacation leave category after this many years of service.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2 max-w-xs">

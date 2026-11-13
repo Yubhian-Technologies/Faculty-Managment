@@ -128,7 +128,7 @@ function CurriculumPageInner() {
               courseName={picker.selectedCatalogItem?.name ?? ""}
               initialDepartmentId={picker.selectedDepartmentId || undefined}
             />
-          : <p className="text-sm text-muted-foreground">Pick a Regulation and Course above, then click Load.</p>
+          : <p className="text-sm text-muted-foreground">Select a regulation and course above, then choose Load.</p>
       )}
       {step === "documents" && <DocumentsStep picker={picker} />}
     </div>

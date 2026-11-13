@@ -502,7 +502,7 @@ export default function NewSectionPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add Section"
-        description="Create a new class section for your department"
+        description="Create a new class section for your department."
       />
 
       <Card>
@@ -531,7 +531,7 @@ export default function NewSectionPage() {
                     {myDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">You manage more than one department - choose which this section belongs to.</p>
+                <p className="text-xs text-muted-foreground">You manage more than one department. Choose the department this section belongs to.</p>
               </div>
             )}
 
@@ -618,9 +618,7 @@ export default function NewSectionPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Students in this section are promoted into this core department next year.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Students in this section are promoted to this core department next year.</p>
                 </div>
                 {/* Only shown once a branch with its own sub-departments is
                     picked (e.g. ECE -> ECE-VLSI) - optional, defaults to the
@@ -736,7 +734,7 @@ export default function NewSectionPage() {
                     {batchOptions.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">Admission year to passout year, derived from this course&apos;s duration</p>
+                <p className="text-xs text-muted-foreground">Admission year to year of completion, based on the course duration.</p>
               </div>
               <div className="space-y-2">
                 <Label>Regulation</Label>
@@ -769,7 +767,7 @@ export default function NewSectionPage() {
               <Input
                 value={form.classroomNumber}
                 maxLength={40}
-                placeholder="e.g. B-204"
+                placeholder="B-204"
                 onChange={(e) => setF({ classroomNumber: e.target.value })}
               />
             </div>

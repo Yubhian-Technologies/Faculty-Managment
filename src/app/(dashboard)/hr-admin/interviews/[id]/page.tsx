@@ -328,9 +328,7 @@ export default function HRInterviewDetailPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Panel Evaluation (70%) - 5 criteria, rated 1–5 · Student Feedback (30%) - 5 criteria, rated 1–5
-            </p>
+            <p className="text-xs text-muted-foreground">Panel evaluation (70%): 5 criteria rated 1 to 5. Student feedback (30%): 5 criteria rated 1 to 5.</p>
           </CardHeader>
           <CardContent className="space-y-6">
             {(interview.candidatesInfo ?? []).map((c) => {
@@ -466,9 +464,7 @@ export default function HRInterviewDetailPage() {
               <ArrowRight className="h-4 w-4 text-primary" />
               Finalize Candidate Decisions
             </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Apply panel recommendations to candidate statuses. Selected candidates can then receive offer letters.
-            </p>
+            <p className="text-xs text-muted-foreground">Apply the panel&apos;s recommendations to candidate statuses. Selected candidates can then receive offer letters.</p>
           </CardHeader>
           <CardContent className="space-y-3">
             {(interview.candidatesInfo ?? []).map((c) => {

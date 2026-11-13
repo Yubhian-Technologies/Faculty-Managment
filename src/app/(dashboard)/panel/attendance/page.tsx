@@ -128,7 +128,7 @@ export default function FacultyAttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Attendance"
-        description="Your monthly attendance record"
+        description="Your monthly attendance record."
       />
 
       {isCurrentMonth && !readOnly && (
@@ -141,12 +141,10 @@ export default function FacultyAttendancePage() {
                 Today is a holiday{todayStatus.holidayName ? ` — ${todayStatus.holidayName}` : ""}. No attendance required.
               </p>
             ) : todayStatus?.isOnLeave ? (
-              <p className="text-sm text-muted-foreground">You&apos;re on approved leave today — attendance cannot be marked.</p>
+              <p className="text-sm text-muted-foreground">You are on approved leave today; attendance cannot be marked.</p>
             ) : faceRegistered === false ? (
               <>
-                <p className="text-sm text-muted-foreground">
-                  Register your face to start using facial attendance check-in.
-                </p>
+                <p className="text-sm text-muted-foreground">Register your face to use face recognition check-in.</p>
                 <Button onClick={() => setDialogMode("register")}>
                   <ScanFace className="h-4 w-4 mr-1.5" /> Register
                 </Button>
@@ -165,7 +163,7 @@ export default function FacultyAttendancePage() {
               </>
             ) : (
               <>
-                <p className="text-sm text-muted-foreground">You haven&apos;t marked attendance today.</p>
+                <p className="text-sm text-muted-foreground">You have not marked attendance today.</p>
                 <Button onClick={() => setDialogMode("check-in")}>
                   <LogIn className="h-4 w-4 mr-1.5" /> Check In
                 </Button>

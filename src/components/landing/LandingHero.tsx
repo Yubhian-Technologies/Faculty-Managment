@@ -75,7 +75,7 @@ function DashboardCards({ variant }: { variant: "floating" | "grid" }) {
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">Workflow Overview</p>
-              <p className="text-xs text-muted-foreground">Every role, one platform</p>
+              <p className="text-xs text-muted-foreground">Every role, one platform.</p>
             </div>
           </div>
           <div className="mt-3 flex items-end gap-1.5">
@@ -109,7 +109,7 @@ function DashboardCards({ variant }: { variant: "floating" | "grid" }) {
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground">Workflow Overview</p>
-            <p className="text-xs text-muted-foreground">Every role, one platform</p>
+            <p className="text-xs text-muted-foreground">Every role, one platform.</p>
           </div>
         </div>
         <div className="mt-4 flex items-end gap-1.5">

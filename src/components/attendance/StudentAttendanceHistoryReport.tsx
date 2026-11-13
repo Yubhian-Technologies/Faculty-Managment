@@ -208,7 +208,7 @@ export function StudentAttendanceHistoryReport({
     <div className="space-y-6">
       <PageHeader
         title={`${studentName} — Attendance History`}
-        description="Cumulative subject-wise attendance, by month, a custom date range, or the student's entire history."
+        description="Cumulative subject-wise attendance by month, for a date range or for the student's entire record."
         actions={
           <Button variant="outline" onClick={() => (onBack ? onBack() : backHref ? router.push(backHref) : router.back())}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back

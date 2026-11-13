@@ -38,7 +38,7 @@ export default function FinanceAuditPage() {
     <div className="space-y-6">
       <PageHeader
         title="Audit & Compliance"
-        description="Financial audit trail - every budget, approval, payment, and clearance action"
+        description="Financial audit trail of every budget, approval, payment and clearance action."
       />
 
       <DataTable

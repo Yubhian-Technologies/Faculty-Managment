@@ -52,7 +52,7 @@ export default function AdminInterviewsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Interview Plans"
-        description="Review, approve and score interview plans submitted by HR Admin"
+        description="Review, approve and score the interview plans submitted by HR Admin."
       />
 
       {collegeId && (

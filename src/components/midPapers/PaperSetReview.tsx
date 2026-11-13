@@ -162,7 +162,7 @@ function DownloadDialog({ pattern, current, papers, isDone, busy, onClose, onDow
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Download PDF</DialogTitle>
-          <DialogDescription>Each paper is its own file. Nothing is finalized here - printing for the exam stays on the Mid Question Paper page.</DialogDescription>
+          <DialogDescription>Each paper is a separate file. Nothing is finalised here; printing for the examination is done on the Mid Question Paper page.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 text-sm">
           {papers.length > 1 && (

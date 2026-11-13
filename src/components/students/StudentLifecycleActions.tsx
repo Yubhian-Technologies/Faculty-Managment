@@ -127,9 +127,7 @@ export function StudentLifecycleActions({
               {student.discontinuedReason ? ` Reason: ${student.discontinuedReason}` : ""}
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Detain a student who did not complete the year (they stay where they are for now), or mark them discontinued if they have left the college.
-            </p>
+            <p className="text-sm text-muted-foreground">Detain a student who did not complete the year (they stay in their current year for now), or mark them as discontinued if they have left the college.</p>
           )}
           <div className="flex flex-wrap gap-2">
             {student.status === "REGULAR" && (
@@ -175,7 +173,7 @@ export function StudentLifecycleActions({
           {(dialog === "DETAIN" || dialog === "DISCONTINUE") && (
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Reason (optional)</label>
-              <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Shortage of attendance / backlogs" />
+              <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Shortage of attendance / backlogs" />
             </div>
           )}
           <DialogFooter>

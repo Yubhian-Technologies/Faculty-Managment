@@ -78,9 +78,7 @@ export function FinancialYearSettingsCard() {
         <CardTitle className="text-base flex items-center gap-2">
           <Landmark className="h-4 w-4" />Financial Year
         </CardTitle>
-        <CardDescription>
-          Set each financial year&rsquo;s start and end date. Budget cycles pick from this list.
-        </CardDescription>
+        <CardDescription>Set the start and end date of each financial year. Budget cycles are selected from this list.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (

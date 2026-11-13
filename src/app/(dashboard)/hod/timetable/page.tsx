@@ -293,9 +293,7 @@ function SectionTimetable() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Find a section</CardTitle>
-          <CardDescription>
-            Each filter narrows the next one. Nothing loads until you press Load.
-          </CardDescription>
+          <CardDescription>Each filter narrows the next. Nothing is loaded until you choose Load.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -321,9 +319,7 @@ function SectionTimetable() {
                   </SelectContent>
                 </Select>
                 {courseGroups.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    No courses set up for your department yet. Ask the Principal to add courses under Departments.
-                  </p>
+                  <p className="text-xs text-muted-foreground">No courses are set up for your department. Ask the Principal to add courses under Departments.</p>
                 )}
               </div>
 
@@ -338,9 +334,7 @@ function SectionTimetable() {
                   </SelectContent>
                 </Select>
                 {selectedCourse && years.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    This department teaches no years of that course yet.
-                  </p>
+                  <p className="text-xs text-muted-foreground">This department does not yet teach any year of that course.</p>
                 )}
               </div>
 
@@ -383,9 +377,7 @@ function SectionTimetable() {
                   </SelectContent>
                 </Select>
                 {year && !isLoadingSections && sections.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    No sections for this year. Add them under the Sections module first.
-                  </p>
+                  <p className="text-xs text-muted-foreground">No sections for this year. Add them in the Sections module first.</p>
                 )}
               </div>
 
@@ -435,7 +427,7 @@ export default function HODTimetablePage() {
     <div className="space-y-6">
       <PageHeader
         title="Timetable"
-        description="Pick a course, year, semester and section, then load that section's timetable to build or publish it"
+        description="Select a course, year, semester and section, then load the section's timetable to build or publish it."
       />
 
       <div className="flex flex-wrap gap-2" role="tablist">

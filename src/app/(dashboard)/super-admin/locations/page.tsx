@@ -64,7 +64,7 @@ export default function LocationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Locations"
-        description="Manage institution locations (Bhimavaram, Hyderabad, Naraspur…)"
+        description="Manage institution locations (Bhimavaram, Hyderabad, Narsapur and others)."
         actions={
           <Button asChild>
             <Link href="/super-admin/locations/new">+ Add Location</Link>

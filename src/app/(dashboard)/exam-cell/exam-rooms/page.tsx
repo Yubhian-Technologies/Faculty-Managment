@@ -161,7 +161,7 @@ export default function ExamRoomsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Exam Rooms"
-        description="Classrooms used for exams - block, floor, benches and students per bench. Exam Cell seats students into these."
+        description="Classrooms used for examinations, with block, floor, benches and students per bench. The Exam Cell seats students in these rooms."
         actions={
           <>
             <input

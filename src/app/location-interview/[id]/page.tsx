@@ -153,7 +153,7 @@ export default function CandidateBioDataPage() {
               </div>
               <div className="space-y-2">
                 <Label>Current Address <span className="text-destructive">*</span></Label>
-                <Textarea value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} rows={2} placeholder="Door No, Street, City, State - PIN" required />
+                <Textarea value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} rows={2} placeholder="Door No, Street, City, State, PIN" required />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">

@@ -165,7 +165,7 @@ export default function SuperAdminSettingsPage() {
     <div className="max-w-3xl space-y-6">
       <PageHeader
         title="Faculty Norms Configuration"
-        description="Set government-mandated faculty requirements used to validate vacancy requests - configured per college"
+        description="Set the government-mandated faculty requirements used to validate vacancy requests, for each college."
       />
 
       <div className="max-w-sm space-y-2">
@@ -203,7 +203,7 @@ export default function SuperAdminSettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Regulatory Authority</CardTitle>
-              <CardDescription>The body whose norms govern faculty requirements for your institutions</CardDescription>
+              <CardDescription>The body whose norms govern faculty requirements for your institutions.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="max-w-sm space-y-2">
@@ -245,7 +245,7 @@ export default function SuperAdminSettingsPage() {
                     />
                     <span className="text-sm text-muted-foreground">: 1</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Students per faculty member</p>
+                  <p className="text-xs text-muted-foreground">Students per faculty member.</p>
                 </div>
 
                 <div className="space-y-2">
@@ -262,7 +262,7 @@ export default function SuperAdminSettingsPage() {
                     />
                     <span className="text-sm text-muted-foreground">hrs</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Required contact hours per week</p>
+                  <p className="text-xs text-muted-foreground">Required contact hours per week.</p>
                 </div>
 
                 <div className="space-y-2">
@@ -276,7 +276,7 @@ export default function SuperAdminSettingsPage() {
                     onChange={(e) => setDefaultMinFacultyPerDept(stripLeadingZeros(e.target.value))}
                     className="w-24"
                   />
-                  <p className="text-xs text-muted-foreground">Default minimum headcount</p>
+                  <p className="text-xs text-muted-foreground">Default minimum headcount.</p>
                 </div>
               </div>
             </CardContent>
@@ -288,7 +288,7 @@ export default function SuperAdminSettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-base">Cadre-wise Ratio</CardTitle>
-                  <CardDescription className="mt-1">Required count per designation per department</CardDescription>
+                  <CardDescription className="mt-1">Required number for each designation in each department.</CardDescription>
                 </div>
                 <Button
                   size="sm"
@@ -302,9 +302,7 @@ export default function SuperAdminSettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {positionNorms.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No positions configured. Click &ldquo;Add Position&rdquo; to define position norms.
-                </p>
+                <p className="text-sm text-muted-foreground text-center py-4">No positions configured. Choose Add Position to define position norms.</p>
               ) : (
                 positionNorms.map((pos, i) => (
                   <div key={i} className="rounded-lg border p-4 space-y-3">
@@ -326,7 +324,7 @@ export default function SuperAdminSettingsPage() {
                         <Input
                           value={pos.designation}
                           onChange={(e) => updatePosition(i, "designation", e.target.value)}
-                          placeholder="e.g. Assistant Professor"
+                          placeholder="Assistant Professor"
                         />
                       </div>
 
@@ -361,9 +359,7 @@ export default function SuperAdminSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Customise Dashboards</CardTitle>
-          <CardDescription>
-            Number and reorder the sidebar tabs for a college and role, and add your own tabs with custom pages.
-          </CardDescription>
+          <CardDescription>Number and reorder the sidebar tabs for a college and role, and add tabs with custom pages.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild><Link href="/super-admin/customize">Open dashboard customiser</Link></Button>
@@ -442,7 +438,7 @@ function SuperAdminChangePasswordCard() {
           <KeyRound className="h-4 w-4" />
           Change Password
         </CardTitle>
-        <CardDescription>Update your Super Admin login password</CardDescription>
+        <CardDescription>Update your Super Admin password.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
@@ -590,9 +586,7 @@ function NavVisibilitySection() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Navigation Visibility</CardTitle>
-        <CardDescription>
-          Hide unfinished modules (or individual items within a module) from a role&apos;s sidebar - per college, without a code change.
-        </CardDescription>
+        <CardDescription>Hide unfinished modules, or individual items within a module, from a role&apos;s sidebar for each college.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">

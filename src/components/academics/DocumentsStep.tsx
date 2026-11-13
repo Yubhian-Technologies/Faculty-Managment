@@ -13,7 +13,7 @@ export function DocumentsStep({ picker }: { picker: ReturnType<typeof useRegulat
   const [docView, setDocView] = useState<"regulation" | "syllabus">("regulation");
 
   if (!picker.isLoaded || !picker.selectedCourse || !picker.selectedRegulation) {
-    return <p className="text-sm text-muted-foreground">Pick a Regulation and Course above, then click Load.</p>;
+    return <p className="text-sm text-muted-foreground">Select a regulation and course above, then choose Load.</p>;
   }
   return (
     <Card>

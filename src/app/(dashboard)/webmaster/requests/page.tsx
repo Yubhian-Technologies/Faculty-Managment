@@ -8,7 +8,7 @@ export default function WebmasterRequestsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Email Requests"
-        description="Every pending official-email request for your college"
+        description="Pending official email requests for your college."
       />
       <EmailRequestQueue
         status="PENDING"

@@ -75,7 +75,7 @@ export default function PanelFeedbackPage() {
     <div className="space-y-6">
       <PageHeader
         title="Feedback"
-        description="Interview feedback you have submitted"
+        description="Interview feedback you have submitted."
       />
 
       <DataTable

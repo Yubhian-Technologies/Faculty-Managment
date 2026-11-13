@@ -78,9 +78,7 @@ export function PermissionRequestDialog({ onSubmitted }: { onSubmitted?: () => v
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Apply for Permission</DialogTitle>
-            <DialogDescription>
-              For arriving late or being away for part of a day. This goes to your approver for a decision.
-            </DialogDescription>
+            <DialogDescription>For arriving late or leaving for part of the day. The request is sent to your approver.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">

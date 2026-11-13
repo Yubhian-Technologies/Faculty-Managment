@@ -110,7 +110,7 @@ export default function ExamSeatingPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Exam Seating" description="Build a room-wise seating plan for an exam, review it, then print it." />
+      <PageHeader title="Exam Seating" description="Build a room-wise seating plan for an examination, review it and print it." />
 
       <PairedPlanCard rooms={rooms} />
 
@@ -141,7 +141,7 @@ export default function ExamSeatingPage() {
           <div className="space-y-2">
             <Label>Rooms (filled in block → floor → room order)</Label>
             {rooms.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No rooms yet - College Office adds them under Exam Rooms.</p>
+              <p className="text-sm text-muted-foreground">No rooms yet. The College Office adds them under Exam Rooms.</p>
             ) : (
               <div className="space-y-2 rounded-lg border p-3">
                 {rooms.map((r) => {
@@ -189,10 +189,7 @@ export default function ExamSeatingPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">New bench-wise plan</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Pick the rooms, then allot one section at a time: its students are divided into groups by bench count and
-            each group is sent to a room. Rooms with 2 or 3 per bench take that many different branches.
-          </p>
+          <p className="text-sm text-muted-foreground">Select the rooms, then allot one section at a time. Its students are divided into groups by bench count and each group is sent to a room. Rooms with 2 or 3 students per bench take that many different branches.</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 max-h-56 overflow-y-auto rounded-lg border p-3">
@@ -203,7 +200,7 @@ export default function ExamSeatingPage() {
                 <span className="text-xs text-muted-foreground">{roomBenches(r)} benches × {roomPerBench(r)}</span>
               </label>
             ))}
-            {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet - College Office adds them under Exam Rooms.</p>}
+            {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet. The College Office adds them under Exam Rooms.</p>}
           </div>
           <Button disabled={layRoomIds.length === 0} loading={layCreating} onClick={() => void createLayered()}>
             <Armchair className="h-4 w-4 mr-1" /> Create and start allotting

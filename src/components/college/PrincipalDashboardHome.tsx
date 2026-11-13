@@ -248,7 +248,7 @@ export function FacultyTodayBody({ f }: { f: ReturnType<typeof summarizeFacultyT
         ]} />
       {f.departments.length > 1 && (
         <div className="space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground">By department (lowest first)</p>
+          <p className="text-xs font-medium text-muted-foreground">By department (lowest first).</p>
           {f.departments.slice(0, 8).map((d) => {
             const tone = pctTone(d.pct);
             return (

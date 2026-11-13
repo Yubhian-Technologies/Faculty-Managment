@@ -486,10 +486,7 @@ function ImportSemesterResults() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">2. Template</CardTitle>
-          <CardDescription>
-            One row per student per subject: Regd. No, Subject Code, Grade. The code must be the subject&rsquo;s college code. Your own results sheet works too if its headings are close
-            (e.g. HTNO, Sub Code, Grade Secured); other columns such as Name, Credits or marks are ignored - only grades are imported.
-          </CardDescription>
+          <CardDescription>One row per student per subject: Regd. No, Subject Code and Grade. The code must be the subject&apos;s college code. Your own results sheet can be used if its headings are similar (for example HTNO, Sub Code, Grade Secured). Other columns such as Name, Credits or marks are ignored; only grades are imported.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button variant="outline" onClick={() => void downloadTemplate()} loading={busy === "template"} disabled={!group || (needsTarget && !target)}>
@@ -536,7 +533,7 @@ function ImportSemesterResults() {
               </div>
               {summary.groups.length > 0 && (
                 <div className="text-sm">
-                  <p className="text-xs text-muted-foreground">One draft sheet per branch / sub-department, from each student&rsquo;s own department:</p>
+                  <p className="text-xs text-muted-foreground">One draft sheet for each branch or sub-department, based on each student&apos;s own department:</p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {summary.groups.map((g) => (
                       <Badge key={`${g.department}|${g.subDepartment}`} variant="outline">{g.subDepartment || g.department} · {g.students}</Badge>

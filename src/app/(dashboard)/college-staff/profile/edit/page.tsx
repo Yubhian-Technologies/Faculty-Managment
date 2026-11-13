@@ -135,9 +135,7 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
         <Card className="mt-6">
           <CardHeader><CardTitle className="text-base">Identity & Employment</CardTitle></CardHeader>
           <CardContent className="space-y-5">
-            <p className="text-xs text-muted-foreground -mt-2">
-              Employee ID, College Email, Department, Designation, Staff Category and Date of Joining are set by your HOD / College Office and can&apos;t be changed here.
-            </p>
+            <p className="text-xs text-muted-foreground -mt-2">Employee ID, College Email, Department, Designation, Staff Category and Date of Joining are set by your HOD or the College Office and cannot be changed here.</p>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -190,7 +188,7 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
               </div>
               <div className="space-y-2">
                 <Label>Highest Qualification *</Label>
-                <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. Diploma, B.Com, ITI" />
+                <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="Diploma, B.Com, ITI" />
               </div>
             </div>
 
@@ -249,7 +247,7 @@ function IdentityEditForm({ staff }: { staff: Partial<SupportingStaffMember> }) 
                         label="Label (optional)"
                         value={item.label}
                         onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
-                        placeholder="e.g. Personal, WhatsApp, or a name"
+                        placeholder="Personal, WhatsApp, or a name"
                       />
                       <TextInput
                         label="Mobile Number"

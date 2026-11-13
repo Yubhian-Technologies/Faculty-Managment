@@ -6,7 +6,7 @@ import { ExamCellQueue } from "@/components/certifications/ExamCellQueue";
 export default function ExamCellCertificateRequestsPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="PC & CMM Requests" description="Students awaiting Provisional Certificate and Consolidated Marks Memo" />
+      <PageHeader title="PC & CMM Requests" description="Students awaiting the Provisional Certificate and Consolidated Marks Memo." />
       <ExamCellQueue />
     </div>
   );

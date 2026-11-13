@@ -27,7 +27,7 @@ export default function CustomPageView() {
     return <div className="space-y-4 max-w-3xl"><Skeleton className="h-8 w-1/3" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div>;
   }
   if (isError) return <p className="text-sm text-destructive">This page could not be loaded. Try again.</p>;
-  if (!data) return <p className="text-sm text-muted-foreground">This page isn&apos;t available.</p>;
+  if (!data) return <p className="text-sm text-muted-foreground">This page is not available.</p>;
 
   return (
     <div className="space-y-6">

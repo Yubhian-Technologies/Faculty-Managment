@@ -75,7 +75,7 @@ export default function EditFundAllocationPage() {
     <div className="max-w-xl">
       <PageHeader
         title={`Modify Allocation - ${allocation?.targetName ?? ""}`}
-        description="Adjust the remaining amount for this allocation"
+        description="Adjust the remaining amount of this allocation."
       />
 
       <Card>

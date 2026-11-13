@@ -515,7 +515,7 @@ export function WeeklyTimetableMatrix({
                   <p className="text-sm font-semibold text-foreground">
                     No classes scheduled for {DAY_LABELS[activeDayTab]}
                   </p>
-                  <p className="text-xs text-muted-foreground">Enjoy your free time or prepare for upcoming classes.</p>
+                  <p className="text-xs text-muted-foreground">No class is scheduled for you at this time.</p>
                 </div>
               );
             }

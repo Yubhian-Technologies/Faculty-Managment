@@ -94,7 +94,7 @@ export default function WebmasterUsersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="All Accounts" description="Every login in this college - reset a password if someone is locked out" />
+      <PageHeader title="All Accounts" description="Every login in this college. Reset a password if someone is locked out." />
 
       <DataTable
         data={users}

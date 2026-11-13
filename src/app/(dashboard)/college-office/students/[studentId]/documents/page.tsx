@@ -130,7 +130,7 @@ export default function StudentDocumentsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <PageHeader title="Student Documents" description="Certificates and documents on file for this student" />
+        <PageHeader title="Student Documents" description="Certificates and documents on file for this student." />
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => router.push(profileHref)}>
             <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Student
@@ -157,7 +157,7 @@ export default function StudentDocumentsPage() {
                   {resolveStudentDocumentTypeLabel(d)}
                 </Badge>
                 {d.description && <p className="text-xs text-muted-foreground line-clamp-2">{d.description}</p>}
-                {d.selfUploaded && <p className="text-xs text-muted-foreground">Uploaded by the student</p>}
+                {d.selfUploaded && <p className="text-xs text-muted-foreground">Uploaded by the student.</p>}
                 <div className="flex items-center justify-between pt-2 border-t border-border/60">
                   <a href={d.fileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary font-medium flex items-center gap-1 hover:underline">
                     <Download className="h-3.5 w-3.5" /> Download

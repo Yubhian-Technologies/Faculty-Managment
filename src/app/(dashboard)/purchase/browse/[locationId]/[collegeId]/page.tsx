@@ -88,7 +88,7 @@ export default function PurchaseBrowseDepartmentsPage() {
         <Button variant="ghost" size="icon" asChild>
           <Link aria-label="Back" href={`/purchase/browse/${params.locationId}`}><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
-        <PageHeader title={college?.name ?? "Departments"} description="Select a department to see its requests" />
+        <PageHeader title={college?.name ?? "Departments"} description="Select a department to view its requests." />
       </div>
 
       {isLoading ? (

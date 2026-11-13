@@ -40,7 +40,7 @@ function Workspace() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Certificates" description="Approve students' certificate requests, issue them, and keep the register"
+      <PageHeader title="Certificates" description="Approve students' certificate requests, issue certificates and maintain the register."
         actions={canStart ? <BatchStart onStarted={() => setVersion((v) => v + 1)} /> : undefined} />
       <SegmentedTabs options={options} value={tab} onChange={(k) => router.replace(`/certificates?tab=${k}`)} />
       {tab === "approvals" && <Inbox key={version} />}

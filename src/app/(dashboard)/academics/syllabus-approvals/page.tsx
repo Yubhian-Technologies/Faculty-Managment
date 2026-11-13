@@ -42,7 +42,7 @@ export default function SyllabusApprovalsPage() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <PageHeader title="Syllabus Approvals" description="The HODs prepare each subject's syllabus (units, COs, CO-PO mapping) and submit it here. Freeze it, or return it with remarks. Once frozen only you can change it, and every change is recorded." />
+      <PageHeader title="Syllabus Approvals" description="HODs prepare each subject's syllabus (units, COs and CO-PO mapping) and submit it here for approval. Freeze it or return it with remarks. A frozen syllabus can be changed only by Academics, and every change is recorded." />
       {error && <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{error}</p>}
 
       <div className="flex flex-wrap gap-2" role="tablist">

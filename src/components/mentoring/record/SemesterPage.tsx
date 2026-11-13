@@ -157,7 +157,7 @@ function Sheet({ api, sheet, stale, onOpenMeetings, readOnly }: { api: string; s
             <span><strong>{src.label}.</strong> <span className="text-muted-foreground">{sheet.subjectsNote}</span></span>
           </p>
           {!sheet.mids.mid1 && !sheet.mids.mid2 && sheet.subjects.length > 0 && (
-            <p className="mt-1 text-xs text-muted-foreground">Mid I and Mid II attendance appear once the Exam Cell publishes the mid exam dates for this semester.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Mid I and Mid II attendance appear once the Exam Cell publishes the Mid examination dates for this semester.</p>
           )}
         </CardContent>
       </Card>

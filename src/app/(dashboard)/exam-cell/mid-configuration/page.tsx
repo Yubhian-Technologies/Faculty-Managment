@@ -41,7 +41,7 @@ function MidConfigurationTabs() {
   const tab = sp.get("tab") === "marks" ? "marks" : sp.get("tab") === "paper" ? "paper" : sp.get("tab") === "cea" ? "cea" : "mid";
   return (
     <div className={cn("space-y-6", tab === "mid" && "max-w-2xl", (tab === "paper" || tab === "cea") && "max-w-4xl")}>
-      <PageHeader title="Mid Configuration" description="How many Mid exams the college runs, the question bank rules, the question paper template, and the Internal / External marks." />
+      <PageHeader title="Mid Configuration" description="The number of Mid examinations, question bank rules, the question paper template and the Internal and External marks." />
       <nav className="inline-flex flex-wrap rounded-xl border bg-muted/40 p-1 text-sm" aria-label="Mid Configuration sections">
         {([["mid", "Mid exams & question bank"], ["paper", "Question paper"], ["marks", "Marks (Internal / External)"], ["cea", "CIE"]] as const).map(([k, label]) => (
           <Link key={k} href={k === "mid" ? "/exam-cell/mid-configuration" : `/exam-cell/mid-configuration?tab=${k}`} aria-current={tab === k ? "page" : undefined}
@@ -143,10 +143,7 @@ function MidSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Mid Exams</CardTitle>
-          <CardDescription>
-            How many mid-semester exams this college runs - used by the Mid Timings &amp; Dates tab
-            to offer Mid 1..N when publishing a schedule.
-          </CardDescription>
+          <CardDescription>The number of Mid examinations this college holds. The Mid Timings and Dates tab offers Mid 1 to Mid N when publishing a schedule.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2 max-w-xs">
@@ -167,7 +164,7 @@ function MidSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">How faculty prepare a Mid</CardTitle>
-          <CardDescription>For the whole college. It can&apos;t change while faculty are preparing for an open deadline.</CardDescription>
+          <CardDescription>Applies to the whole college. It cannot be changed while faculty are preparing for an open deadline.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -206,7 +203,7 @@ function MidSettings() {
                 <span><span className="block font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
               </label>
             ))}
-            <p className="text-xs text-muted-foreground">A bank or paper already started keeps what it started with.</p>
+            <p className="text-xs text-muted-foreground">A bank or paper already started keeps its original settings.</p>
             <label className="flex items-start gap-3 pt-2 text-sm">
               <Checkbox className="mt-0.5" checked={printPo && outcomes.poMapping} disabled={!outcomes.poMapping} onCheckedChange={(c) => setPrintPo(c === true)} />
               <span><span className="block font-medium">Print POs on question papers</span><span className="block text-xs text-muted-foreground">Adds the PO / PSO column to Mid and CIE papers. Off: papers show Marks, CO and BL only - the mapping stays in the syllabus. Applies to every paper printed from now on.</span></span>

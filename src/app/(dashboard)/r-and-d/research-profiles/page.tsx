@@ -168,7 +168,7 @@ export default function RAndDResearchProfilesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Research Profiles"
-        description="Verify staff-submitted researcher IDs (ORCID, Scopus, Researcher ID, Google Scholar, IRINS)"
+        description="Verify researcher IDs submitted by staff (ORCID, Scopus, Researcher ID, Google Scholar, IRINS)."
       />
 
       <div className="flex gap-2 border-b">

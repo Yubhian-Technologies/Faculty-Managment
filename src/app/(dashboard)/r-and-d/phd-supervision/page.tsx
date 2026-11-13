@@ -188,7 +188,7 @@ export default function RAndDPhdSupervisionPage() {
     <div className="space-y-6">
       <PageHeader
         title="Ph.D. Supervision"
-        description="Verify staff-submitted Ph.D. supervision & guidance records"
+        description="Verify Ph.D. supervision and guidance records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

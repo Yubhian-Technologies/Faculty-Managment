@@ -451,7 +451,7 @@ function PrincipalFacultyContent() {
     <div className="space-y-6">
       <PageHeader
         title="Staff Profiles"
-        description="Staff records of the College"
+        description="Staff records of the college."
         actions={
           <div className="flex items-center gap-2">
             {selectedIds.size > 0 && (

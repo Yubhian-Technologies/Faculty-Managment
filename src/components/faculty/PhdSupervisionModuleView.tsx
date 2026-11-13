@@ -294,7 +294,7 @@ function RecordFormFields({
             <TextInput label="Phone Number of Scholar" type="tel" value={form.scholarPhone} onChange={(v) => set("scholarPhone", v)} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Year of Scholar Allocation" value={form.yearOfAllocation} onChange={(v) => setAndCount("yearOfAllocation", v)} placeholder="e.g. 2022" />
+            <TextInput label="Year of Scholar Allocation" value={form.yearOfAllocation} onChange={(v) => setAndCount("yearOfAllocation", v)} placeholder="2022" />
             {/* Derived, so it's shown read-only rather than as an input a
                 submitter could put a conflicting number into. */}
             <div className="space-y-2">

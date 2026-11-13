@@ -40,7 +40,7 @@ export default function FinanceExpenseRequestsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Expense Requests"
-        description="Review expenditure requests against available budget"
+        description="Review expenditure requests against the available budget."
         actions={
           <Button onClick={() => router.push("/finance/expense-requests/new")} disabled={budgets.length === 0}>
             <Plus className="h-4 w-4 mr-1" />

@@ -365,7 +365,7 @@ function OpeningImport({ url, parseUrl, fy, people, onClose, onDone }: { url: st
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader><DialogTitle>Import what was paid so far - FY {fy}</DialogTitle>
-          <DialogDescription>For the months paid before payroll moved into the app: regime, gross, TDS, PF and PT from April. Without these, TDS for the rest of the year would be wrong. Rows without a &quot;Paid up to&quot; month are skipped; declarations already saved are kept.</DialogDescription></DialogHeader>
+          <DialogDescription>For the months paid before payroll was moved into the application: tax regime, gross, TDS, PF and PT from April. Without these figures, TDS for the rest of the year would be incorrect. Rows without a &quot;Paid up to&quot; month are skipped; declarations already saved are kept.</DialogDescription></DialogHeader>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={template}><Download className="mr-1.5 h-4 w-4" />Template</Button>
           <Button variant="outline" asChild><label className="cursor-pointer"><Upload className="mr-1.5 h-4 w-4" />Upload file<input type="file" accept=".xlsx,.csv" className="sr-only" onChange={pick} /></label></Button>

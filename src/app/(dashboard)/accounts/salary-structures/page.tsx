@@ -57,7 +57,7 @@ export default function SalaryStructuresPage() {
     <div className="space-y-6">
       <PageHeader
         title="Salary Structures"
-        description="Define one pay template per designation & employment type. HODs use these to auto-fill Staff Salaries in budget requests."
+        description="Define one pay template for each designation and employment type. HODs use these templates to fill in staff salaries in budget requests."
         actions={
           <Button onClick={() => router.push("/accounts/salary-structures/new")}>
             <Plus className="h-4 w-4 mr-2" />

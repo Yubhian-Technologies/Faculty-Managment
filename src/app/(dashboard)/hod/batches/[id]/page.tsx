@@ -587,7 +587,7 @@ ${institution}`;
                   id="interviewVenue"
                   value={interviewVenue}
                   onChange={(e) => setInterviewVenue(e.target.value)}
-                  placeholder="e.g. Conference Hall, Block B, 2nd Floor"
+                  placeholder="Conference Hall, Block B, 2nd Floor"
                 />
               </div>
             )}
@@ -705,9 +705,9 @@ ${institution}`;
                       id="demoClassroom"
                       value={demoClassroom}
                       onChange={(e) => setDemoClassroom(e.target.value)}
-                      placeholder="e.g. Room 301, Block A"
+                      placeholder="Room 301, Block A"
                     />
-                    <p className="text-xs text-muted-foreground">Room where offline candidates give demo class.</p>
+                    <p className="text-xs text-muted-foreground">Room where offline candidates give the demo class.</p>
                   </div>
                 </div>
 
@@ -734,7 +734,7 @@ ${institution}`;
                       </SelectContent>
                     </Select>
                     {selectedCoordinator && !selectedCoordinator.userUid && (
-                      <p className="text-xs text-muted-foreground">No login account — notification skipped.</p>
+                      <p className="text-xs text-muted-foreground">No login account; notification not sent.</p>
                     )}
                   </div>
                 </div>
@@ -760,9 +760,7 @@ ${institution}`;
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Click to open Gmail with a pre-filled call letter. Principal, Vice Principal, College Office, and the selected panel members will be automatically added to CC.
-            </p>
+            <p className="text-xs text-muted-foreground">Opens Gmail with a call letter filled in. The Principal, Vice Principal, College Office and the selected panel members are added in CC.</p>
             <div className="space-y-2">
               {candidates.map((c) => (
                 <div key={c.id} className={`flex items-center justify-between p-3 rounded-lg border ${!c.bioDataSubmitted ? "bg-amber-50/30 border-amber-200" : "bg-white"}`}>
@@ -1298,9 +1296,7 @@ ${institution}`;
                 );
               })}
               {batch.currentPhase === "PANEL_INTERVIEW" && (
-                <p className="text-xs text-muted-foreground pt-1">
-                  Panel members are submitting their assessments. Submit to Principal once all assessments are in.
-                </p>
+                <p className="text-xs text-muted-foreground pt-1">Panel members are submitting their assessments. Submit to the Principal once all assessments are in.</p>
               )}
             </CardContent>
           </Card>
@@ -1313,16 +1309,14 @@ ${institution}`;
                   <CheckCircle2 className="h-5 w-5" />
                   <div>
                     <p className="font-medium text-sm">Submitted for Principal review</p>
-                    <p className="text-xs text-muted-foreground">The Principal will review all evaluations and make final hiring decisions.</p>
+                    <p className="text-xs text-muted-foreground">The Principal reviews all evaluations and makes the final hiring decisions.</p>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="font-medium text-sm">Submit All Evaluations to Principal</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Submit demo scores and panel assessments to the Principal for final hiring decisions.
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Submit demo scores and panel assessments to the Principal for the final hiring decision.</p>
                   </div>
                   <Button onClick={submitForPrincipalReview} loading={isSubmittingForReview} className="shrink-0">
                     Submit to Principal
@@ -1359,9 +1353,7 @@ ${institution}`;
               ) : (
                 <>
                   <p className="font-medium text-sm">Candidates are arriving</p>
-                  <p className="text-xs text-muted-foreground mt-1 mb-3">
-                    Open the interview session to display demo QR codes and run scoring.
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">Open the interview session to display demo QR codes and record scores.</p>
                   <Button asChild>
                     <Link href={`/coordinator/${id}`}>
                       Open Demo Session

@@ -83,7 +83,7 @@ export default function CollegeOfficeDocumentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hiring Pipeline"
-        description="Offer letter → document verification & joining letter → appointment letter → credentials & official email setup"
+        description="Offer letter, document verification and joining letter, appointment letter, then login and official email setup."
       />
 
       {departments.length === 0 ? (

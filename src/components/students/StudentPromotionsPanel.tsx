@@ -432,7 +432,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
       {showHeader && (
         <PageHeader
           title="Student Promotion"
-          description="Move a cohort to the next year - bulk by section, with per-student override for students splitting into different departments"
+          description="Promote a cohort to the next year by section, with individual changes for students moving to a different department."
         />
       )}
 
@@ -492,12 +492,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div>
                     <p className="text-sm font-medium">Or upload an allotment file</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      A file with Regd. No, Department, and Section columns (e.g. a counseling/branch-allotment
-                      export) fills in the per-student targets below automatically - for cohorts splitting into
-                      several departments at once, like 1st year students under a Freshman&apos;s Department (e.g.
-                      Basic Sciences) moving into their allotted branch.
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">A file with Regd. No, Department and Section columns (for example, a counselling or branch allotment export) fills in each student&apos;s target below. Use it for cohorts moving into several departments at once, such as first-year students under a common department (for example, Basic Sciences) moving to their allotted branch.</p>
                   </div>
                   <input ref={allotmentFileRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => void handleAllotmentFile(e)} />
                   <Button variant="outline" size="sm" onClick={() => allotmentFileRef.current?.click()} className="shrink-0">

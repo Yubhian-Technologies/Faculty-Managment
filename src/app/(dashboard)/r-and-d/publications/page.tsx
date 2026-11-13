@@ -243,7 +243,7 @@ export default function RAndDPublicationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Research Publications"
-        description="Verify and manage publication records for every staff member"
+        description="Verify and manage the publication records of all staff."
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => router.push("/r-and-d/publications/import")}>

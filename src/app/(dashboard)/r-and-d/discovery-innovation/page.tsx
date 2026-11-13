@@ -182,7 +182,7 @@ export default function RAndDDiscoveryInnovationPage() {
     <div className="space-y-6">
       <PageHeader
         title="Discovery & Innovation (IPR)"
-        description="Verify staff-submitted IPR records"
+        description="Verify IPR records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

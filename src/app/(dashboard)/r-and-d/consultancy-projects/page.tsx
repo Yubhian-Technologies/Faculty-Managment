@@ -195,7 +195,7 @@ export default function RAndDConsultancyProjectsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Consultancy Projects"
-        description="Verify staff-submitted consultancy project records"
+        description="Verify consultancy project records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

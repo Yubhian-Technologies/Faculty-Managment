@@ -232,9 +232,7 @@ export default function LocationStaffAdminEditShiftPage({
             <Clock className="h-4 w-4 text-primary" />
             <span>Shift Timings & Scope</span>
           </CardTitle>
-          <CardDescription className="text-xs">
-            Manage reusable shift configuration and department access.
-          </CardDescription>
+          <CardDescription className="text-xs">Manage shift configurations and department access.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -309,7 +307,7 @@ export default function LocationStaffAdminEditShiftPage({
               <Label className="text-xs font-semibold">Shift Name *</Label>
               <Input
                 required
-                placeholder="e.g. Morning Shift, Night Patrol, General Duty"
+                placeholder="Morning Shift, Night Patrol, General Duty"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="h-9 text-xs"
@@ -358,7 +356,7 @@ export default function LocationStaffAdminEditShiftPage({
             <div className="space-y-1">
               <Label className="text-xs font-semibold">Description (Optional)</Label>
               <Input
-                placeholder="e.g. Main gate & perimeter security"
+                placeholder="Main gate & perimeter security"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="h-9 text-xs"

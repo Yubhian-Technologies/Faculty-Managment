@@ -260,9 +260,7 @@ export function ShiftAssignedStaffView({
               <p className="font-semibold text-foreground text-sm">
                 {search ? "No matching staff found" : "No staff assigned to this shift yet"}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Assign campus staff members to this shift or rotate them from other shifts.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">Assign campus staff to this shift or move them from other shifts.</p>
               {!readOnly && assignMoreHref && (
                 <Button asChild size="sm" variant="outline" className="mt-3 text-xs rounded-full gap-1.5">
                   <Link href={assignMoreHref}>

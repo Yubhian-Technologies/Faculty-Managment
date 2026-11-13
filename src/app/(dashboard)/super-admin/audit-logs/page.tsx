@@ -151,7 +151,7 @@ export default function AuditLogsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Audit Logs"
-        description="System-wide action trail - last 100 events per college"
+        description="System-wide activity (last 100 events per college)."
       />
 
       {colleges.length > 0 && (

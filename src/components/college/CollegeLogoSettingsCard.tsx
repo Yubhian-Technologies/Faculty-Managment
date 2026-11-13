@@ -159,9 +159,7 @@ export function CollegeLogoSettingsCard({ className = "" }: { className?: string
                 <Building2 className="h-4 w-4 text-primary" />
                 College Logo & Letterhead Branding
               </CardTitle>
-              <CardDescription className="mt-1">
-                Configure your college logo for official timetables, attendance exports, and printable letterheads.
-              </CardDescription>
+              <CardDescription className="mt-1">Configure the college logo for official timetables, attendance exports and printed letterheads.</CardDescription>
             </div>
             <div>
               {hasCustomLogo ? (
@@ -278,9 +276,7 @@ export function CollegeLogoSettingsCard({ className = "" }: { className?: string
               <Upload className="h-4 w-4 text-primary" />
               Preview & Confirm Logo
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              Review your new college logo before applying it to all official letterheads and timetables.
-            </DialogDescription>
+            <DialogDescription className="text-xs">Review the new college logo before applying it to all official letterheads and timetables.</DialogDescription>
           </DialogHeader>
 
           <div className="py-4 space-y-4">
@@ -355,9 +351,7 @@ export function CollegeLogoSettingsCard({ className = "" }: { className?: string
               <AlertCircle className="h-4 w-4" />
               Reset to Default Vishnu Logo?
             </DialogTitle>
-            <DialogDescription className="text-xs pt-1">
-              This will remove the current custom logo and revert the institution branding back to the default Vishnu logo on all timetables, student attendance exports, and letterheads.
-            </DialogDescription>
+            <DialogDescription className="text-xs pt-1">The current logo will be removed and the default Vishnu logo used on all timetables, student attendance exports and letterheads.</DialogDescription>
           </DialogHeader>
 
           <DialogFooter className="gap-2 sm:gap-0 pt-2">

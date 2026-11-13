@@ -190,9 +190,7 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
               {schedule.facultyName} &mdash; {schedule.slots.length} period{schedule.slots.length === 1 ? "" : "s"} booked this week
             </p>
             {schedule.slots.some((sl) => sl.isDraft) && (
-              <p className="text-xs text-muted-foreground">
-                Dashed cells are from a timetable that has been built but not published yet.
-              </p>
+              <p className="text-xs text-muted-foreground">Dashed cells are from a timetable that has been built but not yet published.</p>
             )}
           </div>
           <div className="overflow-x-auto rounded-lg border">

@@ -268,12 +268,12 @@ export default function EditMyProfileIdentityPage() {
                   </SelectContent>
                 </Select>
                 {qualIsOther && (
-                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. B.Ed, MCA" />
+                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="B.Ed, MCA" />
                 )}
               </div>
               <div className="space-y-2">
                 <Label>Specialization</Label>
-                <Input value={form.specialization} onChange={(e) => set({ specialization: e.target.value })} placeholder="e.g. Machine Learning, VLSI" />
+                <Input value={form.specialization} onChange={(e) => set({ specialization: e.target.value })} placeholder="Machine Learning, VLSI" />
               </div>
             </div>
 
@@ -336,7 +336,7 @@ export default function EditMyProfileIdentityPage() {
                         label="Label (optional)"
                         value={item.label}
                         onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
-                        placeholder="e.g. Personal, WhatsApp, or a name"
+                        placeholder="Personal, WhatsApp, or a name"
                       />
                       <TextInput
                         label="Mobile Number"

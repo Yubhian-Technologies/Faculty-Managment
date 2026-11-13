@@ -157,7 +157,7 @@ export default function CollegeOfficeNonTechnicalStaffPage() {
     <div className="space-y-6">
       <PageHeader
         title="Supporting Staff"
-        description="Supporting staff records for your college"
+        description="Supporting staff records of your college."
         actions={
           <div className="flex gap-2">
             <Button

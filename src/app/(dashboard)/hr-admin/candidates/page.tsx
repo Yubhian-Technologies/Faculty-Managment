@@ -122,7 +122,7 @@ export default function HRCandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Faculty Candidates"
-        description="Review candidates - shortlist for interview or reject"
+        description="Review candidates and shortlist them for interview or reject them."
         actions={<Button onClick={() => router.push("/hr-admin/candidates/new")}>+ Add Candidate</Button>}
       />
 

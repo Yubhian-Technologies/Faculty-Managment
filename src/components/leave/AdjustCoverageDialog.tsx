@@ -104,7 +104,7 @@ export function AdjustCoverageDialog({
         {isLoading ? (
           <div className="h-24 rounded-lg bg-muted animate-pulse" />
         ) : periods.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">No teaching periods fall within this leave range.</p>
+          <p className="text-sm text-muted-foreground italic">No teaching periods fall within this leave period.</p>
         ) : (
           <div className="max-h-80 overflow-y-auto rounded-lg border p-2.5">
             <PeriodCoverageGrid

@@ -188,7 +188,7 @@ export default function RAndDResearchServicesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Research Services & Contributions"
-        description="Verify staff-submitted Conference/Workshop/Reviewer/Editor contribution records"
+        description="Verify conference, workshop, reviewer and editor records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

@@ -129,7 +129,7 @@ export function AssignPanel({ overview, onChanged, initialSlot }: { overview: Ov
               </select>
             </div>
             <div className="max-h-[420px] space-y-1 overflow-y-auto">
-              {sessionSlots.length === 0 && <p className="text-xs text-muted-foreground">No duties in this session - add a seating plan for it in Exam Seating, or turn categories on.</p>}
+              {sessionSlots.length === 0 && <p className="text-xs text-muted-foreground">No duties in this session. Add a seating plan for it in Exam Seating, or turn categories on.</p>}
               {sessionSlots.map((s) => (
                 <button key={s.key} type="button" onClick={() => { setSlotKey(s.key); setReplacing(null); }}
                   className={`flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm ${s.key === slotKey ? "border-primary bg-primary/5" : "hover:bg-muted/40"}`}>

@@ -56,16 +56,16 @@ export default function InvigilationPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Invigilation" description="Exam duties for faculty - invigilators per room, relievers and the special squad per session - checked against timetables, leave, subjects and workload." />
+      <PageHeader title="Invigilation" description="Examination duties for faculty: invigilators for each room, relievers and the squad for each session, checked against timetables, leave, subjects and workload." />
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">New schedule</CardTitle>
-          <CardDescription>Pick the Mid timetable(s) written together. Rooms come from their Exam Seating plans; duties are worked out per exam session.</CardDescription>
+          <CardDescription>Select the Mid timetables held together. Rooms are taken from their Exam Seating plans, and duties are calculated for each examination session.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {mids.length === 0 && !loading ? (
-            <p className="text-sm text-muted-foreground">No Mid timetable has branches saved yet - build one in Mid Timetable first.</p>
+            <p className="text-sm text-muted-foreground">No Mid timetable has branches saved yet. Build one in Mid Timetable first.</p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
               {mids.map((m) => (
@@ -82,7 +82,7 @@ export default function InvigilationPage() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-64 flex-1 space-y-1.5">
               <Label htmlFor="inv-name">Name (optional)</Label>
-              <Input id="inv-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mid-1 November 2026" />
+              <Input id="inv-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Mid-1 November 2026" />
             </div>
             <Button onClick={() => void create()} loading={saving} disabled={picked.length === 0}><Plus className="mr-1 h-4 w-4" />Create schedule</Button>
           </div>

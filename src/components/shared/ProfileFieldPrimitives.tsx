@@ -385,7 +385,7 @@ export function DegreeFields({
             )}
           </div>
         ) : isDoctoralOrPostDoc ? (
-          <TextInput label="Specialization" value={doctoralSpecialization} onChange={(x) => onChange({ ...v, specialization: x })} placeholder="e.g. Machine Learning" />
+          <TextInput label="Specialization" value={doctoralSpecialization} onChange={(x) => onChange({ ...v, specialization: x })} placeholder="Machine Learning" />
         ) : (
           <div className="space-y-2">
             {/* UG/PG: the stored key is still `course`; only the wording changed (Course -> Degree). */}
@@ -424,18 +424,18 @@ export function DegreeFields({
         {/* Intermediate / Diploma / ITI: one optional free-text field right after Course, chosen by the Course. Values
             typed under another course stay stored (never cleared), they are just not asked for here. */}
         {isIntermediate && v.course === "Intermediate" && (
-          <TextInput label="Subject" value={v.subject} onChange={(x) => onChange({ ...v, subject: x })} placeholder="e.g. M.P.C, Bi.P.C" />
+          <TextInput label="Subject" value={v.subject} onChange={(x) => onChange({ ...v, subject: x })} placeholder="M.P.C, Bi.P.C" />
         )}
         {isIntermediate && isDiplomaCourse(v.course) && (
           <TextInput label="Branch" value={v.branch} onChange={(x) => onChange({ ...v, branch: x })} placeholder={diplomaBranchPlaceholder(v.course)} />
         )}
         {isIntermediate && v.course === "ITI" && (
-          <TextInput label="Trade" value={v.trade} onChange={(x) => onChange({ ...v, trade: x })} placeholder="e.g. Fitter, Electrician, Mechanic" />
+          <TextInput label="Trade" value={v.trade} onChange={(x) => onChange({ ...v, trade: x })} placeholder="Fitter, Electrician, Mechanic" />
         )}
         {/* Board sits second, right after Course - School/Intermediate
             only, no fixed catalogue, so no equivalent for UG/PG/Doctoral. */}
         {isSchoolLevel && (
-          <TextInput label="Board" value={v.board} onChange={(x) => onChange({ ...v, board: x })} placeholder="e.g. State Board" />
+          <TextInput label="Board" value={v.board} onChange={(x) => onChange({ ...v, board: x })} placeholder="State Board" />
         )}
         {!isSchoolLevel && !isDoctoralOrPostDoc && (
           <TextInput label={isUgOrPg ? "Course/Branch" : "Branch"} value={v.branch} onChange={(x) => onChange({ ...v, branch: x })} placeholder={level === "PG" && v.course === "MCA" ? "e.g. Computer Application" : "e.g. CSE"} />
@@ -443,7 +443,7 @@ export function DegreeFields({
         {/* UG/PG only: free-text Specialization right after Course/Branch (stored as `specialization`, the same key
             Ph.D. already uses). */}
         {isUgOrPg && !(level === "UG" && domain === "DENTAL_SCIENCE") && (
-          <TextInput label="Specialization" value={v.specialization} onChange={(x) => onChange({ ...v, specialization: x })} placeholder="e.g. Power Electronics & Drives" />
+          <TextInput label="Specialization" value={v.specialization} onChange={(x) => onChange({ ...v, specialization: x })} placeholder="Power Electronics & Drives" />
         )}
         {hasInstitutionType ? (
           <>
@@ -518,11 +518,11 @@ export function DegreeFields({
             it is shown here until it is saved again (the stored branch is never removed). */}
         {isDoctoralOrPostDoc && (
           <>
-            <TextInput label="Name of the Department" value={isPostDoc ? (v.departmentName || v.branch || "") : v.departmentName} onChange={(x) => onChange({ ...v, departmentName: x })} placeholder="e.g. Computer Science and Engineering" />
+            <TextInput label="Name of the Department" value={isPostDoc ? (v.departmentName || v.branch || "") : v.departmentName} onChange={(x) => onChange({ ...v, departmentName: x })} placeholder="Computer Science and Engineering" />
             <TextInput label={isPostDoc ? "Title of the Postdoc Thesis" : "Title of the Ph.D Thesis"} value={v.thesisTitle} onChange={(x) => onChange({ ...v, thesisTitle: x })} placeholder={isPostDoc ? "e.g. Advanced Materials for Energy Storage" : "e.g. Deep Learning Approaches for Image Segmentation"} />
           </>
         )}
-        <TextInput label="Place" value={v.place} onChange={(x) => onChange({ ...v, place: x })} placeholder="e.g. Bhimavaram" />
+        <TextInput label="Place" value={v.place} onChange={(x) => onChange({ ...v, place: x })} placeholder="Bhimavaram" />
         <TextInput label="Percentage / CGPA" value={v.percentageCgpa} onChange={(x) => onChange({ ...v, percentageCgpa: x })} />
         {/* Registration precedes the award/pass date - Doctoral/Post-Doctoral
             only, where the two can be years apart. */}
@@ -767,7 +767,7 @@ export function QualificationsFields({
             </div>
             <TextInput label="Course" value={item.course} onChange={(v) => update({ course: v })} />
             <TextInput label="Institution Name" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
-            <TextInput label="Place" value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
+            <TextInput label="Place" value={item.place} onChange={(v) => update({ place: v })} placeholder="Bhimavaram" />
             <TextInput label="Percentage / CGPA" value={item.percentageCgpa} onChange={(v) => update({ percentageCgpa: v })} />
             <NumInput label="Year of Passing" value={item.yearOfPassing} onChange={(v) => update({ yearOfPassing: v || undefined })} />
             <TextInput label="Hall Ticket Number" value={item.hallTicketNumber} onChange={(v) => update({ hallTicketNumber: v })} />

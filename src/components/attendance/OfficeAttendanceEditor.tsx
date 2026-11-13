@@ -250,7 +250,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
               </div>
               <div className="space-y-2">
                 <Label htmlFor="office-edit-reason" className="text-sm font-medium">Reason for this change *</Label>
-                <Textarea id="office-edit-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} disabled={isSaving} placeholder="Recorded with the change, e.g. marked late / correction requested by the faculty" />
+                <Textarea id="office-edit-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} disabled={isSaving} placeholder="Reason recorded with the change, for example: correction requested by the faculty member." />
               </div>
             </div>
             <CardContent className="flex items-center justify-end border-t py-4">

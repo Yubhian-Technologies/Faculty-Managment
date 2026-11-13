@@ -75,7 +75,7 @@ export default function ReviseBudgetPage() {
     <div className="max-w-xl">
       <PageHeader
         title={`Revise Budget - ${budget?.department ?? ""}`}
-        description="Adjust the allocated amount for this budget"
+        description="Adjust the allocated amount of this budget."
       />
 
       <Card>

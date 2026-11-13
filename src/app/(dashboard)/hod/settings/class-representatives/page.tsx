@@ -65,7 +65,7 @@ export default function ClassRepresentativesSettingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Class Representatives"
-        description="Set how many Class Representatives each section of the department has. The class incharge then picks them from the section's students."
+        description="Set the number of Class Representatives for each section. The class in-charge then selects them from the section's students."
       />
       {isLoading ? (
         <CardSkeleton />

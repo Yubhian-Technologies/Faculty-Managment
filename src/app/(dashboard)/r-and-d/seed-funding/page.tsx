@@ -188,7 +188,7 @@ export default function RAndDSeedFundingPage() {
     <div className="space-y-6">
       <PageHeader
         title="Seed Funding & Outcomes"
-        description="Verify staff-submitted seed funding project records"
+        description="Verify seed funding project records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

@@ -413,7 +413,7 @@ function RecordFormFields({
                 <TextInput label={isConference ? "Title of the Conference" : "Title of Research Workshop"} value={form.title} onChange={(v) => set("title", v)} />
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <NumField label="No. of Days" value={form.noOfDays} onChange={(v) => set("noOfDays", v)} />
-                  <TextInput label="A.Y." value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" />
+                  <TextInput label="A.Y." value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="2024-25" />
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <DateInput label="Start Date" value={form.startDate} onChange={(v) => set("startDate", v)} />
@@ -537,7 +537,7 @@ function RecordFormFields({
                 />
                 {isConference && (
                   <div className="space-y-3 rounded-lg border p-3">
-                    <p className="text-xs font-medium text-muted-foreground">Conference Proceedings/DOI Link</p>
+                    <p className="text-xs font-medium text-muted-foreground">Conference Proceedings / DOI Link</p>
                     <DocumentUploadField
                       label="Conference Proceedings (PDF)"
                       value={form.conferenceProceedingsUrl}

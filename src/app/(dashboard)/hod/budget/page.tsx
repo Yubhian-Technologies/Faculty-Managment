@@ -106,7 +106,7 @@ export default function HODBudgetPage() {
       <div ref={dashboardRef}>
         <PageHeader
           title="Budget"
-          description="View and manage department budget requests"
+          description="View and manage department budget requests."
           actions={
             <Button variant="outline" size="sm" onClick={() => { load(); loadActiveCycle(); }} loading={isLoading}>
               <RefreshCw className="h-4 w-4 mr-1" />

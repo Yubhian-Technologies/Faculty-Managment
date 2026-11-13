@@ -126,7 +126,7 @@ export function StaffAccountsSection() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="font-semibold text-lg">Staff Accounts</h2>
-          <p className="text-sm text-muted-foreground">Non-teaching and departmental leadership accounts for your college</p>
+          <p className="text-sm text-muted-foreground">Non-teaching and departmental leadership accounts for your college.</p>
         </div>
         <Button asChild>
           <Link href="/principal/staff/new"><Plus className="h-4 w-4 mr-2" />Add Staff</Link>

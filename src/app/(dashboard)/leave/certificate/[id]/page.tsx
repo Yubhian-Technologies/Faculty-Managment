@@ -73,7 +73,7 @@ export default function LeaveCertificatePage() {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
   if (!request) {
-    return <p className="text-sm text-muted-foreground">This leave request could not be found.</p>;
+    return <p className="text-sm text-muted-foreground">This leave request was not found.</p>;
   }
 
   const evaluation = evaluateLeaveCertificate(request);

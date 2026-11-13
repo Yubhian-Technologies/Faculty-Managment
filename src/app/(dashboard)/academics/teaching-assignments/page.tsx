@@ -67,7 +67,7 @@ export default function AcademicsTeachingAssignmentsPage() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Teaching Assignments"
-        description="Browse any department's course-year and assign faculty to its subjects - same editor HODs use, opened here for cross-department oversight."
+        description="Assign faculty to the subjects of any department's course and year. This is the same editor HODs use, available here for cross-department oversight."
         actions={
           <Button variant="outline" asChild>
             <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back to Academics</Link>

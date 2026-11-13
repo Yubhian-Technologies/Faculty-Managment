@@ -140,7 +140,7 @@ function BankPaperGenerator({ levels }: { levels: BloomLevel[] }) {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <PageHeader title="Mid Question Paper" description="Generate each subject's Mid question paper from its question bank - pick the exam date and the level of Question 1. Nothing is saved; download the papers." />
+      <PageHeader title="Mid Question Paper" description="Generate each subject's Mid question paper from its question bank. Select the exam date and the level of Question 1, then download the papers. Nothing is saved." />
 
       <Card className="rounded-2xl">
         <CardContent className="space-y-4 p-5">

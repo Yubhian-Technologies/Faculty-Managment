@@ -161,7 +161,7 @@ function PayEditDialog({ collegeId, row, settings, canEdit, onClose, onSaved }: 
           <div className="space-y-4">
             <div className="space-y-1.5"><Label htmlFor="pe-from">New pay starts from</Label>
               <Input id="pe-from" type="month" className="w-44" value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} />
-              <p className="text-xs text-muted-foreground">Applies from the 1st of that month. A month already released can&apos;t be changed - pay a back-dated rise as arrears.</p>
+              <p className="text-xs text-muted-foreground">Applies from the 1st of that month. A released month cannot be changed; pay a back-dated increase as arrears.</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               {parts.map((e) => (
@@ -180,7 +180,7 @@ function PayEditDialog({ collegeId, row, settings, canEdit, onClose, onSaved }: 
                 ))}
               </div>
             </div>
-            <div className="space-y-1"><Label htmlFor="pe-note">Note (optional)</Label><Textarea id="pe-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Annual increment" /></div>
+            <div className="space-y-1"><Label htmlFor="pe-note">Note (optional)</Label><Textarea id="pe-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Annual increment" /></div>
           </div>
         )}
         <div className="space-y-2">

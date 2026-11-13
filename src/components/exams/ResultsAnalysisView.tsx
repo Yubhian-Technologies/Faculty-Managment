@@ -290,7 +290,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
           </Button>
         </div>
       </div>
-      {section && <p className="-mt-3 text-xs text-muted-foreground">Section is each student&rsquo;s current section on their student record.</p>}
+      {section && <p className="-mt-3 text-xs text-muted-foreground">Section is each student&apos;s current section on their student record.</p>}
 
       {!picked ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -326,7 +326,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Branch comparison</CardTitle>
-                <CardDescription>Pass % now = students with no backlog of this semester.</CardDescription>
+                <CardDescription>Pass % (current) = students with no backlog in this semester.</CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
                 <BranchTable rows={a.branches} fmt={fmt} />
@@ -348,7 +348,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">SGPA bands</CardTitle>
-                <CardDescription>Students by SGPA. &ldquo;Withheld&rdquo; = not shown yet under the college&rsquo;s rules (a subject still to pass).</CardDescription>
+                <CardDescription>Students by SGPA. &quot;Withheld&quot; means not yet shown under the college&apos;s rules (a subject still to be passed).</CardDescription>
               </CardHeader>
               <CardContent>
                 <Columns items={a.sgpaBands.map((b) => ({ label: b.label, value: b.count, neutral: b.label === "Withheld", tip: `SGPA ${b.label}: ${b.count} student${b.count === 1 ? "" : "s"}` }))} />
@@ -400,7 +400,7 @@ export function ResultsAnalysisView({ title = "Results Analysis", description }:
                   })}
                 </tbody>
               </table>
-              <p className="mt-2 text-xs text-muted-foreground">Sorted by pass % now, lowest first.</p>
+              <p className="mt-2 text-xs text-muted-foreground">Sorted by current pass %, lowest first.</p>
             </CardContent>
           </Card>
 

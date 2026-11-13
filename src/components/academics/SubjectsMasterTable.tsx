@@ -296,7 +296,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
         {isLoading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-10 rounded-md border bg-muted/30 animate-pulse" />)}</div>
         ) : subjects.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">No subjects yet for this course and regulation. Import a file or add one.</p>
+          <p className="text-sm text-muted-foreground py-6 text-center">No subjects yet for this course and regulation. Import a file or add a subject.</p>
         ) : filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6 text-center">No subjects match &ldquo;{search.trim()}&rdquo;.</p>
         ) : (
@@ -386,7 +386,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                 <div className="space-y-1"><Label>Short Code</Label><Input className="uppercase" value={editForm.shortCode} onChange={(e) => setEditForm({ ...editForm, shortCode: e.target.value })} /></div>
                 <div className="space-y-1"><Label>Second Short Code</Label><Input className="uppercase" placeholder="Asked when placing in the timetable" value={editForm.altShortCode} onChange={(e) => setEditForm({ ...editForm, altShortCode: e.target.value })} /></div>
               </div>
-              <p className="text-xs text-muted-foreground">Changing the Code or Name updates every record that uses this subject (timetables, attendance, marks, results ...) - you&apos;ll see what changes first. The old code still matches results files.</p>
+              <p className="text-xs text-muted-foreground">Changing the code or name updates every record that uses this subject (timetables, attendance, marks, results and others). The changes are shown before they are applied. The old code still matches results files.</p>
               <div className="space-y-1">
                 <Label>Type</Label>
                 <select className={SELECT_CLASS} value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value as SubjectType })}>
@@ -403,7 +403,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                 <div className="space-y-1"><Label>Total Hours per Semester</Label><Input inputMode="decimal" placeholder="Optional" value={editForm.totalHoursPerSemester} onChange={(e) => setEditForm({ ...editForm, totalHoursPerSemester: e.target.value })} /></div>
                 <label className="flex items-end gap-2 pb-2 text-sm"><Checkbox checked={editForm.excludeFromTeachingLoad} onCheckedChange={(v) => setEditForm({ ...editForm, excludeFromTeachingLoad: v === true })} />Not in teaching load</label>
               </div>
-              <p className="text-xs text-muted-foreground">Hours and credits here are the course-wide values; a department&apos;s own override is set on the Assign tab.</p>
+              <p className="text-xs text-muted-foreground">Hours and credits here are the course-wide values; a department&apos;s own values are set on the Assign tab.</p>
               {editError && <p className="rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700 dark:border-destructive/20 dark:bg-destructive/10 dark:text-red-400">{editError}</p>}
             </div>
           )}
@@ -425,14 +425,14 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                   <li key={c.key} className="flex justify-between gap-2"><span>{c.label}</span><span className="tabular-nums text-muted-foreground">{c.count === null ? "checked while updating" : c.count}</span></li>
                 ))}
               </ul>
-              <p className="text-xs text-muted-foreground">Past attendance and published results show the new name too. Issued certificates and printed question papers stay as printed. The old code still matches results files.</p>
+              <p className="text-xs text-muted-foreground">Past attendance and published results also show the new name. Issued certificates and printed question papers are not changed. The old code still matches results files.</p>
             </div>
           )}
           {renaming && (
             <div className="space-y-2 text-sm">
               <p>{renaming.step}</p>
               <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.round((renaming.done / Math.max(1, renaming.total)) * 100)}%` }} /></div>
-              <p className="text-xs text-muted-foreground">Keep this page open until it finishes.</p>
+              <p className="text-xs text-muted-foreground">Keep this page open until the process finishes.</p>
             </div>
           )}
           {!renaming && (

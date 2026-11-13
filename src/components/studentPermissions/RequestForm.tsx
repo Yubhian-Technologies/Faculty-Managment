@@ -262,10 +262,7 @@ export function RequestForm({
             ? "Request Permission"
             : "Request Permission for Students"}
         </CardTitle>
-        <CardDescription>
-          Once approved, the selected periods show as Permission in the students’ attendance
-          (they are left out of the attendance percentage).
-        </CardDescription>
+        <CardDescription>Once approved, the selected periods are shown as Permission in the students&apos; attendance and are excluded from the attendance percentage.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-2 sm:space-y-5 sm:p-6 sm:pt-3">
         {mode === "student" && options.studentInfo && (
@@ -344,7 +341,7 @@ export function RequestForm({
                 title && !title.trim() ? "pm-title-error" : undefined
               }
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Smart India Hackathon"
+              placeholder="Smart India Hackathon"
             />
             {title && !title.trim() && (
               <p
@@ -370,7 +367,7 @@ export function RequestForm({
               maxLength={120}
               required
               onChange={(e) => setOtherCategory(e.target.value)}
-              placeholder="e.g. Blood Donation Camp, NSS Event, Paper Presentation"
+              placeholder="Blood Donation Camp, NSS Event, Paper Presentation"
             />
           </div>
         )}
@@ -441,7 +438,7 @@ export function RequestForm({
             <Input
               id="pm-venue"
               value={venue}
-              placeholder="e.g. XYZ College, Hyderabad"
+              placeholder="XYZ College, Hyderabad"
               maxLength={200}
               onChange={(e) => setVenue(e.target.value)}
             />

@@ -38,7 +38,7 @@ export default function DeptHeadVacanciesPage() {
     <div className="space-y-6">
       <PageHeader
         title="My Hiring Requests"
-        description="Faculty hiring requests you submitted to HR Admin"
+        description="Faculty hiring requests you have submitted to HR Admin."
         actions={
           <Button asChild>
             <Link href="/location-dept-head/vacancies/new">+ New Request</Link>

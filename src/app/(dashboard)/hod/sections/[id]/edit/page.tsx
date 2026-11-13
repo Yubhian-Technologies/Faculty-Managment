@@ -254,7 +254,7 @@ export default function EditSectionPage() {
     <div className="max-w-6xl">
       <PageHeader
         title={`Edit Section ${sectionName}`}
-        description="Update this section's details"
+        description="Update this section's details."
       />
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -274,14 +274,12 @@ export default function EditSectionPage() {
                   <div className="space-y-2">
                     <Label>Year</Label>
                     <ReadOnlyValue>{form.year ? ordinalYear(Number(form.year)) : "—"}</ReadOnlyValue>
-                    <p className="text-xs text-muted-foreground">
-                      Fixed once created - moving a cohort to the next year is a promotion, not an edit here.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Fixed once created. Moving a cohort to the next year is done by promotion, not here.</p>
                   </div>
                   <div className="space-y-2">
                     <Label>Batch</Label>
                     <ReadOnlyValue>{form.batch || "—"}</ReadOnlyValue>
-                    <p className="text-xs text-muted-foreground">Admission year to passout year.</p>
+                    <p className="text-xs text-muted-foreground">Admission year to year of completion.</p>
                   </div>
                   <div className="space-y-2">
                     <Label>Regulation</Label>
@@ -301,9 +299,7 @@ export default function EditSectionPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Students in this section are promoted into this core department next year.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Students in this section are promoted to this core department next year.</p>
                   </div>
                 )}
 
@@ -386,7 +382,7 @@ export default function EditSectionPage() {
                         <Input
                           value={form.classroomNumber}
                           maxLength={40}
-                          placeholder="e.g. B-204"
+                          placeholder="B-204"
                           onChange={(e) => setF({ classroomNumber: e.target.value })}
                         />
                       ) : (
@@ -395,7 +391,7 @@ export default function EditSectionPage() {
                     </div>
                   </div>
                   {editingClassDetails && (
-                    <p className="text-xs text-muted-foreground">Changes apply when you press Save Changes.</p>
+                    <p className="text-xs text-muted-foreground">Changes apply when you choose Save Changes.</p>
                   )}
                 </div>
               </CardContent>

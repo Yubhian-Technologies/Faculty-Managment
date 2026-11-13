@@ -165,7 +165,7 @@ function EntryForm({
           {group.title && (
             <div>
               <h4 className="text-sm font-semibold">{group.title}</h4>
-              {group.columns.some((c) => c.kind === "multiselect") && <p className="text-xs text-muted-foreground">Select all categories discussed during the meeting.</p>}
+              {group.columns.some((c) => c.kind === "multiselect") && <p className="text-xs text-muted-foreground">Select all categories discussed in the meeting.</p>}
             </div>
           )}
           <div className="grid gap-3 sm:grid-cols-2">

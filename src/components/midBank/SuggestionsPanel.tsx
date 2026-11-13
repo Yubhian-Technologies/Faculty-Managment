@@ -78,7 +78,7 @@ export function SuggestionsPanel({ bankId, questions }: { bankId: string; questi
               {questions.map((q) => <option key={q.id} value={q.id}>{q.label}</option>)}
             </select>
           )}
-          <Textarea rows={2} placeholder="e.g. Question 4 repeats Mid 1; Part A could use one more unit-3 question" value={text} onChange={(e) => setText(e.target.value)} />
+          <Textarea rows={2} placeholder="Question 4 repeats Mid 1; Part A could use one more unit-3 question" value={text} onChange={(e) => setText(e.target.value)} />
           {data.canReopen && (
             <label className="flex items-start gap-2 text-sm">
               <Checkbox className="mt-0.5" checked={reopen} onCheckedChange={(c) => setReopen(c === true)} />

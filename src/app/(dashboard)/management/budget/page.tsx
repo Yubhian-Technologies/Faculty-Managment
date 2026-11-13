@@ -8,9 +8,7 @@ export default function ManagementBudgetCollegesPage() {
     <div className="space-y-8">
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">Emergency Requests</h2>
-        <p className="text-sm text-muted-foreground -mt-2">
-          Emergency budget requests raised by Principals / Vice Principals across all colleges, awaiting your approval.
-        </p>
+        <p className="text-sm text-muted-foreground -mt-2">Emergency budget requests raised by Principals and Vice Principals across all colleges, awaiting your approval.</p>
         <EmergencyBudgetRequests />
       </div>
 

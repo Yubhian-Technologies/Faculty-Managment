@@ -156,7 +156,7 @@ function AdvanceDialog({ collegeId, advance, employees, canEdit, onClose, onSave
               <div className="space-y-1"><Label htmlFor="ad-on">Given on (optional)</Label><Input id="ad-on" type="date" value={f.givenOn} onChange={(e) => setF({ ...f, givenOn: e.target.value })} /></div>
               <div className="space-y-1"><Label htmlFor="ad-note">Note (optional)</Label><Input id="ad-note" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></div>
             </div>
-            <p className="text-xs text-muted-foreground">A change applies to months not yet released - an open month picks it up when it is recalculated.</p>
+            <p className="text-xs text-muted-foreground">A change applies to months not yet released; an open month picks it up when recalculated.</p>
           </div>
         )}
         {advance && (
@@ -175,7 +175,7 @@ function AdvanceDialog({ collegeId, advance, employees, canEdit, onClose, onSave
           <div className="flex flex-wrap items-end gap-2 border-t pt-3">
             {advance.status === "ACTIVE" && <Button variant="outline" disabled={busy} onClick={() => send({ action: "PAUSE" }, "Recovery paused")}>Pause recovery</Button>}
             {advance.status === "PAUSED" && <Button variant="outline" disabled={busy} onClick={() => send({ action: "RESUME" }, "Recovery resumed")}>Resume recovery</Button>}
-            <Input aria-label="Reason for closing" className="h-9 min-w-[12rem] flex-1" placeholder="Reason to close early (e.g. paid back in cash)" value={closeReason} onChange={(e) => setCloseReason(e.target.value)} />
+            <Input aria-label="Reason for closing" className="h-9 min-w-[12rem] flex-1" placeholder="Reason to close early (for example paid back in cash)" value={closeReason} onChange={(e) => setCloseReason(e.target.value)} />
             <Button variant="ghost" className="text-destructive" disabled={busy || !closeReason.trim()} onClick={() => send({ action: "CLOSE", reason: closeReason }, "Advance closed")}>Close</Button>
           </div>
         )}
@@ -252,7 +252,7 @@ function AdvanceImport({ collegeId, onClose, onDone }: { collegeId?: string; onC
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import running advances</DialogTitle>
-          <DialogDescription>For advances already being recovered before payroll moved into the app. Each row adds a new advance - load a file once.</DialogDescription>
+          <DialogDescription>For advances already being recovered before payroll was moved into the application. Each row adds a new advance, so upload a file only once.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={template}><Download className="mr-1.5 h-4 w-4" />Template</Button>

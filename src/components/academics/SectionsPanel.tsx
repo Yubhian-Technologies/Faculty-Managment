@@ -250,7 +250,7 @@ export function SectionsPanel() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Sections" description="Every section in the college - open one to see its students" />
+      <PageHeader title="Sections" description="Every section in the college. Open a section to see its students." />
 
       {/* ── Filter bar: nothing is read until Load ── */}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/30 p-3">

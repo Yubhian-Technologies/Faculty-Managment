@@ -69,8 +69,8 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
       <SectionTitle>Module 1 - General &amp; Academic Profile</SectionTitle>
       {isSchool ? (
         <>
-          <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. B.Ed, M.A." />
-          <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
+          <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="B.Ed, M.A." />
+          <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="Machine Learning, press Enter or Add" />
           <QualificationsFields
             items={value.educationalQualifications}
             levelOptions={SCHOOL_TEACHING_QUALIFICATION_LEVELS}
@@ -79,8 +79,8 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
         </>
       ) : (
         <>
-          <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="e.g. Ph.D" />
-          <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="e.g. Machine Learning - press Enter or Add" />
+          <TextInput label="Highest Qualification" value={value.highestQualification} onChange={(v) => set("highestQualification", v)} placeholder="Ph.D" />
+          <StringListInput label="Research Areas/Interests" values={value.researchAreasInterests} onChange={(v) => set("researchAreasInterests", v)} placeholder="Machine Learning, press Enter or Add" />
           <QualifiedExamFields value={value} onChange={(next) => onChange(next as typeof value)} />
           <DegreeFields label="Secondary Education" level="HIGH_SCHOOL" value={value.secondaryEducation} onChange={(v) => set("secondaryEducation", v)} />
           <DegreeFields label="Intermediate / Diploma / ITI" level="INTERMEDIATE" value={value.intermediateDiplomaIti} onChange={(v) => set("intermediateDiplomaIti", v)} />
@@ -103,7 +103,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
         renderRow={(item, update) => (
           <>
             <TextInput label="Name of the Institution" value={item.institutionName} onChange={(v) => update({ institutionName: v })} />
-            <TextInput label="Location of the Institution" value={item.place} onChange={(v) => update({ place: v })} placeholder="e.g. Bhimavaram" />
+            <TextInput label="Location of the Institution" value={item.place} onChange={(v) => update({ place: v })} placeholder="Bhimavaram" />
             <TextInput label="Designation" value={item.designation} onChange={(v) => update({ designation: v })} />
             {(() => {
               const fromDate = item.fromDate ?? (item.fromYear ? `${item.fromYear}-01-01` : undefined);
@@ -192,9 +192,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
                   <p className="text-sm font-medium pt-2">{item.fromDate ? formatDuration(duration) : "-"}</p>
                 </div>
                 {item.fromDate && !item.toDate && (
-                  <p className="sm:col-span-2 text-xs text-muted-foreground">
-                    No To Date yet - experience is calculated up to today and will keep increasing until one is set.
-                  </p>
+                  <p className="sm:col-span-2 text-xs text-muted-foreground">No To Date yet. Experience is calculated up to today until a To Date is set.</p>
                 )}
                 <div className="sm:col-span-2">
                   <CertificateUploadField
@@ -211,19 +209,14 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
       )}
 
       {includeTeachingAssignment && (
-        <p className="text-xs text-muted-foreground">
-          Subject-level teaching assignments (course, section, subject, weekly schedule) are managed below in &ldquo;Current Teaching Assignments&rdquo;.
-        </p>
+        <p className="text-xs text-muted-foreground">Subject-level teaching assignments (course, section, subject, weekly schedule) are managed below in Current Teaching Assignments.</p>
       )}
 
       {/* Module 3 */}
       {!hideResearchModule && (
         <>
           <SectionTitle>Module 3 - Research &amp; Innovation</SectionTitle>
-          <p className="text-xs text-muted-foreground">
-            Individual publication records are maintained by the R&amp;D office - view them on the Research &amp; Innovation module.
-            The fields below are self-reported summary metrics.
-          </p>
+          <p className="text-xs text-muted-foreground">Individual publication records are maintained by the R&amp;D office and shown in the Research and Innovation module. The fields below are self-reported summary figures.</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <NumInput label="First/Corresponding Author Pubs" value={value.publicationsFirstOrCorrespondingAuthor} onChange={(v) => set("publicationsFirstOrCorrespondingAuthor", v)} />
             <NumInput label="Q1 / IF > 4.0 Pubs" value={value.publicationsQ1OrHighImpact} onChange={(v) => set("publicationsQ1OrHighImpact", v)} />
@@ -339,7 +332,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
               label="Membership Type"
               value={item.membershipType}
               onChange={(v) => update({ membershipType: v })}
-              placeholder="e.g. Senior Fellowship / Associate Fellowship / Fellowship"
+              placeholder="Senior Fellowship / Associate Fellowship / Fellowship"
             />
             <TextInput label="Membership ID" value={item.membershipId} onChange={(v) => update({ membershipId: v })} />
             <div className="space-y-2">
@@ -434,9 +427,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
               <NumInput label="Increments Awarded" value={value.incrementsAwarded} onChange={(v) => set("incrementsAwarded", v)} />
               <NumInput label="Funding/Consultancy Revenue Generation (₹)" value={value.fundingConsultancyRevenueGeneration} onChange={(v) => set("fundingConsultancyRevenueGeneration", v)} />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Revenue brought in through research/consultancy grants, offsetting this faculty member&rsquo;s salary cost to the institution.
-            </p>
+            <p className="text-xs text-muted-foreground">Revenue from research and consultancy grants that offsets this faculty member&apos;s salary cost to the institution.</p>
           </div>
         </>
       )}
@@ -448,7 +439,7 @@ export function AcademicProfileFields({ value: rawValue, onChange, includeTeachi
         <Textarea
           value={value.otherInformation ?? ""}
           onChange={(e) => set("otherInformation", e.target.value)}
-          placeholder="Anything not covered above - add it here"
+          placeholder="Anything not covered above, add it here"
           rows={4}
         />
       </div>

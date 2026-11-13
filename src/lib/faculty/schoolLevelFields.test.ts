@@ -85,7 +85,7 @@ describe("Intermediate / Diploma / ITI form", () => {
   it("a Subject is an optional free-text box: an entry saved without one still shows an empty box", () => {
     const m = form("INTERMEDIATE", INTERMEDIATE);
     expect(labels(m)).toContain("Subject");
-    expect(m).toContain('placeholder="e.g. M.P.C, Bi.P.C"');
+    expect(m).toContain('placeholder="M.P.C, Bi.P.C"');
     expect(m).not.toMatch(/Subject<span/); // no required marker
   });
 });

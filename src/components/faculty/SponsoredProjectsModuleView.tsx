@@ -609,12 +609,12 @@ function ProjectFormFields({
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <DateInput label="Date of Project Sanctioned" value={form.dateProjectSanctioned} onChange={(v) => set("dateProjectSanctioned", v)} required />
                 <DateInput label="Date of Start" value={form.dateOfStart} onChange={(v) => set("dateOfStart", v)} required />
-                <TextInput label="F.Y. of Start" value={form.financialYearOfStart} onChange={(v) => set("financialYearOfStart", v)} placeholder="e.g. 2024-25" required />
+                <TextInput label="F.Y. of Start" value={form.financialYearOfStart} onChange={(v) => set("financialYearOfStart", v)} placeholder="2024-25" required />
               </div>
               {isCompleted && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <DateInput label="Date of Completion" value={form.dateOfCompletion} onChange={(v) => set("dateOfCompletion", v)} required />
-                  <TextInput label="F.Y. of Completion" value={form.financialYearOfCompletion} onChange={(v) => set("financialYearOfCompletion", v)} placeholder="e.g. 2025-26" required />
+                  <TextInput label="F.Y. of Completion" value={form.financialYearOfCompletion} onChange={(v) => set("financialYearOfCompletion", v)} placeholder="2025-26" required />
                 </div>
               )}
               <div className="space-y-2">

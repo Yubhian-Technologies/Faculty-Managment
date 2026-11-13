@@ -286,14 +286,14 @@ function LoginForm() {
             <img src="https://res.cloudinary.com/dl88qtudz/image/upload/v1781675822/vishnulogo_r2jsjl.png" alt="Vishnu Logo" className="h-20 w-20 object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">Vishnu People</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to continue to your dashboard</p>
+          <p className="text-sm text-muted-foreground mt-1">Sign in to continue to your dashboard.</p>
         </div>
 
         {/* Login Card */}
         <Card className="shadow-xl border-0">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl">Welcome back</CardTitle>
-            <CardDescription>Enter your email, employee ID or Regd. No to sign in</CardDescription>
+            <CardDescription>Enter your email address, Employee ID or Regd. No to sign in.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={onSubmit} className="space-y-4" noValidate>

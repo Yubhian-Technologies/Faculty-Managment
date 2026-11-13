@@ -650,7 +650,7 @@ function FieldInputBody({ field, values, onChange, departments, courseNames, cou
       return (
         <div className="space-y-2">
           <Label htmlFor={id}>{field.label}</Label>
-          <Input id={id} value={value} onChange={(e) => onChange(field.key, e.target.value)} placeholder="e.g. BC-B" />
+          <Input id={id} value={value} onChange={(e) => onChange(field.key, e.target.value)} placeholder="BC-B" />
         </div>
       );
     }
@@ -689,7 +689,7 @@ function FieldInputBody({ field, values, onChange, departments, courseNames, cou
       return (
         <div className="space-y-2 sm:col-span-2">
           <Label>{label}</Label>
-          <p className="text-xs text-muted-foreground">Permanent Address will be saved as the Temporary Address above - no need to enter it separately.</p>
+          <p className="text-xs text-muted-foreground">The permanent address is saved as the temporary address above; there is no need to enter it separately.</p>
         </div>
       );
     }

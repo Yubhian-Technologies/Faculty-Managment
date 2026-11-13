@@ -278,9 +278,7 @@ export default function AdminInterviewDetailPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Panel Evaluation (70%) - 5 criteria, rated 1–5 · Student Feedback (30%) - 5 criteria, rated 1–5
-            </p>
+            <p className="text-xs text-muted-foreground">Panel evaluation (70%): 5 criteria rated 1 to 5. Student feedback (30%): 5 criteria rated 1 to 5.</p>
           </CardHeader>
           <CardContent className="space-y-6">
             {(interview.candidatesInfo ?? []).map((c) => {

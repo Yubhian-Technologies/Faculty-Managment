@@ -49,7 +49,7 @@ export default function ManagementLocationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Locations"
-        description="Campuses under the organization"
+        description="Campuses of the organisation."
         actions={
           <Button asChild>
             <Link href="/management/locations/new">+ Add Location</Link>

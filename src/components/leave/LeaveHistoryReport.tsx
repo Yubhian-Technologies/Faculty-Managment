@@ -445,9 +445,7 @@ export function LeaveHistoryReport({ apiUrl, queryKey, employeeHrefBase, emptyTi
       </div>
 
       {filtersMoved && (
-        <p className="text-xs text-muted-foreground">
-          Filters have changed since this was loaded &mdash; press Reload to apply them.
-        </p>
+        <p className="text-xs text-muted-foreground">Filters have changed since this was loaded. Choose Reload to apply them.</p>
       )}
 
       {!applied ? (

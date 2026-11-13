@@ -141,7 +141,7 @@ export default function NewSubDepartmentPage() {
   if (!ownDept) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Add Sub-Department" description="Create a sub-department under your department" />
+        <PageHeader title="Add Sub-Department" description="Create a sub-department under your department." />
         <Card>
           <CardContent className="py-16">
             <EmptyState
@@ -236,7 +236,7 @@ export default function NewSubDepartmentPage() {
                 id="subdept-code"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. BSM"
+                placeholder="BSM"
                 className="uppercase"
                 maxLength={10}
               />
@@ -247,10 +247,7 @@ export default function NewSubDepartmentPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Sub-HOD</CardTitle>
-            <CardDescription>
-              Optional - a Sub-HOD is a seat a person holds on top of their own faculty login, not a separate
-              account. You can appoint one later.
-            </CardDescription>
+            <CardDescription>Optional. A Sub-HOD is a role held in addition to the person&apos;s own faculty login, not a separate account. You can appoint one later.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {hods.length > 0 ? (
@@ -268,9 +265,7 @@ export default function NewSubDepartmentPage() {
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">
-                No faculty in your department yet - add faculty first, then appoint one as Sub-HOD
-              </p>
+              <p className="text-sm text-muted-foreground border rounded-md px-3 py-2">No faculty in your department yet. Add faculty first, then appoint a Sub-HOD.</p>
             )}
             <p className="text-xs text-muted-foreground rounded-md border p-2.5">
               This Sub-HOD gets full edit rights (overview, sections, assign faculty) over{" "}

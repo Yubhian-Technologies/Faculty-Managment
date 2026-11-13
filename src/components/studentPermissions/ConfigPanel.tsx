@@ -170,7 +170,7 @@ function RuleSetEditor({ rs, onChange, data, inherited }: {
           {numberField("Students per request", "maxStudentsPerRequest", data.defaults.limits.maxStudentsPerRequest)}
           {numberField("Can start up to (days ago)", "maxBackdateDays", data.defaults.limits.maxBackdateDays)}
         </div>
-        <p className="text-xs text-muted-foreground">Empty fields inherit. A request raised with less than the preferred notice is flagged as late, not refused.</p>
+        <p className="text-xs text-muted-foreground">Empty fields use the default. A request raised with less than the preferred notice is marked as late, not refused.</p>
       </div>
     </div>
   );

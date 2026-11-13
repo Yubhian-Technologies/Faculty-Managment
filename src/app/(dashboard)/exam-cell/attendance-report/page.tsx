@@ -256,7 +256,7 @@ export default function ExamCellAttendanceReportPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Attendance Reports"
-        description="Each student's overall attendance percentage across their currently-assigned subjects, for a Course + Department + Semester (optionally one Section) - narrow further with a percentage range, e.g. everyone below 75%."
+        description="Each student's overall attendance percentage across their current subjects for a course, department and semester, optionally one section. Narrow the list with a percentage range, for example below 75%."
       />
 
       <Card>
@@ -309,11 +309,11 @@ export default function ExamCellAttendanceReportPage() {
 
           <div className="space-y-2">
             <Label>Attendance % - From <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <Input type="number" min={0} max={100} value={minPct} onChange={(e) => setMinPct(e.target.value)} placeholder="e.g. 0" />
+            <Input type="number" min={0} max={100} value={minPct} onChange={(e) => setMinPct(e.target.value)} placeholder="0" />
           </div>
           <div className="space-y-2">
             <Label>Attendance % - To <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <Input type="number" min={0} max={100} value={maxPct} onChange={(e) => setMaxPct(e.target.value)} placeholder="e.g. 75" />
+            <Input type="number" min={0} max={100} value={maxPct} onChange={(e) => setMaxPct(e.target.value)} placeholder="75" />
           </div>
 
           <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3">

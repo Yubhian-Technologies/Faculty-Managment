@@ -64,7 +64,7 @@ export function PaperPreviewButton({ detail, initialSet = 1, size = "sm" }: { de
           {error ? <p className="text-sm text-destructive">{error}</p>
             : html ? <iframe title={`Question paper ${set} preview`} srcDoc={html} sandbox="" className="min-h-0 w-full flex-1 rounded-md border bg-white" />
             : <div className="min-h-0 flex-1 animate-pulse rounded-md border bg-muted/30" />}
-          <p className="text-xs text-muted-foreground">Preview only - the Exam Cell prints the paper.</p>
+          <p className="text-xs text-muted-foreground">Preview only. The Exam Cell prints the paper.</p>
         </DialogContent>
       </Dialog>
     </>

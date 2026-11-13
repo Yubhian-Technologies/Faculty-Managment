@@ -84,7 +84,7 @@ export default function MySectionPage() {
   if (!isLoading && sections.length === 0) {
     return (
       <div className="space-y-6">
-        <PageHeader title="My Section" description="The section you are in charge of" />
+        <PageHeader title="My Section" description="The section you are in charge of." />
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             You are not currently in charge of any section. Ask your HOD to assign you as the faculty-in-charge for a section.

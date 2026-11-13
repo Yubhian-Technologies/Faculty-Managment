@@ -6,7 +6,7 @@ export default function PrincipalAbsentReportPage() {
   const who = useOwnerRoleLabel();
   return (
     <div className="space-y-6">
-      <PageHeader title={`Absent Reports (${who})`} description="All sections — filter by section; same absent logic as HOD." />
+      <PageHeader title={`Absent Reports (${who})`} description="All sections, filtered by section, with the same absentee rules as the HOD view." />
       <SectionReportsView title={`Absent Report — ${who} (college-wide)`} />
     </div>
   );

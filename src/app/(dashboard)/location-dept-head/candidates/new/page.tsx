@@ -52,7 +52,7 @@ export default function NewLocationDeptHeadCandidatePage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add Faculty Candidate"
-        description="Add a new candidate for your department"
+        description="Add a new candidate for your department."
       />
 
       <Card>

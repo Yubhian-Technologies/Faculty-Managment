@@ -98,7 +98,7 @@ function LineRow({ request, line, busy, run }: {
       {dues && (
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1"><Label className="text-xs">Amount (Rs.)</Label><Input className="w-28" type="number" min={0} value={dues.amount} onChange={(e) => setDues({ ...dues, amount: e.target.value })} /></div>
-          <div className="space-y-1 flex-1 min-w-48"><Label className="text-xs">For what</Label><Input value={dues.reason} placeholder="e.g. Lost book - Data Structures" onChange={(e) => setDues({ ...dues, reason: e.target.value })} /></div>
+          <div className="space-y-1 flex-1 min-w-48"><Label className="text-xs">For what</Label><Input value={dues.reason} placeholder="Lost book, Data Structures" onChange={(e) => setDues({ ...dues, reason: e.target.value })} /></div>
           <Button size="sm" disabled={busy || !dues.amount || !dues.reason.trim()}
             onClick={() => run({ action: "DUES_PENDING", branchKey: line.key, amount: Number(dues.amount), remarks: dues.reason.trim() }, "Dues recorded - the student is told").then(() => setDues(null))}>Save dues</Button>
         </div>
@@ -191,7 +191,7 @@ function InboxCard({ request, onDecided, selected, onSelect }: { request: InboxR
 
         {step?.type === "PARALLEL" && (
           <div className="space-y-2">
-            {lines.length === 0 && <p className="text-sm text-muted-foreground">Nothing left for you on this one.</p>}
+            {lines.length === 0 && <p className="text-sm text-muted-foreground">Nothing is pending for you on this request.</p>}
             {lines.map((line) => <LineRow key={line.key} request={request} line={line} busy={busy} run={run} />)}
           </div>
         )}
@@ -302,7 +302,7 @@ export function Inbox() {
           )}
         </div>
       )}
-      {lineOptions.length > 1 && line === "ALL" && <p className="text-xs text-muted-foreground">Pick one of your lines above to clear many students at once.</p>}
+      {lineOptions.length > 1 && line === "ALL" && <p className="text-xs text-muted-foreground">Select one of your lines above to clear several students at once.</p>}
 
       {shown.map((r) => (
         <InboxCard key={r.id} request={r} onDecided={load} selected={selected.has(r.id)}

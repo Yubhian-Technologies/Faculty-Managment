@@ -62,7 +62,7 @@ export default function NewReceiptPage() {
     <div className="max-w-xl">
       <PageHeader
         title="New Receipt"
-        description="Record a receipt for a budget, expense, payment, or allocation"
+        description="Record a receipt for a budget, expense, payment or allocation."
       />
 
       <Card>

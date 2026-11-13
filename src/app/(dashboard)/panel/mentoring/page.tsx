@@ -23,7 +23,7 @@ export default function PanelMentoringPage() {
     <div>
       <PageHeader
         title="Mentoring"
-        description="Students your HOD has assigned to you. Open one to follow their attendance, results and internal marks."
+        description="Students assigned to you by your HOD. Open a student to follow their attendance, results and internal marks."
       />
       {error && <p className="text-sm text-red-600">{error}</p>}
       {!students && !error && <p className="text-sm text-muted-foreground">Loading…</p>}

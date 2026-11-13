@@ -260,7 +260,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Import Supporting Staff"
-        description="Bulk upload Supporting staff records from a CSV file"
+        description="Upload supporting staff records in bulk from a CSV file."
         actions={
           <Button variant="outline" asChild>
             <Link href="/college-office/non-technical-staff"><ArrowLeft className="h-4 w-4 mr-1" />Back to Supporting Staff</Link>
@@ -298,7 +298,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. &quot;DOJ&quot; for Joining Date)</p>
+              <p className="text-xs text-muted-foreground mt-1">CSV and XLSX files are supported. Column headings are matched flexibly (for example, &quot;DOJ&quot; for Date of Joining).</p>
             </div>
           </button>
           {parseError && (
@@ -452,7 +452,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
               )}
               {result.warnings.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Imported, but some fields were ignored.</p>
                   <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
                     {result.warnings.map((w, i) => (
                       <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
@@ -477,9 +477,7 @@ export default function CollegeOfficeNonTechnicalStaffImportPage() {
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Fix Row {fixTarget?.row}</DialogTitle>
-            <DialogDescription>
-              Correct the field(s) that failed and save - this imports just this one staff member, the same as the rest of the file.
-            </DialogDescription>
+            <DialogDescription>Correct the fields that failed and save. Only this staff member is imported, using the same rules as the rest of the file.</DialogDescription>
           </DialogHeader>
 
           {fixTarget && (

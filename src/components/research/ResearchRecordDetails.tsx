@@ -238,7 +238,7 @@ export function ResearchRecordDetails({
   const entries = Object.entries(record).filter(([k, v]) => !HIDDEN_KEYS.has(k) && !isEmpty(v));
 
   if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground">This record has no details recorded.</p>;
+    return <p className="text-sm text-muted-foreground">This record has no details.</p>;
   }
 
   return (

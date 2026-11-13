@@ -9,7 +9,7 @@ export default function HodLeaveHistoryPage() {
     <div className="space-y-6">
       <PageHeader
         title="Leave Register"
-        description="Monthly leave register for your department - click a faculty member to view their full history"
+        description="Monthly leave register of your department. Select a faculty member to view their complete history."
       />
       <ActiveLeaveNowCard />
       <LeaveHistoryReport

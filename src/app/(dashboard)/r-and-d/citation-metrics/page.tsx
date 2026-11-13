@@ -167,7 +167,7 @@ export default function RAndDCitationMetricsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Citations & H-Index Growth"
-        description="Verify staff-submitted citation counts and H-Index metrics"
+        description="Verify citation counts and h-index figures submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

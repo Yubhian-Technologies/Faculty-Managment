@@ -138,7 +138,7 @@ export default function EditStaffAccountPage() {
         <ArrowLeft className="h-4 w-4 mr-1" />
         Back
       </Button>
-      <PageHeader title={`Edit ${ROLE_LABELS[role]}`} description="Update this staff member's account details" />
+      <PageHeader title={`Edit ${ROLE_LABELS[role]}`} description="Update this staff member's account details." />
 
       <Card>
         <CardHeader><CardTitle className="text-base">Account Details</CardTitle></CardHeader>
@@ -197,7 +197,7 @@ export default function EditStaffAccountPage() {
               {role === "COLLEGE_STAFF" && (
                 <div className="space-y-2">
                   <Label>Designation</Label>
-                  <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Academics - R&D, IQAC Coordinator" />
+                  <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="Academics, R&D, IQAC Coordinator" />
                 </div>
               )}
             </div>

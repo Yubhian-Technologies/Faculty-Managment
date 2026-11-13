@@ -47,7 +47,7 @@ export default function NewPurchaseClearancePage() {
     <div className="max-w-xl">
       <PageHeader
         title="Raise Purchase Clearance Request"
-        description="Request clearance to purchase items against your department's budget"
+        description="Request clearance to purchase items against your department's budget."
       />
 
       <Card>

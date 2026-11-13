@@ -189,7 +189,7 @@ export default function RAndDSponsoredProjectsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Sponsored Research Projects"
-        description="Verify staff-submitted sponsored research project records"
+        description="Verify sponsored research project records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

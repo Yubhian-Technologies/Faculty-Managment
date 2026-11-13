@@ -339,7 +339,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
     <div className="space-y-6">
       <PageHeader
         title={title}
-        description="Ask another department to lend a faculty member for a subject you can't staff yourself, or fulfil requests sent to your department"
+        description="Request another department to lend a faculty member for a subject you cannot staff, or fulfil requests sent to your department."
       />
 
       <SegmentedTabs
@@ -510,7 +510,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
                               requesting side), editable only through the builder below. */}
                           {(r.busyClosed || dir === "outgoing") && (
                             mine.length === 0 ? (
-                              <p className="text-xs text-muted-foreground">None - the faculty is free for every period.</p>
+                              <p className="text-xs text-muted-foreground">None. The faculty member is free for every period.</p>
                             ) : (
                               <div className="flex flex-wrap gap-1.5">
                                 {mine.map((bp) => (

@@ -145,10 +145,7 @@ export function NavLayoutBuilder() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Dashboard tabs</CardTitle>
-        <CardDescription>
-          Number, reorder, show or hide the tabs in a role&apos;s sidebar for one college, and add your own tabs with custom pages. Built-in tabs
-          can be moved and switched off but not edited.
-        </CardDescription>
+        <CardDescription>Number, reorder, show or hide the tabs in a role&apos;s sidebar for one college, and add tabs with custom pages. Built-in tabs can be moved and switched off, but not edited.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">

@@ -107,10 +107,7 @@ export function MidPaperTemplateCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Mid question paper template</CardTitle>
-        <CardDescription>
-          A paper is 6 questions in three OR-pairs (1 OR 2, 3 OR 4, 5 OR 6); every part of a question has the question&rsquo;s level.
-          When generating, the Exam Cell picks the level of Question 1 - the other five follow the sequence set here.
-        </CardDescription>
+        <CardDescription>A paper has six questions in three OR pairs (1 or 2, 3 or 4, 5 or 6), and every part of a question has the question&apos;s level. When generating, the Exam Cell chooses the level of Question 1; the other five follow the sequence set here.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {templates.length > 0 && (
@@ -190,7 +187,7 @@ export function MidPaperTemplateCard() {
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">Unit of each question</legend>
-          <p className="text-xs text-muted-foreground">By the Mid&rsquo;s own units: &ldquo;I&rdquo; is the Mid&rsquo;s first unit (Unit 3 for a Mid covering 3 and 4). Every unit must have the same number of questions.</p>
+          <p className="text-xs text-muted-foreground">By the Mid&apos;s own units: &quot;I&quot; is the Mid&apos;s first unit (Unit 3 for a Mid covering Units 3 and 4). Every unit must have the same number of questions.</p>
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full min-w-[34rem] text-sm">
               <thead className="bg-muted/50 text-xs text-muted-foreground">

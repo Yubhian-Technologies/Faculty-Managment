@@ -111,7 +111,7 @@ export default function LibraryReservationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Reservation Queue"
-        description="Students waiting for a book with no copies currently available"
+        description="Students waiting for a book with no copy currently available."
         actions={
           <Button onClick={() => setDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -163,7 +163,7 @@ export default function LibraryReservationsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {unavailableBooks.length === 0 && <p className="text-xs text-muted-foreground">Every book currently has a copy available.</p>}
+              {unavailableBooks.length === 0 && <p className="text-xs text-muted-foreground">Every book has a copy available.</p>}
             </div>
           </div>
           <DialogFooter>

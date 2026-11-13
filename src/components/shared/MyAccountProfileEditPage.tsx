@@ -77,7 +77,7 @@ export function MyAccountProfileEditPage({ basePath, fetchEndpoint, patchEndpoin
           Back to Profile
         </Link>
       </Button>
-      <PageHeader title="Edit My Profile" description="Update your account details" />
+      <PageHeader title="Edit My Profile" description="Update your account details." />
 
       <Card>
         <CardContent className="p-6 space-y-4">

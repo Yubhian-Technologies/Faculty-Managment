@@ -55,10 +55,7 @@ export function ReadOnlyHome({ blockedPath }: { blockedPath?: string }) {
               </div>
             </div>
           </div>
-          <p className="mt-5 text-sm text-muted-foreground">
-            You are no longer an active faculty member, so your account is view-only. Your records are safe and
-            you can look at them any time below - editing, applying and marking are switched off.
-          </p>
+          <p className="mt-5 text-sm text-muted-foreground">You are no longer an active faculty member, so your account is read only. Your records are kept and you can view them below; editing, applying and marking are switched off.</p>
         </CardContent>
       </Card>
 
@@ -92,9 +89,7 @@ export function ReadOnlyHome({ blockedPath }: { blockedPath?: string }) {
         </div>
       </div>
 
-      <p className="text-center text-xs text-muted-foreground">
-        If you think this is a mistake contact your HOD or the college office.
-      </p>
+      <p className="text-center text-xs text-muted-foreground">If you think this is a mistake, contact your HOD or the College Office.</p>
     </div>
   );
 }

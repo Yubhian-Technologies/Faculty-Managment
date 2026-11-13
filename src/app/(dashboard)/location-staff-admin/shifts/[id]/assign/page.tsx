@@ -124,9 +124,7 @@ export default function LocationStaffAdminAssignShiftPage() {
               {selectedStaffIds.length} selected
             </Badge>
           </CardTitle>
-          <CardDescription className="text-xs">
-            Tap a staff member to toggle their assignment to this shift.
-          </CardDescription>
+          <CardDescription className="text-xs">Select a staff member to add or remove them from this shift.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {isLoading ? (

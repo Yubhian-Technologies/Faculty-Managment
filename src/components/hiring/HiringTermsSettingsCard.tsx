@@ -90,9 +90,7 @@ export function HiringTermsSettingsCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Hiring Pipeline Terms &amp; Conditions</CardTitle>
-        <CardDescription>
-          Manage the reusable terms &amp; conditions Principals can select from when negotiating an offer at /principal/negotiate
-        </CardDescription>
+        <CardDescription>Manage the terms and conditions Principals can select when negotiating an offer.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {isLoading ? (
@@ -152,7 +150,7 @@ export function HiringTermsSettingsCard() {
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void addTemplate(); } }}
-            placeholder="e.g. Probationary period of one year"
+            placeholder="Probationary period of one year"
             className="text-sm"
           />
           <Button type="button" variant="outline" loading={isAdding} onClick={() => void addTemplate()}>

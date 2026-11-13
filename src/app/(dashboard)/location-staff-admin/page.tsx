@@ -97,9 +97,7 @@ export default function LocationStaffAdminDashboard() {
               {user?.name ? <span className="font-normal text-muted-foreground"> · {user.name}</span> : ""}
             </h1>
 
-            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              Real-time oversight across campus departments, staff rosters, shift scheduling, and daily attendance tracking.
-            </p>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">Oversight of campus departments, staff rosters, shift schedules and daily attendance.</p>
           </div>
 
           {/* Quick Action Floating Pills */}
@@ -261,9 +259,7 @@ export default function LocationStaffAdminDashboard() {
               <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
                 Departments Hub
               </h3>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                Dedicated department hubs with Department Heads, Staff rosters, Shift schedules, and Live attendance.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Department pages with Department Heads, staff rosters, shift schedules and live attendance.</p>
             </div>
             <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
               <span>Explore Departments</span>
@@ -288,9 +284,7 @@ export default function LocationStaffAdminDashboard() {
               <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
                 Shifts & Roster Rotation
               </h3>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                Configure reusable shifts across departments, set start/end timings, grace periods, and rotate staff.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Configure shifts shared across departments, with start and end times, grace periods and staff rotation.</p>
             </div>
             <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
               <span>Manage Shifts</span>
@@ -315,9 +309,7 @@ export default function LocationStaffAdminDashboard() {
               <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
                 Attendance Reports & Export
               </h3>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                Analyze historical attendance, calculate attendance percentages, and download formatted CSV reports.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Analyse attendance history, calculate attendance percentages and download CSV reports.</p>
             </div>
             <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
               <span>View Reports</span>
@@ -342,9 +334,7 @@ export default function LocationStaffAdminDashboard() {
               <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
                 Staff Registration
               </h3>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                Register new campus personnel with live webcam photo capture, Aadhaar validation, and shift assignments.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Register new campus staff with a webcam photo, Aadhaar validation and shift assignment.</p>
             </div>
             <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
               <span>Add Staff Member</span>
@@ -369,9 +359,7 @@ export default function LocationStaffAdminDashboard() {
               <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
                 Shift-Wise Attendance
               </h3>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                Take attendance focused per shift with automated late arrival and out-of-time checkout detection.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Take shift-wise attendance with automatic detection of late arrival and early check-out.</p>
             </div>
             <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-semibold text-primary">
               <span>Open Shift Roster</span>
@@ -393,9 +381,7 @@ export default function LocationStaffAdminDashboard() {
               <h3 className="font-bold text-base text-foreground">
                 Location Tenancy Shield
               </h3>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                Atomic transaction operations and location-isolated Firestore security guarding all departmental records.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Every departmental record is stored securely and kept separate for each location.</p>
             </div>
             <div className="mt-4 pt-3 border-t border-border/40 text-[11px] text-muted-foreground font-medium">
               Enterprise Grade • Verified Multi-Tenant

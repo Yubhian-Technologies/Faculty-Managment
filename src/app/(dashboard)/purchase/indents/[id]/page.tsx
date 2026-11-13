@@ -210,9 +210,7 @@ export default function PurchaseIndentDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Finance has disbursed the funds. Once you&apos;ve bought the goods, upload the bill/receipt below to notify Finance and close out this indent.
-            </p>
+            <p className="text-sm text-muted-foreground">Finance has released the funds. Once the goods are bought, upload the bill or receipt below to notify Finance and close this indent.</p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Amount Paid</Label>

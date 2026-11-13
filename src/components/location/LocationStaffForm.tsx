@@ -289,7 +289,7 @@ export function LocationStaffForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs font-medium">Full Name <span className="text-destructive">*</span></Label>
-            <Input placeholder="e.g. Ramesh Kumar" value={name}
+            <Input placeholder="Ramesh Kumar" value={name}
               onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: "" })); }}
               onBlur={() => setTouched((p) => ({ ...p, name: true }))}
               className={`h-9 text-xs ${errors.name && touched.name ? "border-destructive focus-visible:ring-destructive" : ""}`} />
@@ -300,11 +300,11 @@ export function LocationStaffForm({
               <Label className="text-xs font-medium text-foreground">Father&rsquo;s Name</Label>
               <span className="text-[10px] text-muted-foreground">Optional</span>
             </div>
-            <Input placeholder="e.g. Suresh Kumar" value={fatherName} onChange={(e) => setFatherName(e.target.value)} className="h-9 text-xs" />
+            <Input placeholder="Suresh Kumar" value={fatherName} onChange={(e) => setFatherName(e.target.value)} className="h-9 text-xs" />
           </div>
           <div className="space-y-1">
             <Label className="text-xs font-medium">Contact Phone Number <span className="text-destructive">*</span></Label>
-            <Input type="tel" placeholder="10-digit mobile (e.g. 9876543210)" value={contactNumber}
+            <Input type="tel" placeholder="10-digit mobile (for example 9876543210)" value={contactNumber}
               onChange={(e) => { setContactNumber(e.target.value.replace(/\D/g, "").slice(0, 10)); if (errors.contactNumber) setErrors((p) => ({ ...p, contactNumber: "" })); }}
               onBlur={() => setTouched((p) => ({ ...p, contactNumber: true }))}
               className={`h-9 text-xs ${errors.contactNumber && touched.contactNumber ? "border-destructive focus-visible:ring-destructive" : ""}`} />
@@ -372,7 +372,7 @@ export function LocationStaffForm({
               <Label className="text-xs font-medium text-foreground">Voucher / Contract Reference</Label>
               <span className="text-[10px] text-muted-foreground">Optional</span>
             </div>
-            <Input placeholder="e.g. VCH-004, Contract-2026-A" value={payeeReference} onChange={(e) => setPayeeReference(e.target.value)} className="h-9 text-xs" />
+            <Input placeholder="VCH-004, Contract-2026-A" value={payeeReference} onChange={(e) => setPayeeReference(e.target.value)} className="h-9 text-xs" />
           </div>
         </div>
 
@@ -389,13 +389,13 @@ export function LocationStaffForm({
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Branch Name <span className="text-destructive">*</span></Label>
-                <Input placeholder="e.g. Main Branch" value={branchName} onChange={(e) => { setBranchName(e.target.value); if (errors.branchName) setErrors((p) => ({ ...p, branchName: "" })); }}
+                <Input placeholder="Main Branch" value={branchName} onChange={(e) => { setBranchName(e.target.value); if (errors.branchName) setErrors((p) => ({ ...p, branchName: "" })); }}
                   className={`h-9 text-xs ${errors.branchName && touched.branchName ? "border-destructive focus-visible:ring-destructive" : ""}`} />
                 {errors.branchName && touched.branchName && <p className="text-[11px] text-destructive font-medium">{errors.branchName}</p>}
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-medium">IFSC Code <span className="text-destructive">*</span></Label>
-                <Input placeholder="e.g. SBIN0001234" value={ifscCode} onChange={(e) => { setIfscCode(e.target.value.toUpperCase()); if (errors.ifscCode) setErrors((p) => ({ ...p, ifscCode: "" })); }}
+                <Input placeholder="SBIN0001234" value={ifscCode} onChange={(e) => { setIfscCode(e.target.value.toUpperCase()); if (errors.ifscCode) setErrors((p) => ({ ...p, ifscCode: "" })); }}
                   className={`h-9 text-xs font-mono ${errors.ifscCode && touched.ifscCode ? "border-destructive focus-visible:ring-destructive" : ""}`} />
                 {errors.ifscCode && touched.ifscCode && <p className="text-[11px] text-destructive font-medium">{errors.ifscCode}</p>}
               </div>
@@ -485,7 +485,7 @@ export function LocationStaffForm({
           </div>
           <div className="space-y-1">
             <Label className="text-xs font-medium">Leave Balance</Label>
-            <Input type="number" placeholder="e.g. 12" value={leaveBalance} onChange={(e) => setLeaveBalance(parseInt(e.target.value) || 0)} className="h-9 text-xs" />
+            <Input type="number" placeholder="12" value={leaveBalance} onChange={(e) => setLeaveBalance(parseInt(e.target.value) || 0)} className="h-9 text-xs" />
             <p className="text-[10px] text-muted-foreground">Total leaves configured for this staff member</p>
           </div>
         </div>

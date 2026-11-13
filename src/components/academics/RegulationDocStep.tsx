@@ -48,7 +48,7 @@ export function RegulationDocStep({ picker }: { picker: ReturnType<typeof useReg
               onRemoved={() => { setLocalUrl(""); void patchRegulationDocument(""); }}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">Load a Regulation and Course above to upload its document.</p>
+            <p className="text-sm text-muted-foreground">Load a regulation and course above to upload its document.</p>
           )}
         </CardContent>
       </Card>

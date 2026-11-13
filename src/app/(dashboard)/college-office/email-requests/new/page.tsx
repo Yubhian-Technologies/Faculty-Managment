@@ -89,7 +89,7 @@ export default function NewEmailRequestPage() {
     <div className="space-y-6 max-w-xl">
       <PageHeader
         title="Request Official Email"
-        description="Ask the Webmaster to provision an institutional email for a newly joined faculty member"
+        description="Request the Webmaster to create an institutional email account for a newly joined faculty member."
       />
 
       <Card>
@@ -128,7 +128,7 @@ export default function NewEmailRequestPage() {
               type="email"
               value={preferredEmail1}
               onChange={(e) => setPreferredEmail1(e.target.value)}
-              placeholder="e.g. dharani@college.edu"
+              placeholder="dharani@college.edu"
             />
           </div>
 
@@ -138,13 +138,11 @@ export default function NewEmailRequestPage() {
               type="email"
               value={preferredEmail2}
               onChange={(e) => setPreferredEmail2(e.target.value)}
-              placeholder="e.g. dharani.n@college.edu"
+              placeholder="dharani.n@college.edu"
             />
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            These are suggestions only — the Webmaster will confirm availability and may assign a different address.
-          </p>
+          <p className="text-xs text-muted-foreground">These are suggestions only. The Webmaster confirms availability and may assign a different address.</p>
 
           <div className="flex gap-2 pt-2">
             <Button onClick={submit} loading={isSubmitting} disabled={!facultyId}>

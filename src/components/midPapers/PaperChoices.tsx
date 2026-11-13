@@ -112,7 +112,7 @@ export function PaperChoices() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <PageHeader title="Mid Question Paper" description="Choose, for every subject written on an exam day, which of the faculty's approved question papers is used - then download it and its answer key. Faculty don't see which one was chosen." />
+      <PageHeader title="Mid Question Paper" description="For every subject written on an examination day, choose which of the faculty's approved question papers is used, then download it and its answer key. Faculty are not told which paper was chosen." />
       <Card className="rounded-2xl"><CardContent className="grid gap-3 p-5 sm:grid-cols-3">
         <div className="space-y-1.5"><Label htmlFor="pc-plan">Mid timetable</Label>
           <select id="pc-plan" className={selectClass} value={planId} onChange={(e) => { setPlanId(e.target.value); setDetail(null); setDate(""); setDay(null); }}>

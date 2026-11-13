@@ -59,7 +59,7 @@ export function ResearchAreaFilter({ faculty, value, onChange }: { faculty: Row[
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && terms.length > 0) { e.preventDefault(); apply(text); } }}
-            placeholder="Type a research area, e.g. ML or ML/DS"
+            placeholder="Type a research area, for example ML or ML/DS"
             className="h-10 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>

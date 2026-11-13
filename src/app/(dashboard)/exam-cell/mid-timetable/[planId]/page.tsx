@@ -358,7 +358,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold">1. Exam days and time</h2>
-              <p className="text-sm text-muted-foreground">Tick the days exams are held (Sundays start off). One time for every exam, or add a second session for two exams a day.</p>
+              <p className="text-sm text-muted-foreground">Select the examination days (Sundays are excluded by default). Use one time for every examination, or add a second session for two examinations a day.</p>
             </div>
             {setupDirty && <Button onClick={() => void saveSetup()} loading={busy === "setup"}><Check className="mr-1.5 h-4 w-4" />Save days &amp; time</Button>}
           </div>
@@ -503,7 +503,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Reschedule an exam day</DialogTitle>
-            <DialogDescription>Postpone or prepone every exam of one day - for one branch or the whole year. Published timetables stay published with the new date, and their faculty and students are told.</DialogDescription>
+            <DialogDescription>Postpone or prepone every examination of one day, for one branch or the whole year. Published timetables stay published with the new date, and their faculty and students are notified.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
@@ -542,7 +542,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
             )}
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="mv-reason">Reason (optional, shown to students and faculty)</Label>
-              <Input id="mv-reason" value={move.reason} maxLength={200} placeholder="e.g. Holiday declared on 3 Oct" onChange={(e) => setMove((m) => ({ ...m, reason: e.target.value }))} />
+              <Input id="mv-reason" value={move.reason} maxLength={200} placeholder="Holiday declared on 3 Oct" onChange={(e) => setMove((m) => ({ ...m, reason: e.target.value }))} />
             </div>
           </div>
           {moveError && <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-2.5 text-sm text-destructive" role="alert">{moveError}</p>}
@@ -603,7 +603,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
               {picked.size > 0 && (
                 <div className="space-y-1.5">
                   <Label htmlFor="cell-heading">Heading {picked.size > 1 ? "(for these electives)" : "(optional)"}</Label>
-                  <Input id="cell-heading" value={heading} maxLength={60} placeholder="e.g. Professional Elective-IV" onChange={(e) => setHeading(e.target.value)} />
+                  <Input id="cell-heading" value={heading} maxLength={60} placeholder="Professional Elective-IV" onChange={(e) => setHeading(e.target.value)} />
                 </div>
               )}
               {data.branches.length > 1 && picked.size > 0 && (
@@ -634,7 +634,7 @@ export default function MidTimetableBuilderPage({ params }: { params: Promise<{ 
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Branch order</DialogTitle>
-            <DialogDescription>The order branches are listed in on this sheet, every timetable PDF and the published timetables.</DialogDescription>
+            <DialogDescription>The order of branches on this sheet, on every timetable PDF and in the published timetables.</DialogDescription>
           </DialogHeader>
           <ol className="max-h-[60vh] space-y-1 overflow-y-auto">
             {(ordering ?? []).map((b, i, list) => (

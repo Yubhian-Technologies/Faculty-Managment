@@ -81,7 +81,7 @@ export default function CollegeDepartmentBrowsePage() {
         <Button variant="ghost" size="icon" asChild>
           <Link aria-label="Back" href={`/administration/colleges/${collegeId}/departments`}><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
-        <PageHeader title={departmentName || "Department"} description="Search faculty or students in this department" />
+        <PageHeader title={departmentName || "Department"} description="Search for faculty or students in this department." />
       </div>
 
       <Card>

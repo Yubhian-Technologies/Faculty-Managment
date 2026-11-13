@@ -155,7 +155,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
           {from && to && from >= to && (
             <p className="text-xs text-destructive">&ldquo;Time to&rdquo; must be after &ldquo;Time from&rdquo;.</p>
           )}
-          {!date && <p className="text-xs text-muted-foreground">Pick a date to start.</p>}
+          {!date && <p className="text-xs text-muted-foreground">Select a date to begin.</p>}
           {date && !from && !to && (
             <p className="text-xs text-muted-foreground">Set a time range.</p>
           )}

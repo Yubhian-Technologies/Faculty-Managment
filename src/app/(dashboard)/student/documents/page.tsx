@@ -31,7 +31,7 @@ export default function StudentDocumentsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <PageHeader title="My Documents" description="Certificates and documents on file for you - from your College Office and the ones you uploaded in My Profile" />
+        <PageHeader title="My Documents" description="Certificates and documents on file for you, from the College Office and those you uploaded in My Profile." />
         <Button asChild variant="outline" size="sm">
           <Link href="/student">
             <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Dashboard

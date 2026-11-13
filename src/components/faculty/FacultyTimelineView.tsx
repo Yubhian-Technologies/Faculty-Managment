@@ -268,7 +268,7 @@ export function FacultyTimelineView({ fetchUrl, backHref, backLabel = "Back to F
 
       <PageHeader
         title="Faculty Timeline"
-        description="Historical record of faculty joining, resignation, retirement and retainership dates"
+        description="Record of faculty joining, resignation, retirement and retainership dates."
         actions={
           <div className="flex items-center gap-2">
             {selectedIds.size > 0 && (

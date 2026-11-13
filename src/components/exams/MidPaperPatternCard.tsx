@@ -102,9 +102,7 @@ export function MidPaperPatternCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Question paper pattern</CardTitle>
-        <CardDescription>
-          This college prepares question papers: each faculty member writes the number of papers set here, to this pattern. The HOD approves them and the Exam Cell picks the one used. A paper already started keeps the pattern it started with.
-        </CardDescription>
+        <CardDescription>This college prepares question papers. Each faculty member writes the number of papers set here, to this pattern. The HOD approves them and the Exam Cell chooses the paper used. A paper already started keeps its original pattern.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {patterns.length > 0 && (
@@ -153,7 +151,7 @@ export function MidPaperPatternCard() {
           </div>
           <div className="space-y-1.5"><Label htmlFor="mpp-sets">Question papers each faculty submits</Label><Input id="mpp-sets" type="number" min={1} max={5} value={sets} onChange={(e) => setSets(e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="mpp-dur">Duration (minutes)</Label><Input id="mpp-dur" type="number" min={15} max={360} value={duration} onChange={(e) => setDuration(e.target.value)} /></div>
-          <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="mpp-instr">Instruction on the paper (optional)</Label><Input id="mpp-instr" maxLength={300} value={instruction} placeholder="e.g. Answer all questions of Part A and any one of each pair in Part B" onChange={(e) => setInstruction(e.target.value)} /></div>
+          <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="mpp-instr">Instruction on the paper (optional)</Label><Input id="mpp-instr" maxLength={300} value={instruction} placeholder="Answer all questions of Part A and any one of each pair in Part B" onChange={(e) => setInstruction(e.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="mpp-regd">Regd. No boxes</Label><Input id="mpp-regd" type="number" min={6} max={20} value={regdBoxes} onChange={(e) => setRegdBoxes(e.target.value)} /></div>
         </div>
 

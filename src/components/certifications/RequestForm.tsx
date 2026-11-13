@@ -94,9 +94,7 @@ export function RequestForm() {
             </div>
             <div className="space-y-1">
               <h2 className="font-semibold text-lg">No certificate request in progress</h2>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                Start a request when you need one - it goes to your HOD, then Placement, Library, Hostel and PD, then the College Office.
-              </p>
+              <p className="text-sm text-muted-foreground max-w-sm">Start a request when you need one. It goes to your HOD, then Placement, Library, Hostel and PD, then the College Office.</p>
             </div>
             <Button size="lg" onClick={() => setDialogOpen(true)} className="gap-2">
               <FilePlus2 className="h-4 w-4" />

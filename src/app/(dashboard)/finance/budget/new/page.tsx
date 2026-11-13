@@ -89,7 +89,7 @@ export default function NewBudgetCyclePage() {
     <div className="max-w-2xl">
       <PageHeader
         title="Release Budget Cycle"
-        description="Announce an institution-wide budget cycle for the Principal to approve. Once approved, every active department automatically gets a pending budget to fill in and submit."
+        description="Announce an institution-wide budget cycle for the Principal's approval. Once approved, every active department receives a budget to complete and submit."
       />
 
       <Card>
@@ -100,7 +100,7 @@ export default function NewBudgetCyclePage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label>Budget Title *</Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Annual Budget 2026-27" />
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Annual Budget 2026-27" />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

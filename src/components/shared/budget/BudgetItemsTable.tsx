@@ -319,7 +319,7 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
                 )}
               </div>
             ) : (
-              <Input value={item.title} onChange={(e) => onUpdate({ title: e.target.value })} placeholder="e.g. Oscilloscope" />
+              <Input value={item.title} onChange={(e) => onUpdate({ title: e.target.value })} placeholder="Oscilloscope" />
             )}
           </td>
           <td className="px-3 py-2">
@@ -453,7 +453,7 @@ function ItemRows({ item, cfg, category, readOnly, colCount, removable, salarySt
                   <Input
                     value={draftLabel}
                     onChange={(e) => setDraftLabel(e.target.value)}
-                    placeholder="Field name, e.g. Vendor Name"
+                    placeholder="Field name, for example Vendor Name"
                     className="h-7 w-40 text-xs"
                     autoFocus
                   />

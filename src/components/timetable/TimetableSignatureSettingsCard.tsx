@@ -135,7 +135,7 @@ export function TimetableSignatureSettingsCard({
         {isLoading ? (
           <Skeleton className="h-20 w-full" />
         ) : groups.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No groups yet - the default In-Charge / HOD / Principal row is printed.</p>
+          <p className="text-sm text-muted-foreground">No groups yet. The default In-Charge, HOD and Principal row is printed.</p>
         ) : (
           <div className="space-y-3">
             {groups.map((g) => (
@@ -152,7 +152,7 @@ export function TimetableSignatureSettingsCard({
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                {g.designations.length === 0 && <p className="text-xs text-muted-foreground">No designations yet - add some below.</p>}
+                {g.designations.length === 0 && <p className="text-xs text-muted-foreground">No designations yet. Add them below.</p>}
                 <div className="space-y-1.5">
                   {g.designations.map((d, j) => (
                     <div key={`${d.label}-${j}`} className="flex items-center gap-3">

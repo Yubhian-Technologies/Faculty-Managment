@@ -144,11 +144,7 @@ export function AcademicYearSettingsCard() {
         <CardTitle className="text-base flex items-center gap-2">
           <CalendarClock className="h-4 w-4" />Academic Year
         </CardTitle>
-        <CardDescription>
-          Set the days your academic year begins and ends. The year itself is worked
-          out from today and moves on by itself each cycle &mdash; there is nothing to
-          update when it rolls over.
-        </CardDescription>
+        <CardDescription>Set the days your academic year begins and ends. The current year is calculated from today&apos;s date and moves forward automatically each cycle, so nothing needs updating at year end.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (

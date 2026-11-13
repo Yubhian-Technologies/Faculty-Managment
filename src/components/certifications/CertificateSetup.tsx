@@ -283,7 +283,7 @@ function TemplateEditor({ initial, id, signature, college, onClose, onSaved }: {
               <div className="space-y-1.5">
                 <Label htmlFor="tp-body">{kind === "MARKS" ? "Text above the marks (optional)" : "Certificate text *"}</Label>
                 <Textarea id="tp-body" rows={9} value={t.body ?? ""} onChange={(e) => set("body", e.target.value)} />
-                <p className="text-xs text-muted-foreground">A blank line starts a new paragraph. Click a value to add it:</p>
+                <p className="text-xs text-muted-foreground">A blank line starts a new paragraph. Select a value to insert it:</p>
                 {PLACEHOLDER_GROUPS.map((g) => (
                   <div key={g.title} className="flex flex-wrap gap-1">
                     {g.items.map((i) => <button key={i.key} type="button" onClick={() => insert(i.key)} className="rounded border px-1.5 py-0.5 text-xs hover:bg-muted" title={`{{${i.key}}}`}>{i.label}</button>)}
@@ -345,7 +345,7 @@ function SignaturesEditor({ settings, canEdit, onSaved }: { settings: Certificat
   }
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">The signature printed on certificates. A certificate type picks one; the first is used otherwise. Use a PNG with a transparent background (max 512 KB).</p>
+      <p className="text-sm text-muted-foreground">The signature printed on certificates. Each certificate type selects one; otherwise the first is used. Use a PNG with a transparent background (up to 512 KB).</p>
       {list.map((s, i) => (
         <Card key={s.id}><CardContent className="p-3 flex flex-wrap items-center gap-3">
           <div className="flex h-14 w-40 items-center justify-center rounded border bg-white">

@@ -78,7 +78,7 @@ export default function FinanceReceiptsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Receipts"
-        description="Record and verify receipts for budgets, expenses, payments, and allocations"
+        description="Record and verify receipts for budgets, expenses, payments and allocations."
         actions={
           <Button onClick={() => router.push("/finance/receipts/new")}>
             <Plus className="h-4 w-4 mr-1" />

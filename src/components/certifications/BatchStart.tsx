@@ -80,7 +80,7 @@ export function BatchStart({ onStarted }: { onStarted: () => void }) {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Start a certificate for classes</DialogTitle>
-            <DialogDescription>Every department on it gets the students in their inbox; students follow it in Certificates.</DialogDescription>
+            <DialogDescription>Each department on the list receives the students in its inbox; students follow the progress under Certificates.</DialogDescription>
           </DialogHeader>
           {data?.oldNoDues && (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm space-y-2 dark:border-amber-900 dark:bg-amber-950/40">
@@ -95,7 +95,7 @@ export function BatchStart({ onStarted }: { onStarted: () => void }) {
             </div>
           )}
           {!data ? <p className="text-sm text-muted-foreground">Loading…</p> : data.types.length === 0 ? (
-            !data.oldNoDues && <p className="text-sm text-muted-foreground">No certificate is set to be started by the College Office. In Setup, edit one and set &quot;Who starts it&quot; to the College Office.</p>
+            !data.oldNoDues && <p className="text-sm text-muted-foreground">No certificate is set to be started by the College Office. In Setup, edit a certificate and set Who Starts It to the College Office.</p>
           ) : (
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">

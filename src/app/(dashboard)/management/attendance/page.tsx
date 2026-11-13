@@ -433,7 +433,7 @@ export default function ManagementAttendancePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Attendance" description="Location → College → Principal/Vice Principal → Department → Course → HOD → Faculty" />
+      <PageHeader title="Attendance" description="Location, College, Principal and Vice Principal, Department, Course, HOD and Faculty." />
 
       <Card>
         <CardContent className="p-5 space-y-4">
@@ -598,7 +598,7 @@ export default function ManagementAttendancePage() {
                   {hodRow ? (
                     <RosterTable rows={[hodRow]} monthlyViewBasePath={`/management/faculty-attendance/${selectedCollegeId}`} />
                   ) : (
-                    <p className="text-sm text-muted-foreground">No HOD assigned for this department.</p>
+                    <p className="text-sm text-muted-foreground">No HOD has been assigned to this department.</p>
                   )}
                 </div>
 

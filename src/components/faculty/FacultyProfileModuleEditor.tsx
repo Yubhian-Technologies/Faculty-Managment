@@ -135,7 +135,7 @@ export function FacultyProfileModuleEditor({
       if (onPreviousTeachingRecordsChange) {
         return <PreviousTeachingAssignmentsEditor value={previousTeachingRecords ?? []} onChange={onPreviousTeachingRecordsChange} />;
       }
-      return <p className="text-sm text-muted-foreground">Teaching assignments aren&apos;t editable here.</p>;
+      return <p className="text-sm text-muted-foreground">Teaching assignments cannot be edited here.</p>;
     case "display-name":
       return (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -145,7 +145,7 @@ export function FacultyProfileModuleEditor({
               id="displaySurname"
               value={record.displaySurname ?? ""}
               maxLength={DISPLAY_SURNAME_MAX}
-              placeholder="e.g. AV"
+              placeholder="AV"
               onChange={(e) => onChange({ displaySurname: normalizeDisplaySurname(e.target.value) })}
             />
             <p className="text-xs text-muted-foreground">Up to {DISPLAY_SURNAME_MAX} capital letters.</p>
@@ -155,7 +155,7 @@ export function FacultyProfileModuleEditor({
             <Input
               id="displayName"
               value={record.displayName ?? ""}
-              placeholder="e.g. VENU GOPAL"
+              placeholder="VENU GOPAL"
               onChange={(e) => onChange({ displayName: normalizeDisplayName(e.target.value) })}
             />
           </div>

@@ -150,7 +150,7 @@ export function EmergencyBudgetForm({ editingRequest, onCancel, onSaved }: Emerg
         <CardContent className="space-y-5">
           <div className="space-y-2">
             <Label>Budget Title <span className="text-destructive">*</span></Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Urgent lab equipment replacement" />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Urgent lab equipment replacement" />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -160,7 +160,7 @@ export function EmergencyBudgetForm({ editingRequest, onCancel, onSaved }: Emerg
             </div>
             <div className="space-y-2">
               <Label>Academic Year <span className="text-destructive">*</span></Label>
-              <Input value={academicYear} onChange={(e) => setAcademicYear(e.target.value)} placeholder="e.g. 2026-27" />
+              <Input value={academicYear} onChange={(e) => setAcademicYear(e.target.value)} placeholder="2026-27" />
             </div>
           </div>
 

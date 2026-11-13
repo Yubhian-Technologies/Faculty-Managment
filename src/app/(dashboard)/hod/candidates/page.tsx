@@ -170,7 +170,7 @@ export default function HODCandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Candidates"
-        description="Manage candidate profiles and associate applicants with their respective recruitment requests."
+        description="Manage candidate profiles and link applicants to their recruitment requests."
         actions={
           <Button asChild>
             <Link href="/hod/candidates/new">

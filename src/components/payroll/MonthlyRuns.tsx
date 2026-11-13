@@ -73,7 +73,7 @@ export function MonthlyRuns({ collegeId }: { collegeId?: string }) {
         <Card className="rounded-2xl"><CardContent className="flex flex-wrap items-end gap-3 p-5">
           <div className="space-y-1.5"><Label htmlFor="mr-month">Prepare salaries for</Label><Input id="mr-month" type="month" className="w-44" value={prepMonth} onChange={(e) => e.target.value && setPrepMonth(e.target.value)} /></div>
           <Button onClick={prepare} disabled={busy || list.runs.some((r) => r.month === prepMonth)}>{busy ? "Working..." : "Prepare month"}</Button>
-          <p className="text-xs text-muted-foreground">Pay days come from joining / relieving dates, the leave register&apos;s loss of pay and absences marked in attendance. You can adjust each line before submitting to Accounts.</p>
+          <p className="text-xs text-muted-foreground">Pay days are based on joining and relieving dates, loss of pay in the leave register and absences marked in attendance. You can adjust each line before submitting to Accounts.</p>
         </CardContent></Card>
       )}
       {list.role !== "PRINCIPAL" && list.role !== "VICE_PRINCIPAL" && list.runs.some((r) => r.status === "RELEASED") && (
@@ -222,7 +222,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
         <details className="rounded-md border px-3 py-2 text-sm">
           <summary className="cursor-pointer font-medium"><AlertTriangle className="mr-1 inline h-4 w-4 text-amber-600" />{run.excluded.length} not in this month</summary>
           <ul className="mt-2 space-y-1 text-xs">{run.excluded.map((x) => <li key={x.employeeKey}><span className="font-mono">{x.employeeCode || "-"}</span> {x.name} - {x.reason}</li>)}</ul>
-          <p className="mt-2 text-xs text-muted-foreground">Accounts set pay in Pay structures, then Recalculate.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Accounts set pay in Pay Structures; then choose Recalculate.</p>
         </details>
       )}
 

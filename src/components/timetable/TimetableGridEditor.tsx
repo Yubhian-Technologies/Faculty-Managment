@@ -1627,9 +1627,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
           <p className="text-sm font-semibold text-destructive">Danger zone</p>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Removes this section&rsquo;s published timetable, its draft, its teaching assignments and open assignment requests for this semester. This cannot be undone.
-            </p>
+            <p className="text-sm text-muted-foreground">Removes this section&apos;s published timetable, its draft, its teaching assignments and open assignment requests for this semester. This cannot be undone.</p>
             <Button size="sm" variant="destructive" onClick={() => setConfirmReset(true)} disabled={busy !== null}>
               <Trash2 className="h-4 w-4 mr-1.5" />Delete entire timetable
             </Button>

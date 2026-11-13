@@ -21,7 +21,7 @@ export default function HodCircularsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Circulars" description="View circulars for your college. If enabled by Principal, you can also publish." />
+      <PageHeader title="Circulars" description="Circulars of your college. You can also publish circulars if the Principal has enabled it." />
       {canSend !== false && <CircularForm onCreated={() => void load()} />}
       {canSend === false && <Card><CardContent className="py-3 text-sm text-muted-foreground">You have view-only access. Principal has not enabled you to send circulars.</CardContent></Card>}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

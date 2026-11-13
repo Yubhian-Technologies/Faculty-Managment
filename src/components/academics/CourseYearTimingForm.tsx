@@ -304,9 +304,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
                 <Clock className="h-4 w-4 text-primary" />
                 College Hours & Periods
               </CardTitle>
-              <CardDescription>
-                Define the overall college day start/end times and individual period lengths.
-              </CardDescription>
+              <CardDescription>Define the start and end of the college day and the length of each period.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -386,9 +384,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
                 <Coffee className="h-4 w-4 text-primary" />
                 Lunch & Recess Breaks
               </CardTitle>
-              <CardDescription>
-                Configure midday lunch break and any scheduled short recess breaks.
-              </CardDescription>
+              <CardDescription>Configure the lunch break and any short breaks.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="space-y-2">

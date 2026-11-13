@@ -60,7 +60,7 @@ export default function HODVacancyPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hiring Requests"
-        description="Track all your faculty hiring requests"
+        description="Track your faculty hiring requests."
         actions={
           <Button asChild>
             <Link href="/hod/vacancy/new">

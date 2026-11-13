@@ -522,7 +522,7 @@ export function FacultyPublicProfileView({ profile }: { profile: FacultyPublicPr
               )}
               {p.recognition.fdpsWorkshopsMoocsCertifications.length > 0 && (
                 <div>
-                  <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">FDPs, Workshops, MOOCs &amp; Certifications</p>
+                  <p className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">FDPs, Workshops, MOOCs and Certifications</p>
                   <EntryList>
                     {p.recognition.fdpsWorkshopsMoocsCertifications.map((t, i) => {
                       const year = publicYear(t.fromDate, t.year);

@@ -114,7 +114,7 @@ export default function LeavePage() {
       ) : leaveRequests.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-border/80 p-12 text-center bg-card/40">
           <CalendarClock className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
-          <p className="text-sm text-muted-foreground">No leave requests found</p>
+          <p className="text-sm text-muted-foreground">No leave requests found.</p>
         </div>
       ) : (
         <DataTable<LocationLeaveRequest>

@@ -59,7 +59,7 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
 
       <Card className="rounded-2xl"><CardContent className="space-y-3 p-5">
         <div className="flex items-center justify-between gap-2">
-          <div><h2 className="font-semibold">Earnings</h2><p className="text-xs text-muted-foreground">Their fixed amounts add up to Gross_Actual. Loss of pay reduces a part only when &quot;Reduced by LOP&quot; is ticked.</p></div>
+          <div><h2 className="font-semibold">Earnings</h2><p className="text-xs text-muted-foreground">The fixed amounts add up to Gross_Actual. Loss of pay reduces a component only when Reduced by LOP is selected.</p></div>
           {!ro && <Button size="sm" variant="outline" onClick={() => setS({ ...s, earnings: [...s.earnings, { id: "", label: "", prorate: true, pfWage: false, esiWage: false, taxable: true, active: true }] })}><Plus className="mr-1 h-4 w-4" />Add part</Button>}
         </div>
         <div className="overflow-x-auto"><table className="w-full min-w-[42rem] text-sm">
@@ -78,7 +78,7 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
 
       <Card className="rounded-2xl"><CardContent className="space-y-3 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div><h2 className="font-semibold">Deductions</h2><p className="text-xs text-muted-foreground">If there&apos;s no pay in a month, every deduction is 0. If deductions would make the net negative, the advance is reduced first.</p></div>
+          <div><h2 className="font-semibold">Deductions</h2><p className="text-xs text-muted-foreground">If there is no pay in a month, every deduction is 0. If deductions would make the net pay negative, the advance is reduced first.</p></div>
           {!ro && (
             <select aria-label="Add deduction" className={selectClass} value="" onChange={(ev) => {
               const kind = ev.target.value as PayDeduction["kind"];
@@ -114,7 +114,7 @@ export function PayRules({ collegeId }: { collegeId?: string }) {
             )}
             {d.kind === "SLAB" && (
               <div className="mt-2 space-y-1.5">
-                <p className="text-xs text-muted-foreground">On the month&apos;s earned gross. The last slab is &quot;and above&quot;.</p>
+                <p className="text-xs text-muted-foreground">On the month&apos;s earned gross. The last slab means &quot;and above&quot;.</p>
                 {d.slabs.map((sl, k) => (
                   <div key={k} className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="w-20 text-xs text-muted-foreground">{k === 0 ? "Up to" : sl.upTo === null ? "Above" : "Then up to"}</span>
@@ -200,7 +200,7 @@ function PfRuleFields({ d, ro, onChange }: { d: PfDeduction; ro: boolean; onChan
           <Plus className="mr-1 h-4 w-4" />PF rule changes from a month
         </Button>
       )}
-      <p className="text-xs text-muted-foreground">Each month uses the latest rule starting on or before it. A month already prepared picks up a change on Recalculate; released months never change.</p>
+      <p className="text-xs text-muted-foreground">Each month uses the latest rule starting on or before it. A prepared month picks up a change on Recalculate; released months never change.</p>
     </div>
   );
 }

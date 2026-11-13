@@ -76,7 +76,7 @@ export default function HODIndentsPage() {
       <div ref={dashboardRef}>
         <PageHeader
           title="Indent Requests"
-          description="Raise and track indents against your department's budget"
+          description="Raise and track indents against your department's budget."
           actions={
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
               <RefreshCw className="h-4 w-4 mr-1" />

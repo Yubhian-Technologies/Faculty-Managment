@@ -412,9 +412,7 @@ export function FacultyIdentityEditPage({
         <Card className="shadow-xs border-border/80 overflow-hidden">
           <WizardStepHeader step={tabs[0]} />
           <CardContent className="p-5 sm:p-6 space-y-5">
-            <p className="text-xs text-muted-foreground -mt-2">
-              Employee ID, College Email and the login password can&apos;t be changed here.
-            </p>
+            <p className="text-xs text-muted-foreground -mt-2">Employee ID, College Email and the login password cannot be changed here.</p>
 
             <div className="flex flex-col gap-5 pb-5 border-b sm:flex-row sm:items-start">
               <div className="flex shrink-0 flex-col items-center gap-2 sm:pt-6">
@@ -496,9 +494,7 @@ export function FacultyIdentityEditPage({
                   </SelectContent>
                 </Select>
                 {designationManaged && (
-                  <p className="text-xs text-muted-foreground">
-                    Managed by this faculty member&apos;s Promotion History - College Office updates it under Promotion &amp; Salary.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Taken from this faculty member&apos;s promotion history. The College Office updates it under Promotion and Salary.</p>
                 )}
               </div>
               <div className="space-y-2">
@@ -561,12 +557,12 @@ export function FacultyIdentityEditPage({
                   </SelectContent>
                 </Select>
                 {qualIsOther && (
-                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="e.g. B.Ed, MCA" />
+                  <Input value={form.highestQualification} onChange={(e) => set({ highestQualification: e.target.value })} placeholder="B.Ed, MCA" />
                 )}
               </div>
               <div className="space-y-2">
                 <Label>Specialization</Label>
-                <Input value={form.specialization} onChange={(e) => set({ specialization: e.target.value })} placeholder="e.g. Machine Learning, VLSI" />
+                <Input value={form.specialization} onChange={(e) => set({ specialization: e.target.value })} placeholder="Machine Learning, VLSI" />
               </div>
             </div>
 
@@ -629,7 +625,7 @@ export function FacultyIdentityEditPage({
                         label="Label (optional)"
                         value={item.label}
                         onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
-                        placeholder="e.g. Personal, WhatsApp, or a name"
+                        placeholder="Personal, WhatsApp, or a name"
                       />
                       <TextInput
                         label="Mobile Number"

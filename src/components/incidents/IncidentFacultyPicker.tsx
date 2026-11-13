@@ -140,9 +140,7 @@ export function IncidentFacultyPicker({ departments, courses, selected, onChange
       </div>
 
       {results === null ? (
-        <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-          Set your filters and press Load to list faculty.
-        </p>
+        <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">Set the filters and choose Load to list faculty.</p>
       ) : shown.length === 0 ? (
         <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No faculty match.</p>
       ) : (

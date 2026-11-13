@@ -99,7 +99,7 @@ export function BankReview({ id, editHref, writeHref, autoDownload }: { id: stri
   // A college that prepares question papers: the papers' own review.
   if (detail.bank.kind === "PAPERS") return <PaperSetReview detail={detail} writeHref={writeHref} onChanged={() => setReloadKey((k) => k + 1)} />;
   if (!bank || !detail.outcomes) {
-    return <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">This question bank hasn&rsquo;t been started yet.</p>;
+    return <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">This question bank has not been started yet.</p>;
   }
 
   const drafts = detail.questions.filter((q) => q.state === "DRAFT").length;

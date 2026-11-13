@@ -121,10 +121,7 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Question bank deadlines</CardTitle>
-        <CardDescription>
-          Set before the Mid timings. Faculty teaching that semester&rsquo;s subjects are notified and prepare their question banks
-          until the end of the deadline day; after that the banks lock unless you move the date.
-        </CardDescription>
+        <CardDescription>Set before the Mid timings. Faculty teaching the semester&apos;s subjects are notified and prepare their question banks until the end of the deadline day. After that, banks are locked unless the date is moved.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

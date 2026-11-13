@@ -101,7 +101,7 @@ export function QuotationsForm({ quotations, selectedQuotationId, onChange, onSe
                   <p className="font-medium">{q.expectedDeliveryDate ? formatDate(new Date(q.expectedDeliveryDate)) : "-"}</p>
                 </div>
                 <div className="sm:col-span-3">
-                  <p className="text-xs text-muted-foreground">Terms &amp; Conditions</p>
+                  <p className="text-xs text-muted-foreground">Terms and Conditions</p>
                   <p className="mt-1 rounded bg-background p-2">{q.termsAndConditions || "-"}</p>
                 </div>
               </div>

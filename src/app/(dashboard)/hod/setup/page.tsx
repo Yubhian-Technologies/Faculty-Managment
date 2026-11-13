@@ -84,7 +84,7 @@ export default function HODSetupPage() {
     <div className="space-y-6">
       <PageHeader
         title="Interview Setup"
-        description="Track College Office setup progress and add demo classroom details"
+        description="Track the College Office setup and add demo classroom details."
       />
 
       <DataTable

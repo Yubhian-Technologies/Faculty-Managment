@@ -69,19 +69,19 @@ export function PreviousTeachingRecordList({ value, onChange }: ListProps) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-1">
               <Label className="text-xs">Academic Year</Label>
-              <Input value={row.academicYear} onChange={(e) => update(row.id, { academicYear: e.target.value })} placeholder="e.g. 2024-2025" />
+              <Input value={row.academicYear} onChange={(e) => update(row.id, { academicYear: e.target.value })} placeholder="2024-2025" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Course</Label>
-              <Input value={row.course} onChange={(e) => update(row.id, { course: e.target.value })} placeholder="e.g. B.Tech" />
+              <Input value={row.course} onChange={(e) => update(row.id, { course: e.target.value })} placeholder="B.Tech" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Year</Label>
-              <Input value={row.year} onChange={(e) => update(row.id, { year: e.target.value })} placeholder="e.g. 1st, 2nd" />
+              <Input value={row.year} onChange={(e) => update(row.id, { year: e.target.value })} placeholder="1st, 2nd" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Semester</Label>
-              <Input value={row.semester} onChange={(e) => update(row.id, { semester: e.target.value })} placeholder="e.g. I, II" />
+              <Input value={row.semester} onChange={(e) => update(row.id, { semester: e.target.value })} placeholder="I, II" />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Subject</Label>
@@ -98,7 +98,7 @@ export function PreviousTeachingRecordList({ value, onChange }: ListProps) {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Passing Percentage %</Label>
-              <Input value={row.passPercentage} onChange={(e) => update(row.id, { passPercentage: e.target.value })} placeholder="e.g. 85" />
+              <Input value={row.passPercentage} onChange={(e) => update(row.id, { passPercentage: e.target.value })} placeholder="85" />
             </div>
           </div>
         </div>

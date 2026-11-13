@@ -291,7 +291,7 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Overview</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" required />
+            <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="2024-25" required />
             <TextInput label="Event Title" value={form.eventTitle} onChange={(v) => set("eventTitle", v)} required />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -48,7 +48,7 @@ export default function StudentHolidaysPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Holidays" description="The college's holiday list for the academic year" />
+      <PageHeader title="Holidays" description="The college's holiday list for the academic year." />
 
       <div className="w-48">
         <Select value={year} onValueChange={setYear}>

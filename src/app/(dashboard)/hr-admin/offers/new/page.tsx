@@ -89,7 +89,7 @@ export default function NewHROfferPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Create Offer Letter"
-        description="Prepare an offer letter for a selected candidate - Administration approval required"
+        description="Prepare an offer letter for a selected candidate. Approval by Administration is required."
       />
 
       <Card>
@@ -114,9 +114,7 @@ export default function NewHROfferPage() {
                 </SelectContent>
               </Select>
               {selectedCandidates.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  No candidates available yet. Complete an interview and use Finalize Decisions to mark candidates first.
-                </p>
+                <p className="text-xs text-muted-foreground">No candidates available yet. Complete an interview and use Finalise Decisions to mark candidates first.</p>
               )}
             </div>
 

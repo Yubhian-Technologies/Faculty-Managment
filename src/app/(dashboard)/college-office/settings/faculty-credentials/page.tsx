@@ -262,7 +262,7 @@ export default function FacultyCredentialsPage() {
     <div className="space-y-8">
       <PageHeader
         title="Faculty Credentials"
-        description="Select one or more candidates whose appointment letter has been sent, and request their login from the Webmaster"
+        description="Select candidates whose appointment letter has been sent, and request their login from the Webmaster."
       />
 
       {eligible.length === 0 ? (
@@ -270,9 +270,7 @@ export default function FacultyCredentialsPage() {
           <CardContent className="p-12 text-center">
             <UserCog className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium">No candidates awaiting an account request</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Candidates appear here once their appointment letter has been sent and no faculty account has been requested yet.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">Candidates appear here once their appointment letter is sent and no faculty account has been requested.</p>
           </CardContent>
         </Card>
       ) : (

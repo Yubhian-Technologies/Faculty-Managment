@@ -575,9 +575,7 @@ export function AddStudentsImport() {
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">{templateStep}</span>Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Download the template, fill in the student roster, and upload it below.
-          </p>
+          <p className="text-sm text-muted-foreground">Download the template, enter the student roster and upload it below.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.filter((h) => !locked || (!h.startsWith("Department accepts") && !h.startsWith("Course is the programme") && !h.startsWith("A single file"))).map((h) => (
               <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>
@@ -602,7 +600,7 @@ export function AddStudentsImport() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely (e.g. &quot;DOB&quot; for Date of Birth)</p>
+              <p className="text-xs text-muted-foreground mt-1">CSV and XLSX files are supported. Column headings are matched flexibly (for example, &quot;DOB&quot; for Date of Birth).</p>
             </div>
           </button>
           {parseError && (
@@ -780,9 +778,7 @@ export function AddStudentsImport() {
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Fix Row {fixTarget?.row}</DialogTitle>
-            <DialogDescription>
-              Correct the field(s) that failed and save - this imports just this one student, the same as adding one manually.
-            </DialogDescription>
+            <DialogDescription>Correct the fields that failed and save. Only this student is imported, in the same way as adding one manually.</DialogDescription>
           </DialogHeader>
 
           {fixTarget && (

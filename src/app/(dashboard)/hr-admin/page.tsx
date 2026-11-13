@@ -66,7 +66,7 @@ export default function HRAdminDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name ?? "HR Admin"}`}
-        description="Location-level HR management"
+        description="Human resources management for the location."
       />
       <div className="grid gap-4 sm:grid-cols-2">
         {actions.filter((a) => !isHidden(a.href)).map((a) => (

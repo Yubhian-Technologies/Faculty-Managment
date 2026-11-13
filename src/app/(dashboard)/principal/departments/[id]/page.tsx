@@ -855,9 +855,7 @@ export default function DepartmentDetailPage() {
             <DialogDescription>Add a course offered by this department.</DialogDescription>
           </DialogHeader>
           {activeCatalog.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No courses are set up yet. Add your college&apos;s courses in the Courses tab first.
-            </p>
+            <p className="text-sm text-muted-foreground py-4 text-center">No courses are set up yet. Add your college&apos;s courses in the Courses tab first.</p>
           ) : (
             <form onSubmit={submitAddCourse} className="space-y-4">
               <div className="space-y-2">

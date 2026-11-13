@@ -106,9 +106,7 @@ export default function AssignShiftStaffPage() {
             <UserPlus className="h-4 w-4 text-primary" />
             <span>Select Staff Members</span>
           </CardTitle>
-          <CardDescription className="text-xs">
-            Choose which staff members are assigned to this shift.
-          </CardDescription>
+          <CardDescription className="text-xs">Choose the staff members assigned to this shift.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-1.5">
           {isLoading ? (

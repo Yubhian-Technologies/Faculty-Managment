@@ -64,12 +64,7 @@ export function LeaveVacationStaffCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Vacation / Non-Vacation Staff</CardTitle>
-        <CardDescription>
-          Choose which roles are vacation staff and which are non-vacation, for leave entitlements. A person follows
-          the highest seat they hold (a faculty member who is also an HOD follows the HOD setting). Leave balances
-          update the next time they are opened. A profile someone edited by hand on the Leave Profile screen keeps
-          its manual category.
-        </CardDescription>
+        <CardDescription>Choose which roles are vacation staff and which are non-vacation staff for leave entitlements. A person follows the highest role they hold (a faculty member who is also an HOD follows the HOD setting). Leave balances are updated the next time they are opened. A profile edited manually on the Leave Profile screen keeps its manual category.</CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -93,9 +88,7 @@ export function LeaveVacationStaffCard() {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Faculty left as vacation staff still follow their own record: a legacy technical designation stays non-vacation.
-            </p>
+            <p className="text-xs text-muted-foreground">Faculty left as vacation staff still follow their own record: an older technical designation stays non-vacation.</p>
             <div className="flex justify-end">
               <Button onClick={handleSave} loading={isSaving}>Save</Button>
             </div>

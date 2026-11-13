@@ -108,9 +108,7 @@ export function CollegeAdminAccountMenu({
           </DialogHeader>
           <div className="space-y-6">
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                This is a role login, not tied to one fixed person - update these whenever it changes hands.
-              </p>
+              <p className="text-xs text-muted-foreground">This is a role login, not tied to one person. Update these details whenever it changes hands.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Name</Label>

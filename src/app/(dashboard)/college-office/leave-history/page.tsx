@@ -45,7 +45,7 @@ export default function CollegeOfficeLeaveHistoryDepartmentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Leave History"
-        description="Select a department to view its leave register"
+        description="Select a department to view its leave register."
         actions={
           <Button asChild variant="outline" size="sm">
             <Link href="/college-office/leave-history/import">

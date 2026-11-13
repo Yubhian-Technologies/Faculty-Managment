@@ -99,7 +99,7 @@ export default function EditAdministrationCollegePage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Edit College" description="Update institution details" />
+      <PageHeader title="Edit College" description="Update the institution's details." />
 
       <Card>
         <CardHeader>

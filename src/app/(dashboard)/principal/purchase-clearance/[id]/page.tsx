@@ -187,7 +187,7 @@ export default function PrincipalPurchaseClearanceDetailPage() {
             <CardTitle className="text-base">Edit & Resubmit</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">Edit and resubmit this request for Purchase Dept review.</p>
+            <p className="text-sm text-muted-foreground">Edit and resubmit this request for review by the Purchase Department.</p>
             <div className="space-y-2">
               <Label>Items / Purpose *</Label>
               <Textarea
@@ -226,19 +226,17 @@ export default function PrincipalPurchaseClearanceDetailPage() {
             <CardTitle className="text-base">Confirm Goods Received</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Purchase Dept has bought these goods. Upload the GRN to confirm they were received and close out this request.
-            </p>
+            <p className="text-sm text-muted-foreground">The Purchase Department has bought these goods. Upload the GRN to confirm receipt and close this request.</p>
             <div className="space-y-2">
               <Label>GRN Number *</Label>
-              <Input value={grnForm.grnNumber} onChange={(e) => setGrnForm((f) => ({ ...f, grnNumber: e.target.value }))} placeholder="e.g. GRN-2026-0142" />
+              <Input value={grnForm.grnNumber} onChange={(e) => setGrnForm((f) => ({ ...f, grnNumber: e.target.value }))} placeholder="GRN-2026-0142" />
             </div>
             <div className="space-y-2">
               <Label>Confirmation Message *</Label>
               <Textarea
                 value={grnForm.grnMessage}
                 onChange={(e) => setGrnForm((f) => ({ ...f, grnMessage: e.target.value }))}
-                placeholder="e.g. All items received in good condition on 14 Jul 2026."
+                placeholder="All items received in good condition on 14 Jul 2026."
                 rows={2}
               />
             </div>

@@ -195,7 +195,7 @@ export default function FinanceBudgetPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget Management"
-        description="Track department budgets approved through the budget cycle workflow"
+        description="Track department budgets approved in the budget cycle."
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => { load(); loadCycle(); }} loading={isLoading}>

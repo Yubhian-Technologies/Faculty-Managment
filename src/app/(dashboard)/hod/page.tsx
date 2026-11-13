@@ -198,7 +198,7 @@ export default function HODDashboard() {
           <CardContent>
             <div className="grid gap-6 sm:grid-cols-[1.3fr_1fr]">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Leave taken this month</p>
+                <p className="text-sm text-muted-foreground mb-1">Leave taken this month.</p>
                 <LeaveUsageBar
                   order={LEAVE_USAGE_ORDER}
                   segments={teamStats.leaveByType.map((s) => ({
@@ -213,7 +213,7 @@ export default function HODDashboard() {
                 {teamStats.attendancePercent != null ? (
                   <RatioMeter label="Department attendance this month" percent={teamStats.attendancePercent} />
                 ) : (
-                  <p className="text-xs text-muted-foreground">No attendance data yet this month</p>
+                  <p className="text-xs text-muted-foreground">No attendance data this month yet.</p>
                 )}
               </div>
             </div>
@@ -237,7 +237,7 @@ export default function HODDashboard() {
               <div className="space-y-3">{[1, 2].map((i) => <CardSkeleton key={i} />)}</div>
             ) : !vacancies.length ? (
               <div className="text-center py-8">
-                <p className="text-sm text-muted-foreground mb-3">No hiring requests yet</p>
+                <p className="text-sm text-muted-foreground mb-3">No hiring requests yet.</p>
                 <Button asChild size="sm">
                   <Link href="/hod/vacancy/new">Create First Request</Link>
                 </Button>

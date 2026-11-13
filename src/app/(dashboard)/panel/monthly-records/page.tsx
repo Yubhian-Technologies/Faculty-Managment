@@ -61,7 +61,7 @@ export default function FacultyAttendanceReportPage() {
   if (!hasTeaching && !isIncharge) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Attendance Register" description="Attendance and class-work history for your sections." />
+        <PageHeader title="Attendance Register" description="Attendance and class work history of your sections." />
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             You have no assigned sections yet. Ask your HOD to assign you to a section and subject first.

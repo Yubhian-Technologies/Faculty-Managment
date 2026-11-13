@@ -305,9 +305,7 @@ export function StudentFormDialog({ open, onOpenChange, student, onSaved, rollEd
               aria-invalid={fieldErrors.loginPassword ? true : undefined}
             />
             {fieldErrors.loginPassword && <p role="alert" data-field-error="loginPassword" className="text-xs font-medium text-destructive">{fieldErrors.loginPassword}</p>}
-            <p className="text-xs text-muted-foreground">
-              When given, the student can sign in with their Regd. No and this password straight away. It is not saved anywhere readable, and they can change it after signing in.
-            </p>
+            <p className="text-xs text-muted-foreground">If entered, the student can sign in with their Regd. No and this password immediately. It is not stored in readable form, and the student can change it after signing in.</p>
           </div>
         )}
 

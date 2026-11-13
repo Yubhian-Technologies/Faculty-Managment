@@ -99,10 +99,7 @@ export function ChangePasswordDialog({
         <DialogHeader>
           <DialogTitle>{forced ? "Set a new password" : "Change Password"}</DialogTitle>
           {forced && (
-            <p className="text-sm text-muted-foreground">
-              You signed in with a one-time password from your college. Choose a password of your own to continue - enter the
-              one-time password below as your current password.
-            </p>
+            <p className="text-sm text-muted-foreground">You signed in with a one-time password from your college. Choose your own password to continue, entering the one-time password below as your current password.</p>
           )}
         </DialogHeader>
         <form

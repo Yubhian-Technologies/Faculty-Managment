@@ -190,7 +190,7 @@ export default function RAndDHackathonsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Organizing Hackathons / Competitions"
-        description="Verify staff-submitted hackathon/competition records"
+        description="Verify hackathon and competition records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

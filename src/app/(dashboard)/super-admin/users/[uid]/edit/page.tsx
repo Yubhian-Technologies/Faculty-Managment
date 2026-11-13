@@ -292,9 +292,7 @@ export default function EditUserPage() {
                   </Select>
                 </div>
 
-                <p className="text-xs text-muted-foreground">
-                  Personal Details and Academic Profile are edited one section at a time from the profile view - use &quot;Back to Profile&quot; above.
-                </p>
+                <p className="text-xs text-muted-foreground">Personal Details and Academic Profile are edited one section at a time from the profile view. Use Back to Profile above.</p>
 
                 <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">
                   <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
@@ -326,7 +324,7 @@ export default function EditUserPage() {
                 <Textarea
                   value={academicProfile.otherInformation ?? ""}
                   onChange={(e) => setAcademicProfile({ ...academicProfile, otherInformation: e.target.value })}
-                  placeholder="Anything not covered above - add it here"
+                  placeholder="Anything not covered above, add it here"
                   rows={4}
                 />
                 <div className="flex justify-end">

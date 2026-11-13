@@ -65,7 +65,7 @@ export function AssignSetters({ deadlineId, onChanged }: { deadlineId: string; /
           Only the faculty you assign prepare these; others teaching the subject can view and give suggestions. {unassigned ? `${unassigned} subject${unassigned === 1 ? "" : "s"} still need setters.` : "Every subject has setters."}
         </p>
       </div>
-      {subjects.length === 0 && <p className="text-sm text-muted-foreground">No subjects of this semester are looked after by your department.</p>}
+      {subjects.length === 0 && <p className="text-sm text-muted-foreground">Your department does not look after any subject of this semester.</p>}
       {subjects.map((s) => <SubjectAssign key={s.subjectId} deadlineId={deadlineId} s={s} locked={data.deadline.locked} onSaved={() => { setReloadKey((k) => k + 1); onChanged?.(); }} />)}
     </CardContent></Card>
   );

@@ -11,7 +11,7 @@ export default function PlacementDeptDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "Placement Department"}`}
-        description="Placement Department - college placement & recruitment support"
+        description="Placement and recruitment support for the college."
       />
       <p className="text-muted-foreground text-sm">Placement Department features are being set up. Check back soon.</p>
     </div>

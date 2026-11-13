@@ -74,7 +74,7 @@ export function StudentProfileDialog({ requestId, studentName }: { requestId: st
             <DialogTitle>{student?.name ?? studentName}</DialogTitle>
           </DialogHeader>
 
-          {loading && <p className="text-sm text-muted-foreground py-6 text-center">Loading student profile…</p>}
+          {loading && <p className="text-sm text-muted-foreground py-6 text-center">Loading student profile...</p>}
 
           {!loading && student && (
             <div className="space-y-5">

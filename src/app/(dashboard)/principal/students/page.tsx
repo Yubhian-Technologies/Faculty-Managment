@@ -388,9 +388,7 @@ function PrincipalStudentsContent() {
             <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
               <Users className="h-10 w-10 text-muted-foreground mb-3" />
               <p className="font-medium text-base">Click Load to view students</p>
-              <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                Select your filters above (or leave as all) and click Load to fetch the student roster with pagination.
-              </p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-sm">Select filters above (or leave them as All) and choose Load to view the student list.</p>
             </div>
           ) : isFetching && students.length === 0 ? (
             <div className="space-y-2">

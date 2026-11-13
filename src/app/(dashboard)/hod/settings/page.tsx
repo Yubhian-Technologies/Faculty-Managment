@@ -18,7 +18,7 @@ export default function HodSettingsPage() {
   ];
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" description="Settings that apply to the department" />
+      <PageHeader title="Settings" description="Settings that apply to the department." />
       <div className="grid gap-4 sm:grid-cols-2">
         {items.map(({ href, label, description, icon: Icon }) => (
           <Link key={href} href={href}>

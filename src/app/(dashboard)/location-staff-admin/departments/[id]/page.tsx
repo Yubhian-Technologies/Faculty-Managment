@@ -475,9 +475,7 @@ export default function DepartmentDetailPage() {
                 {dept.description}
               </p>
             ) : (
-              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 italic">
-                Operational campus department
-              </p>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 italic">Operational campus department.</p>
             )}
           </div>
         </div>
@@ -537,9 +535,7 @@ export default function DepartmentDetailPage() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground italic">
-                    No Department Head appointed yet. Click &apos;Edit Department&apos; to assign one.
-                  </p>
+                  <p className="text-xs text-muted-foreground italic">No Department Head appointed yet. Choose Edit Department to assign one.</p>
                 )}
               </div>
             </div>
@@ -888,9 +884,7 @@ export default function DepartmentDetailPage() {
               </div>
               <div>
                 <h3 className="font-bold text-foreground text-base">No shifts configured for this department</h3>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-                  Create a dedicated shift, or reuse an existing shift already configured for another campus department.
-                </p>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-sm mx-auto">Create a shift, or reuse a shift already configured for another campus department.</p>
               </div>
               <div className="flex items-center justify-center gap-2 pt-2">
                 <Button

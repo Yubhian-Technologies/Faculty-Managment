@@ -46,9 +46,7 @@ export function PeopleNotOnRoster({ departments }: { departments: Department[] }
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Not on the faculty roster yet</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Add anyone who teaches to a department&apos;s roster. Leave out office staff who don&apos;t teach.
-        </p>
+        <p className="text-xs text-muted-foreground">Add everyone who teaches to a department&apos;s roster. Leave out office staff who do not teach.</p>
       </CardHeader>
       <CardContent className="space-y-2">
         {people.map((p) => {

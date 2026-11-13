@@ -68,7 +68,7 @@ export default function FinancePaymentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Payments"
-        description="Process vendor payments, staff reimbursements, and student refunds"
+        description="Process vendor payments, staff reimbursements and student refunds."
         actions={
           <Button onClick={() => router.push("/finance/payments/new")}>
             <Plus className="h-4 w-4 mr-1" />

@@ -254,7 +254,7 @@ function InternalTab({ api }: { api: string }) {
   const years = [...new Set(data.subjects.map((x) => x.year))];
   return (
     <div className="space-y-5">
-      <p className="text-xs text-muted-foreground">Shows marks the faculty have submitted; drafts are not included.</p>
+      <p className="text-xs text-muted-foreground">Shows marks submitted by faculty; drafts are not included.</p>
       {years.map((y) => (
         <div key={String(y)} className="space-y-3">
           <h3 className="text-sm font-semibold text-muted-foreground">{y != null ? `Year ${y}` : "Other"}</h3>

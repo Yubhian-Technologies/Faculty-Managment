@@ -171,9 +171,7 @@ export function LabAttendanceAllocation({ loadAssignments }: { loadAssignments: 
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Allocate attendance faculty</CardTitle>
-          <CardDescription>
-            Pick a lab, its faculty and the dates. On those dates the faculty can open the lab&apos;s Student Attendance and mark it, at any time of day.
-          </CardDescription>
+          <CardDescription>Select a lab, its faculty and the dates. On those dates the faculty member can open the lab&apos;s student attendance and mark it at any time of day.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -198,7 +196,7 @@ export function LabAttendanceAllocation({ loadAssignments }: { loadAssignments: 
                   ))}
                 </SelectContent>
               </Select>
-              {onlyOne && <p className="text-xs text-muted-foreground">Only one faculty teaches this lab, so they are selected.</p>}
+              {onlyOne && <p className="text-xs text-muted-foreground">Only one faculty member teaches this lab, so they are selected.</p>}
             </div>
           </div>
 

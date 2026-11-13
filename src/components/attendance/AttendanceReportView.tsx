@@ -662,7 +662,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
                     {searchedHod ? (
                       <RosterTable rows={[searchedHod]} onMark={allowManualMark && canEditSelectedDate ? openMarkDialog : undefined} monthlyViewBasePath={monthlyViewBasePath} />
                     ) : (
-                      <p className="text-sm text-muted-foreground">No HOD assigned for this department.</p>
+                      <p className="text-sm text-muted-foreground">No HOD has been assigned to this department.</p>
                     )}
                   </div>
 
@@ -759,7 +759,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
                   value={manualReason}
                   onChange={(e) => setManualReason(e.target.value)}
                   rows={3}
-                  placeholder="Why are you marking this manually? e.g. Left campus at 2pm for an official site visit."
+                  placeholder="Reason for marking manually, for example: left campus at 2 pm for an official site visit."
                 />
               </div>
             </div>
@@ -790,7 +790,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
                 value={permissionReason}
                 onChange={(e) => setPermissionReason(e.target.value)}
                 rows={3}
-                placeholder="Why are you granting this? e.g. Attending a family function in the morning."
+                placeholder="Reason for granting, for example: attending a family function in the morning."
               />
             </div>
           </div>

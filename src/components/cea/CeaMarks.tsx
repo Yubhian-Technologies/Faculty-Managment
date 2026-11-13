@@ -33,7 +33,7 @@ export function CeaMarks() {
   if (open) return <SheetView {...open} onBack={() => { setOpen(null); load(); }} />;
   return (
     <div className="max-w-5xl space-y-6">
-      <PageHeader title="CIE Marks" description="Continuous Internal Evaluation: one assessment per unit, as your Subject Department planned it. Submitted units add up into internal marks." />
+      <PageHeader title="CIE Marks" description="Continuous Internal Evaluation: one assessment per unit, as planned by the Subject Department. Submitted units count towards internal marks." />
       {error ? <p className="text-sm text-destructive">{error}</p> : !list ? <div className="h-40 animate-pulse rounded-2xl bg-muted/40" /> : list.length === 0 ? (
         <p className="text-sm text-muted-foreground">None of your subjects has a CIE plan.</p>
       ) : list.map((a) => (

@@ -80,7 +80,7 @@ function RequestFormFields({
     <>
       <DialogHeader>
         <DialogTitle>Citations &amp; H-Index Growth</DialogTitle>
-        <DialogDescription>This goes to R&amp;D for verification before it shows on your profile.</DialogDescription>
+        <DialogDescription>This is sent to R&amp;D for verification before it appears on your profile.</DialogDescription>
       </DialogHeader>
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

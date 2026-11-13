@@ -54,7 +54,7 @@ export default function StudentPaymentPage({ params }: { params: Promise<{ id: s
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
           {rows.filter(([, v]) => v).map(([k, v]) => <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="font-medium break-all">{v}</dd></div>)}
         </dl>
-        {!ok && <p className="text-xs text-muted-foreground">No money is taken for a failed or cancelled payment. If your bank shows a debit, it is reversed by the bank, or checked by the Accounts office.</p>}
+        {!ok && <p className="text-xs text-muted-foreground">No money is taken for a failed or cancelled payment. If your bank shows a debit, the bank reverses it, or the Accounts office checks it.</p>}
       </CardContent></Card>
       <div className="flex gap-2">
         <Button asChild><Link href="/student/certificates">Back to certificates</Link></Button>

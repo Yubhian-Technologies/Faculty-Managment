@@ -77,7 +77,7 @@ export default function PurchaseLatestPage() {
     <div className="space-y-6">
       <PageHeader
         title="Latest Requests"
-        description="Most recently updated indent and purchase clearance requests, any status"
+        description="Most recently updated indent and purchase clearance requests, in any status."
       />
 
       {isLoading ? (

@@ -180,9 +180,7 @@ export default function ResearchRecordPage({
         <Card>
           <CardContent className="p-8 text-center">
             <p className="text-sm font-medium">This record no longer exists</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              It may have been deleted after this page was opened.
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">It may have been deleted after this page was opened.</p>
           </CardContent>
         </Card>
       ) : (

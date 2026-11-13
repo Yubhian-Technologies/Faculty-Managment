@@ -145,7 +145,7 @@ export default function CollegeOfficeDepartmentVacanciesPage() {
 
       <div>
         <h1 className="text-xl font-bold">{decodedDepartment}</h1>
-        <p className="text-sm text-muted-foreground">Offer letter → document verification & joining letter → appointment letter → credentials & official email setup</p>
+        <p className="text-sm text-muted-foreground">Offer letter, document verification and joining letter, appointment letter, then login and official email setup.</p>
       </div>
 
       <div className="flex gap-2">

@@ -271,7 +271,7 @@ export function FacultyProfileCompletionView({ role }: { role: "HOD" | "PRINCIPA
             <Button onClick={() => handleLoad(selectedDept)} loading={isLoading} disabled={role === "SUPER_ADMIN" && !selectedCollegeId}>
               Load
             </Button>
-            {!hasLoaded && <p className="text-sm text-muted-foreground ml-auto">Pick a department (or leave All) and click Load.</p>}
+            {!hasLoaded && <p className="text-sm text-muted-foreground ml-auto">Select a department (or leave All) and choose Load.</p>}
           </CardContent>
         </Card>
       )}

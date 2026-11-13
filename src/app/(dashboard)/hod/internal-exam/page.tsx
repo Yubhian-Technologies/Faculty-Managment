@@ -174,7 +174,7 @@ export default function HodInternalExamPage() {
       <div className="space-y-6">
         <PageHeader
           title={`${selectedBatch.subjectName} — ${selectedBatch.sectionName}`}
-          description="Submitted internal exam marks (view-only)"
+          description="Submitted internal examination marks (read only)."
           actions={
             <Button variant="outline" onClick={() => { setSelectedBatch(null); setSelectedConfig(null); }}>
               Back to list
@@ -244,7 +244,7 @@ export default function HodInternalExamPage() {
     <div className="space-y-6">
       <PageHeader
         title="Internal Marks"
-        description="Submitted internal exam marks for your department (view-only)"
+        description="Submitted internal examination marks of your department (read only)."
       />
 
       {isLoading ? (

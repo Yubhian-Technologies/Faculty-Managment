@@ -108,7 +108,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Role Assignments"
-        description="Appoint people to roles - Principal, each department's HOD, Vice Principal, Academics and so on. Everyone signs in with their own college email; a role adds its modules to their dashboard and stays with the position when the person changes."
+        description="Appoint people to roles such as Principal, HOD of each department, Vice Principal and Academics. Everyone signs in with their own college email; a role adds its modules to their dashboard and stays with the position when the person changes."
         actions={
           <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Role</Button>
         }
@@ -119,9 +119,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
       ) : visibleSeats.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center space-y-3">
-            <p className="text-sm text-muted-foreground">
-              No seats yet. Add a seat and appoint someone to get started.
-            </p>
+            <p className="text-sm text-muted-foreground">No positions yet. Add a position and appoint someone to it.</p>
             <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 mr-2" />Add Role</Button>
           </CardContent>
         </Card>
@@ -202,9 +200,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
                 <CardContent className="p-4 flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-sm font-semibold">{seat.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Retired - no one holds this role. Reactivate it to appoint someone.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Retired. No one holds this role; reactivate it to appoint someone.</p>
                   </div>
                   <Button size="sm" variant="outline" loading={reactivatingId === seat.id} onClick={() => reactivate(seat)}>
                     <RotateCcw className="h-3.5 w-3.5 mr-1" />Reactivate
@@ -548,13 +544,11 @@ function RoleEmailDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Role email - {seat.label}</DialogTitle>
-          <DialogDescription>
-            The position&apos;s own contact address. It stays with the seat as people change and is not a login - everyone signs in with their personal college email.
-          </DialogDescription>
+          <DialogDescription>The position&apos;s own contact address. It stays with the position when people change and is not a login; everyone signs in with their personal college email.</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           <Label>Role email</Label>
-          <Input type="email" value={value} onChange={(e) => setValue(e.target.value)} placeholder="e.g. hod.cse@yourcollege.edu" />
+          <Input type="email" value={value} onChange={(e) => setValue(e.target.value)} placeholder="hod.cse@yourcollege.edu" />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>

@@ -58,7 +58,7 @@ export default function NewHRCandidatePage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add Faculty Candidate"
-        description="Add a new candidate to the recruitment pipeline"
+        description="Add a new candidate to the recruitment pipeline."
       />
 
       <Card>
@@ -100,7 +100,7 @@ export default function NewHRCandidatePage() {
 
             <div className="space-y-2">
               <Label>Qualification</Label>
-              <Input value={form.qualification} onChange={(e) => setForm((f) => ({ ...f, qualification: e.target.value }))} placeholder="e.g. M.Tech, Ph.D" />
+              <Input value={form.qualification} onChange={(e) => setForm((f) => ({ ...f, qualification: e.target.value }))} placeholder="M.Tech, Ph.D" />
             </div>
 
             <div className="space-y-2">

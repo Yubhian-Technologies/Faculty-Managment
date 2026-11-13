@@ -43,7 +43,7 @@ export default function PurchaseDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Hello, ${user?.name ?? "Purchase"}`}
-        description="Source quotations, track the purchase status of goods, and submit receipts to Finance"
+        description="Obtain quotations, track the purchase of goods and submit receipts to Finance."
       />
 
       {!isHidden("/purchase/indents") && (

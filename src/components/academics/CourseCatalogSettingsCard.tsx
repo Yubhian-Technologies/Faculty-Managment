@@ -196,7 +196,7 @@ function RegulationBatchesEditor({
           <Label htmlFor={`${listId}-code`} className="text-[11px]">Code</Label>
           <Input
             id={`${listId}-code`} value={code} onChange={(e) => setCode(e.target.value)}
-            placeholder="e.g. R23" className="w-24 uppercase" list={listId} disabled={editingCode != null}
+            placeholder="R23" className="w-24 uppercase" list={listId} disabled={editingCode != null}
             aria-invalid={fieldError?.field === "code" || undefined}
             aria-describedby={fieldError ? `${listId}-error` : undefined}
           />
@@ -572,12 +572,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
             for itself. The Academics' regulations-only view keeps the blurb -
             the card is one of several there and has to say which part it owns. */}
         {!showDepartments && (
-          <CardDescription>
-            The fixed list of courses for your entire college. Create a course here first - departments can only select
-            from these (a department needs at least one), which keeps course names and codes consistent and prevents
-            duplicates. Each course&apos;s curriculum regulations (e.g. R23) are created right here too - give one a
-            starting year and a duration and it covers those years automatically.
-          </CardDescription>
+          <CardDescription>The fixed list of courses for the whole college. Create a course here first; departments select only from this list (each department needs at least one), which keeps course names and codes consistent. Each course&apos;s regulations (for example R23) are also created here; give a regulation a starting year and a duration and it covers those years.</CardDescription>
         )}
       </CardHeader>
       <CardContent className="space-y-5">
@@ -617,7 +612,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
                       <Input
                         value={newDraft.name}
                         onChange={(e) => setNewDraft((d) => ({ ...d, name: e.target.value }))}
-                        placeholder="e.g. Bachelor of Technology"
+                        placeholder="Bachelor of Technology"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -681,9 +676,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
             {[1, 2].map((i) => <div key={i} className="h-32 bg-muted animate-pulse rounded-lg" />)}
           </div>
         ) : items.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No courses yet. Add your college&apos;s courses above so departments can select them.
-          </p>
+          <p className="text-sm text-muted-foreground text-center py-4">No courses yet. Add your college&apos;s courses above so departments can select them.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {items.map((item) => {

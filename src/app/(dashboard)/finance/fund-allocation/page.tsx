@@ -57,7 +57,7 @@ export default function FinanceFundAllocationPage() {
     <div className="space-y-6">
       <PageHeader
         title="Fund Allocation"
-        description="Allocate approved budgets to departments, projects, events, and purchases"
+        description="Allocate approved budgets to departments, projects, events and purchases."
         actions={
           <Button onClick={() => router.push("/finance/fund-allocation/new")} disabled={budgets.length === 0}>
             <Plus className="h-4 w-4 mr-1" />

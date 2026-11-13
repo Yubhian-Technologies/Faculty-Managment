@@ -68,7 +68,7 @@ export default function PurchasePendingPage() {
     <div className="space-y-6">
       <PageHeader
         title="Pending Requests"
-        description="Indents and purchase clearance requests currently waiting on Purchase Dept"
+        description="Indent and purchase clearance requests awaiting the Purchase Department."
       />
 
       {isLoading ? (

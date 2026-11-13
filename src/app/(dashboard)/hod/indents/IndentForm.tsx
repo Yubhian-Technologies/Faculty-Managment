@@ -114,7 +114,7 @@ export function IndentForm({ editingRequest, onCancel, onSaved }: IndentFormProp
         <CardContent className="space-y-5">
           <div className="space-y-2">
             <Label>Title / Purpose <span className="text-destructive">*</span></Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Lab consumables restock" />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Lab consumables restock" />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">

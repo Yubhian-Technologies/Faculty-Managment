@@ -107,7 +107,7 @@ export function CeaPlanDialog({ subjectId, onClose, onSaved }: { subjectId: stri
           <DialogTitle>CIE plan{d ? ` - ${d.subject.name}` : ""}</DialogTitle>
           <DialogDescription>{d ? `${d.subject.code} · ${d.subject.courseName} ${d.subject.regulation} · every branch${d.settings ? ` · ${d.settings.unitMarks} marks a unit` : ""}` : "Loading..."}</DialogDescription>
         </DialogHeader>
-        {d && !d.settings && <p className="text-sm text-muted-foreground">CIE isn&apos;t switched on for this course and regulation.</p>}
+        {d && !d.settings && <p className="text-sm text-muted-foreground">CIE is not enabled for this course and regulation.</p>}
         {d && d.settings && d.syllabusStatus !== "FROZEN" && <p className="text-sm text-amber-700 dark:text-amber-300">The syllabus isn&apos;t frozen yet - its units are what you plan. Academics freeze it after the HOD submits it.</p>}
         {d && d.settings && d.units.length > 0 && (
           <div className="space-y-2">

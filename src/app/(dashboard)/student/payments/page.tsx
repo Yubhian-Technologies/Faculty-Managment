@@ -17,7 +17,7 @@ function MyPayments() {
   }, []);
   return (
     <div className="max-w-3xl space-y-6">
-      <PageHeader title="My payments" description="Fees you paid online through CCAvenue" />
+      <PageHeader title="My payments" description="Fees you have paid online through CCAvenue." />
       {params.get("result") === "unknown" && (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           We couldn&apos;t read the payment result. If money was taken from your account, it is checked and recorded by the Accounts office - you don&apos;t need to pay again. Contact the College Office with the time of payment.

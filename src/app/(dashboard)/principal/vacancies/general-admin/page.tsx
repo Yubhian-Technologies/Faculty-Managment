@@ -89,7 +89,7 @@ export default function GeneralAdminVacancyPage() {
     <div className="space-y-6">
       <PageHeader
         title="General Admin Vacancies"
-        description="Request non-teaching / general administration staff from Super Admin"
+        description="Request non-teaching and general administration staff from the Super Admin."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
@@ -116,7 +116,7 @@ export default function GeneralAdminVacancyPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-2 sm:col-span-1">
                   <Label>Position <span className="text-destructive">*</span></Label>
-                  <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="e.g. Office Assistant" />
+                  <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Office Assistant" />
                 </div>
                 <div className="space-y-2">
                   <Label>Required Count <span className="text-destructive">*</span></Label>

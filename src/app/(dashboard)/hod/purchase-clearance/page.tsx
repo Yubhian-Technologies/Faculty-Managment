@@ -114,7 +114,7 @@ export default function HODPurchaseClearancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Purchase Clearance"
-        description="Goods indents and purchase clearance requests you've raised with Purchase Dept"
+        description="Goods indents and purchase clearance requests you have raised with the Purchase Department."
         actions={
           <>
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>

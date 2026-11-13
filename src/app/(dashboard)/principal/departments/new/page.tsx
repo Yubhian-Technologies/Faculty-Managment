@@ -118,7 +118,7 @@ return (
 <div className="w-full max-w-4xl mx-auto space-y-6 pb-12">
       <PageHeader
         title="Add Department"
-        description="Add a new department under one or more courses"
+        description="Add a new department under one or more courses."
       />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -139,7 +139,7 @@ return (
                 <Input
                   id="dept-name"
                   {...register("name")}
-                  placeholder="e.g. Computer Science"
+                  placeholder="Computer Science"
                 />
                 {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
               </div>
@@ -149,19 +149,17 @@ return (
                 <Input
                   id="dept-code"
                   {...register("code")}
-                  placeholder="e.g. CS"
+                  placeholder="CS"
                   className="uppercase"
                   maxLength={10}
                 />
-                <p className="text-xs text-muted-foreground">2-10 uppercase letters, used in reports and batch IDs</p>
+                <p className="text-xs text-muted-foreground">2 to 10 capital letters, used in reports and batch IDs.</p>
                 {errors.code && <p className="text-sm text-destructive">{errors.code.message}</p>}
               </div>
 
               <div className="space-y-1 rounded-md border p-3">
                 <Label>Head of Department</Label>
-                <p className="text-xs text-muted-foreground">
-                  A HOD seat is created automatically - appoint someone in Role Assignments.
-                </p>
+                <p className="text-xs text-muted-foreground">An HOD position is created automatically. Appoint someone in Role Assignments.</p>
               </div>
             </CardContent>
           </Card>
@@ -169,10 +167,7 @@ return (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Courses *</CardTitle>
-              <CardDescription>
-                Pick every course this department offers (e.g. CSE under both B.Tech and M.Tech) - it will be listed
-                under each of them in the Courses module.
-              </CardDescription>
+              <CardDescription>Select every course this department offers (for example CSE under both B.Tech and M.Tech). It is listed under each of them in the Courses module.</CardDescription>
             </CardHeader>
             <CardContent>
               {catalogLoaded ? (
@@ -187,9 +182,7 @@ return (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Core Departments available to link</CardTitle>
-            <CardDescription>
-              Optional. The head of each department picked gets view-only access to this department&apos;s sections and students.
-            </CardDescription>
+            <CardDescription>Optional. The head of each selected department gets read-only access to this department&apos;s sections and students.</CardDescription>
           </CardHeader>
           <CardContent>
             <YearsTaughtAndSecondaryFields
@@ -211,9 +204,7 @@ return (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Structure</CardTitle>
-            <CardDescription>
-              How this department is organised and where its students begin.
-            </CardDescription>
+            <CardDescription>How this department is organised and where its students begin.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-start gap-2">
@@ -224,9 +215,7 @@ return (
               />
               <div className="space-y-1">
                 <Label htmlFor="dept-is-freshman" className="font-normal">Freshman&apos;s Department</Label>
-                <p className="text-xs text-muted-foreground">
-                  Shared first year - year-1 students can only be filed under this department (or its sub-departments).
-                </p>
+                <p className="text-xs text-muted-foreground">Common first year: first-year students can be filed only under this department or its sub-departments.</p>
               </div>
             </div>
 
@@ -238,9 +227,7 @@ return (
               />
               <div className="space-y-1">
                 <Label htmlFor="dept-has-subdepts" className="font-normal">Has sub-departments</Label>
-                <p className="text-xs text-muted-foreground">
-                  Splits this department into smaller ones, each with its own head, managed from the HOD&apos;s Sub-Departments page.
-                </p>
+                <p className="text-xs text-muted-foreground">Divides this department into smaller departments, each with its own head, managed from the HOD&apos;s Sub-Departments page.</p>
               </div>
             </div>
 
@@ -255,9 +242,7 @@ return (
                   <Label htmlFor="dept-parent-runs-own-sections" className="font-normal">
                     This department also has its own sections/students, separate from its sub-departments
                   </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Turn off only if every student belongs to a sub-department.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Turn off only if every student belongs to a sub-department.</p>
                 </div>
               </div>
             )}

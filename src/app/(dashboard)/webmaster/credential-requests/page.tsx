@@ -150,7 +150,7 @@ export default function WebmasterCredentialRequestsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Faculty Account Requests" description="Review and provision the login for each candidate the office has requested an account for" />
+      <PageHeader title="Faculty Account Requests" description="Review and create the login for each candidate the office has requested an account for." />
 
       {isLoading ? (
         <div className="space-y-3">{[1, 2, 3].map((i) => <CardSkeleton key={i} />)}</div>
@@ -159,7 +159,7 @@ export default function WebmasterCredentialRequestsPage() {
           <CardContent className="p-12 text-center">
             <KeyRound className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium">No pending requests</p>
-            <p className="text-sm text-muted-foreground mt-1">Requests appear here once College Office asks for a candidate&apos;s faculty account.</p>
+            <p className="text-sm text-muted-foreground mt-1">Requests appear here once the College Office requests a faculty account for a candidate.</p>
           </CardContent>
         </Card>
       ) : (

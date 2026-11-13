@@ -246,7 +246,7 @@ function RecordFormFields({
         <div className="space-y-4">
           <SubLabel>Overview</SubLabel>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="e.g. 2024-25" required />
+            <TextInput label="Academic Year" value={form.academicYear} onChange={(v) => set("academicYear", v)} placeholder="2024-25" required />
             <div className="space-y-2">
               <Label>Type of Innovation<RequiredMark required /></Label>
               <Select value={form.innovatorType} onValueChange={(v) => set("innovatorType", v as InnovatorType)}>

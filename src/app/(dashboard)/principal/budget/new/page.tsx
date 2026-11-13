@@ -10,7 +10,7 @@ export default function NewEmergencyBudgetRequestPage() {
     <div className="space-y-6">
       <PageHeader
         title="Raise Emergency Budget Request"
-        description="Submit an emergency budget request directly to Management"
+        description="Submit an emergency budget request directly to Management."
       />
       <EmergencyBudgetForm
         onCancel={() => router.push("/principal/budget")}

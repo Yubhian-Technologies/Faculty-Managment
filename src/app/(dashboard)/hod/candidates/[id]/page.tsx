@@ -146,7 +146,7 @@ export default function HODCandidateDetailPage() {
           <CardContent>
             {applications.length === 0 ? (
               <div className="text-center py-8 space-y-2">
-                <p className="text-sm text-muted-foreground">Not attached to any hiring request yet</p>
+                <p className="text-sm text-muted-foreground">Not linked to a hiring request yet.</p>
                 <Button size="sm" onClick={() => setAttachOpen(true)}>
                   <Plus className="h-4 w-4 mr-1" /> Attach to Hiring Request
                 </Button>

@@ -152,7 +152,7 @@ export default function SubDepartmentsSettingsPage() {
       <div className="space-y-6">
         <PageHeader
           title="Sub-Departments"
-          description="Split your department into sub-branches, each with its own HOD"
+          description="Divide your department into sub-departments, each with its own HOD."
         />
         <Card>
           <CardContent className="py-16">
@@ -187,7 +187,7 @@ export default function SubDepartmentsSettingsPage() {
         {deptPicker}
         <PageHeader
           title="Sub-Departments"
-          description="Split your department into sub-branches, each with its own HOD"
+          description="Divide your department into sub-departments, each with its own HOD."
         />
         <Card>
           <CardContent className="py-16">

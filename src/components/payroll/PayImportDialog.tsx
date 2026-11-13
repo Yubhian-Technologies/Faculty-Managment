@@ -102,7 +102,7 @@ export function PayImportDialog({ collegeId, settings, rows: people, onClose, on
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import salary sheet</DialogTitle>
-          <DialogDescription>Fixed monthly pay per person, matched by Emp Code. Download the template (it has everyone&apos;s current pay), change it, and upload it - or upload your monthly salary sheet as it is (Pay Days and the worked-out columns are skipped; a PF / SWF amount means it applies).</DialogDescription>
+          <DialogDescription>Fixed monthly pay for each employee, matched by Employee ID. Download the template, which contains everyone&apos;s current pay, update it and upload it. You can also upload your monthly salary sheet as it is: Pay Days and calculated columns are ignored, and a PF or SWF amount means the deduction applies.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5"><Label htmlFor="pi-from">Pay starts from</Label><Input id="pi-from" type="month" className="w-44" value={from} onChange={(e) => { if (e.target.value) { setFrom(e.target.value); setPlan(null); } }} /></div>

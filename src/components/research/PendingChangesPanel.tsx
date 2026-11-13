@@ -41,9 +41,7 @@ export function readPendingChanges(record: unknown): { changes: FieldChange[]; c
 function ChangesTable({ changes }: { changes: FieldChange[] }) {
   if (changes.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        It was edited, but every field has the same value as the verified version.
-      </p>
+      <p className="text-sm text-muted-foreground">It was edited, but every field has the same value as the verified version.</p>
     );
   }
   return (

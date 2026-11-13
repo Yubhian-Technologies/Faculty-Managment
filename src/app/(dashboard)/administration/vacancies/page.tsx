@@ -81,7 +81,7 @@ export default function AdministrationVacanciesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hiring Requests"
-        description="Approve or reject faculty hiring requests forwarded by HR Admin"
+        description="Approve or reject the faculty hiring requests forwarded by HR Admin."
       />
 
       {collegeId && (

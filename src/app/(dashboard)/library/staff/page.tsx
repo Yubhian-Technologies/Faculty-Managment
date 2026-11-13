@@ -136,7 +136,7 @@ export default function LibraryStaffPage() {
     <div className="space-y-6">
       <PageHeader
         title="Library Staff"
-        description="Staff records for your Library unit"
+        description="Staff records of the library."
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => exportSupportingStaffCsv(staff, "library_staff")} disabled={staff.length === 0}>

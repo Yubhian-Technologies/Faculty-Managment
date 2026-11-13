@@ -64,13 +64,13 @@ export function AddTabDialog({ open, onOpenChange, collegeId, role, roles, posit
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add a tab at position {position}</DialogTitle>
-          <DialogDescription>Name the tab and choose who sees it. You&apos;ll build its page next.</DialogDescription>
+          <DialogDescription>Name the tab and choose who can see it. You will build its page next.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="tab-title">Tab name</Label>
-            <Input id="tab-title" value={title} maxLength={60} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Notices" />
+            <Input id="tab-title" value={title} maxLength={60} onChange={(e) => setTitle(e.target.value)} placeholder="Notices" />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">

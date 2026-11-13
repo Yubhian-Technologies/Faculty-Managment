@@ -157,10 +157,7 @@ export function CategoriesManager({ initialText = "", onChanged }: { initialText
               placeholder={"PC: Professional Core\nES: Engineering Sciences\nBS&H: Basic Sciences and Humanities"}
               className="font-mono text-sm"
             />
-            <p className="text-xs text-muted-foreground">
-              Codes use letters, digits and &amp; - / . (up to 12 characters). You can paste two spreadsheet columns as they are.
-              The standard categories below are always available - edit one directly in its own row to relabel it.
-            </p>
+            <p className="text-xs text-muted-foreground">Codes may use letters, digits and &amp; - / . (up to 12 characters). You can paste two spreadsheet columns as they are. The standard categories below are always available; edit one in its own row to rename it.</p>
           </div>
           {(draft.errors.length > 0 || addError) && (
             <ul className="space-y-1 text-sm text-red-600">

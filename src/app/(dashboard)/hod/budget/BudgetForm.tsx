@@ -131,7 +131,7 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Department budget proposal"
+              placeholder="Department budget proposal"
             />
           </div>
 
@@ -141,7 +141,7 @@ export function BudgetForm({ editingRequest, onCancel, onSaved }: BudgetFormProp
               <Input
                 value={academicYear}
                 onChange={(e) => setAcademicYear(e.target.value)}
-                placeholder="e.g. 2026-27"
+                placeholder="2026-27"
               />
             </div>
             <div className="space-y-2">

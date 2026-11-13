@@ -231,7 +231,7 @@ export default function IncidentReportPage() {
                 {errors.description && <p className="text-xs text-destructive" role="alert">{errors.description}</p>}
               </div>
               <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">Choose the category to get started. You can pick both.</p>
+                <p className="text-sm text-muted-foreground">Choose a category to begin. You can select both.</p>
                 <div className="grid gap-4 sm:grid-cols-2" role="group" aria-label="Affected category">
                   {([
                     { label: "Student", Icon: GraduationCap, on: includeStudents, toggle: toggleStudents },
@@ -338,7 +338,7 @@ export default function IncidentReportPage() {
             <>
               <DialogHeader>
                 <DialogTitle>{openReport.title}</DialogTitle>
-                <DialogDescription>Incident report</DialogDescription>
+                <DialogDescription>Incident Report</DialogDescription>
               </DialogHeader>
               <dl className="grid gap-3 text-sm sm:grid-cols-3">
                 <div><dt className="text-xs text-muted-foreground">Incident Date</dt><dd className="font-medium">{formatIncidentDate(openReport.incidentDate)}</dd></div>

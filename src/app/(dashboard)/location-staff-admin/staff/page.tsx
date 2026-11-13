@@ -134,9 +134,7 @@ function CampusStaffDirectoryContent() {
               Location Staff Admin
             </Badge>
             <h1 className="text-lg sm:text-xl font-bold text-foreground">Campus Staff Directory</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Comprehensive registry of all location departments, supervising heads, and staff profiles.
-            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">Register of all location departments, their heads and staff profiles.</p>
           </div>
         </div>
 
@@ -262,9 +260,7 @@ function CampusStaffDirectoryContent() {
         <div className="rounded-xl border border-dashed p-8 text-center bg-card/30">
           <UsersRound className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
           <p className="font-semibold text-foreground text-sm">No staff members found</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Add staff members to assign them to shifts and departments, or appoint as Department Heads.
-          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Add staff members to assign them to shifts and departments, or appoint them as Department Heads.</p>
           <Button asChild size="sm" className="mt-3 text-xs rounded-full gap-1.5">
             <Link href="/location-staff-admin/staff/new">
               <Plus className="h-3.5 w-3.5" />

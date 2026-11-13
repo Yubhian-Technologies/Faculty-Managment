@@ -182,7 +182,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
               {regulationOptions.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
             {courseKey && regulationOptions.length === 0 && (
-              <p className="text-xs text-muted-foreground">No regulations set for this course in Academics &gt; Regulation - the rule applies to all.</p>
+              <p className="text-xs text-muted-foreground">No regulations are set for this course in Academics &gt; Regulation; the rule applies to all.</p>
             )}
           </div>
           {mids.map((m) => (
@@ -193,10 +193,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
           ))}
           <fieldset className="space-y-2 sm:col-span-2">
             <legend className="text-sm font-medium">Mid units by the subject&rsquo;s number of units</legend>
-            <p className="text-xs text-muted-foreground">
-              A subject uses the row for its own number of units (entered by the faculty in Course Outcomes); a blank row uses the default above.
-              E.g. 5 units: Mid 1 = 1, 2, 3 and Mid 2 = 3, 4, 5 &middot; 6 units: Mid 1 = 1, 2, 3 and Mid 2 = 4, 5, 6.
-            </p>
+            <p className="text-xs text-muted-foreground">A subject uses the row for its number of units (entered in Course Outcomes); a blank row uses the default above. For example, 5 units: Mid 1 = 1, 2, 3 and Mid 2 = 3, 4, 5. 6 units: Mid 1 = 1, 2, 3 and Mid 2 = 4, 5, 6.</p>
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
@@ -229,7 +226,7 @@ export function MidBankRulesCard({ midCount, papers = false }: { midCount: numbe
           </div>
           <fieldset className="space-y-2 sm:col-span-2">
             <legend className="text-sm font-medium">Question types the faculty may use</legend>
-            <p className="text-xs text-muted-foreground">Tick every type allowed. Faculty pick one of them for each question; with one ticked, every question uses it.</p>
+            <p className="text-xs text-muted-foreground">Select every type allowed. Faculty choose one for each question; if only one is selected, every question uses it.</p>
             <div className="flex flex-wrap gap-2">
               {QUESTION_FORMATS.map((f) => {
                 const on = formats.includes(f);

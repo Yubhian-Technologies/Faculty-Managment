@@ -50,7 +50,7 @@ export default function PrincipalCircularsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Circulars" description="Create, publish and manage circulars. Published circulars are notified to the selected audience." />
+      <PageHeader title="Circulars" description="Create, publish and manage circulars. The selected audience is notified when a circular is published." />
 
       <CircularForm onCreated={() => void load()} />
 
@@ -64,7 +64,7 @@ export default function PrincipalCircularsPage() {
               ))}
             </div>
             <div className="flex gap-2">
-              <Input value={newOption} onChange={(e) => setNewOption(e.target.value)} placeholder="Add new sender (e.g. Vice Principal)" />
+              <Input value={newOption} onChange={(e) => setNewOption(e.target.value)} placeholder="Add new sender (for example Vice Principal)" />
               <Button variant="outline" onClick={() => { if (newOption.trim()) { setMessageFromOptions((p) => [...p, newOption.trim()]); setNewOption(""); } }}>Add</Button>
             </div>
             <Button onClick={() => void saveSettings()}>Save Settings</Button>

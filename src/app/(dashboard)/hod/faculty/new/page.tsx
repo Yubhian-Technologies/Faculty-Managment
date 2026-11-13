@@ -665,7 +665,7 @@ export default function NewFacultyPage() {
                         <Label htmlFor="employeeId" className="text-xs font-semibold">
                           Employee ID <span className="text-destructive">*</span>
                         </Label>
-                        <Input id="employeeId" {...register("employeeId")} placeholder="e.g. EMP-1042" />
+                        <Input id="employeeId" {...register("employeeId")} placeholder="EMP-1042" />
                         {errors.employeeId && <p className="text-xs text-destructive">{errors.employeeId.message}</p>}
                       </div>
 
@@ -937,7 +937,7 @@ export default function NewFacultyPage() {
                         </SelectContent>
                       </Select>
                       {qualIsOther && (
-                        <Input {...register("highestQualification")} placeholder="e.g. B.Ed, MCA" className="mt-1.5" />
+                        <Input {...register("highestQualification")} placeholder="B.Ed, MCA" className="mt-1.5" />
                       )}
                       {errors.highestQualification && (
                         <p className="text-xs text-destructive">{errors.highestQualification.message}</p>
@@ -951,7 +951,7 @@ export default function NewFacultyPage() {
                       <Input
                         id="specialization"
                         {...register("specialization")}
-                        placeholder="e.g. VLSI, Machine Learning"
+                        placeholder="VLSI, Machine Learning"
                         className="bg-card"
                       />
                     </div>
@@ -1045,7 +1045,7 @@ export default function NewFacultyPage() {
                                   prev.map((p, idx) => (idx === i ? { ...p, label: v } : p))
                                 )
                               }
-                              placeholder="e.g. WhatsApp, Alternate"
+                              placeholder="WhatsApp, Alternate"
                             />
                             <TextInput
                               label="Number"

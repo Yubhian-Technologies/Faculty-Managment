@@ -172,9 +172,7 @@ export function IncidentStudentPicker({ departments, courses, years, selected, o
       </div>
 
       {results === null ? (
-        <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-          Set your filters and press Load to list students.
-        </p>
+        <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">Set the filters and choose Load to list students.</p>
       ) : shown.length === 0 ? (
         <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No students match.</p>
       ) : (

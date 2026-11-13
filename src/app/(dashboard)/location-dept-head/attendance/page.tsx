@@ -441,9 +441,7 @@ export default function LocationDeptAttendancePage() {
         <div className="rounded-xl border border-dashed p-8 text-center bg-card/30">
           <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
           <p className="font-semibold text-foreground text-sm">No staff members found</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Add staff members in the Staff Roster tab to begin taking attendance.
-          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Add staff members in the Staff Roster tab to start taking attendance.</p>
           <Button asChild size="sm" variant="outline" className="mt-3 text-xs rounded-full">
             <Link href="/location-dept-head/staff">Go to Staff Roster</Link>
           </Button>

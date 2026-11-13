@@ -284,7 +284,7 @@ export function IncomingBudgetRequests() {
                     <Input
                       value={fiscalYear}
                       onChange={(e) => setFiscalYear(e.target.value)}
-                      placeholder="e.g. 2026-27"
+                      placeholder="2026-27"
                       disabled={isActingThis}
                       className="bg-background"
                     />
@@ -303,7 +303,7 @@ export function IncomingBudgetRequests() {
                       <Label className="text-sm font-medium text-red-800">Items not approved</Label>
                       <div className="space-y-1.5 rounded-md border bg-background p-2">
                         {Object.keys(flaggedItems).length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No items unticked - untick items above first.</p>
+                          <p className="text-xs text-muted-foreground">No items are unselected. Unselect items above first.</p>
                         ) : (
                           Object.entries(flaggedItems).map(([itemId, label]) => (
                             <div key={itemId} className="text-sm space-y-0.5">

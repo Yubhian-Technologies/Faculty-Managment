@@ -604,7 +604,7 @@ export function LeaveApprovalQueue() {
                         {loadingPeriodsId === r.id ? (
                           <div className="h-12 bg-muted animate-pulse rounded-lg" />
                         ) : (periodsById[r.id]?.length ?? 0) === 0 ? (
-                          <p className="text-xs text-muted-foreground italic">No teaching periods fall within this leave range.</p>
+                          <p className="text-xs text-muted-foreground italic">No teaching periods fall within this leave period.</p>
                         ) : (coverageModeById[r.id] ?? "ADJUSTMENT") === "REPLACEMENT" ? (
                           (() => {
                             const replacementCandidates = intersectCandidates(periodsById[r.id]!);
@@ -774,10 +774,7 @@ export function LeaveApprovalQueue() {
             <FileCheck className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">On Duty Proof Verification ({odProofs.length})</h3>
           </div>
-          <p className="text-xs text-muted-foreground">
-            On Duty leave is only paid once the duty is evidenced. Verify the document, or reject it with a reason so
-            they can re-upload.
-          </p>
+          <p className="text-xs text-muted-foreground">On Duty leave is paid only once the duty is evidenced. Verify the document, or reject it with a reason so it can be uploaded again.</p>
           {odProofs.map((r) => (
             <Card key={r.id}>
               <CardContent className="p-4 space-y-3">
@@ -825,7 +822,7 @@ export function LeaveApprovalQueue() {
                   <Textarea
                     className="mt-1 text-xs"
                     rows={2}
-                    placeholder="e.g. the certificate doesn't cover these dates"
+                    placeholder="the certificate doesn't cover these dates"
                     value={odProofReasonById[r.id] ?? ""}
                     onChange={(e) => setOdProofReasonById((prev) => ({ ...prev, [r.id]: e.target.value }))}
                   />
@@ -862,10 +859,7 @@ export function LeaveApprovalQueue() {
             <BellRing className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">On Duty Proof Not Uploaded ({odMissingProofs.length})</h3>
           </div>
-          <p className="text-xs text-muted-foreground">
-            These On Duty leaves have ended with no proof of duty on file yet. They&rsquo;ve already had (or will get) an
-            automatic reminder - send one yourself if it&rsquo;s still overdue.
-          </p>
+          <p className="text-xs text-muted-foreground">These On Duty leaves have ended with no proof of duty on file. An automatic reminder has been or will be sent; send one yourself if it is still overdue.</p>
           <div className="divide-y rounded-lg border">
             {odMissingProofs.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 p-3 flex-wrap">
@@ -902,10 +896,7 @@ export function LeaveApprovalQueue() {
             <FileCheck className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">Certificate Verification ({certificates.length})</h3>
           </div>
-          <p className="text-xs text-muted-foreground">
-            These never affect whether the leave is paid - verify the document, or reject it with a reason so they can
-            re-upload.
-          </p>
+          <p className="text-xs text-muted-foreground">These do not affect whether the leave is paid. Verify the document, or reject it with a reason so it can be uploaded again.</p>
           {certificates.map((r) => (
             <Card key={r.id}>
               <CardContent className="p-4 space-y-3">
@@ -955,7 +946,7 @@ export function LeaveApprovalQueue() {
                   <Textarea
                     className="mt-1 text-xs"
                     rows={2}
-                    placeholder="e.g. the certificate doesn't cover these dates"
+                    placeholder="the certificate doesn't cover these dates"
                     value={certificateReasonById[r.id] ?? ""}
                     onChange={(e) => setCertificateReasonById((prev) => ({ ...prev, [r.id]: e.target.value }))}
                   />
@@ -990,10 +981,7 @@ export function LeaveApprovalQueue() {
             <BellRing className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">Certificate Not Uploaded ({missingCertificates.length})</h3>
           </div>
-          <p className="text-xs text-muted-foreground">
-            These Special Casual Leaves have ended with no certificate on file yet. This never affects whether the
-            leave is paid - send a reminder if you&rsquo;d like one on record.
-          </p>
+          <p className="text-xs text-muted-foreground">These Special Casual Leaves have ended with no certificate on file. This does not affect whether the leave is paid; send a reminder if you want one on record.</p>
           <div className="divide-y rounded-lg border">
             {missingCertificates.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 p-3 flex-wrap">

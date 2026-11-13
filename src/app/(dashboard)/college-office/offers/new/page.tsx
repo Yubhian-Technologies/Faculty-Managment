@@ -272,7 +272,7 @@ ${institution}`;
     <div className="max-w-xl">
       <PageHeader
         title="Send Offer Letter"
-        description="Generate the offer letter and open a composed email draft to review before sending"
+        description="Generate the offer letter and open an email draft to review before sending."
       />
 
       <Card>
@@ -318,7 +318,7 @@ ${institution}`;
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Designation *</Label>
-                <Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} placeholder="e.g. Assistant Professor" />
+                <Input value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} placeholder="Assistant Professor" />
               </div>
               <div className="space-y-2">
                 <Label>Department *</Label>
@@ -333,7 +333,7 @@ ${institution}`;
               </div>
               <div className="space-y-2">
                 <Label>Annual CTC (₹) *</Label>
-                <Input type="number" min="0" value={form.ctcAnnual} onChange={(e) => setForm((f) => ({ ...f, ctcAnnual: e.target.value }))} placeholder="e.g. 600000" />
+                <Input type="number" min="0" value={form.ctcAnnual} onChange={(e) => setForm((f) => ({ ...f, ctcAnnual: e.target.value }))} placeholder="600000" />
                 {(() => {
                   const candidate = candidates.find((c) => c.id === form.candidateId);
                   if (candidate?.expectedSalary == null) return null;
@@ -348,7 +348,7 @@ ${institution}`;
 
             <div className="space-y-2">
               <Label>Subjects (comma-separated)</Label>
-              <Input value={form.subjects} onChange={(e) => setForm((f) => ({ ...f, subjects: e.target.value }))} placeholder="e.g. Data Structures, Algorithms" />
+              <Input value={form.subjects} onChange={(e) => setForm((f) => ({ ...f, subjects: e.target.value }))} placeholder="Data Structures, Algorithms" />
             </div>
 
             <div className="space-y-2">
@@ -359,7 +359,7 @@ ${institution}`;
                 placeholder={"One per line, e.g.\nThis appointment is on a probationary basis for one year.\nSubject to the institution's service rules and regulations."}
                 rows={4}
               />
-              <p className="text-xs text-muted-foreground">Included in the offer letter and email. One condition per line.</p>
+              <p className="text-xs text-muted-foreground">Included in the offer letter and email. Enter one condition per line.</p>
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">

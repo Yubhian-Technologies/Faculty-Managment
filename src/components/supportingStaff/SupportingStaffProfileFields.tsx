@@ -80,7 +80,7 @@ export function SupportingStaffProfileFields({ value, onChange, collegeType }: P
         <Textarea
           value={value.otherInformation ?? ""}
           onChange={(e) => set("otherInformation", e.target.value)}
-          placeholder="Anything not covered above - add it here"
+          placeholder="Anything not covered above, add it here"
           rows={4}
         />
       </div>

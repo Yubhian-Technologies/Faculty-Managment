@@ -85,7 +85,7 @@ export default function NewSalaryStructurePage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add Salary Structure"
-        description="Define a pay template for a designation & employment type"
+        description="Define a pay template for a designation and employment type."
       />
 
       <Card>
@@ -96,7 +96,7 @@ export default function NewSalaryStructurePage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="ss-name">Name *</Label>
-              <Input id="ss-name" {...register("name")} placeholder="e.g. Assistant Professor – Permanent 2026" />
+              <Input id="ss-name" {...register("name")} placeholder="Assistant Professor – Permanent 2026" />
               {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
             </div>
 

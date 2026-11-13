@@ -438,11 +438,11 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
             <Textarea
               id="late-reason"
               rows={2}
-              placeholder="e.g. traffic, a personal errand, a delayed bus..."
+              placeholder="traffic, a personal errand, a delayed bus..."
               value={lateReason}
               onChange={(e) => setLateReason(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">Your HOD/Principal will see this reason on the attendance report.</p>
+            <p className="text-xs text-muted-foreground">Your HOD and Principal will see this reason on the attendance report.</p>
           </div>
         )}
 
@@ -464,7 +464,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
             <div className="flex flex-col items-center gap-2 py-6 text-center">
               <CheckCircle2 className="h-10 w-10 text-green-600" />
               <p className="text-sm font-medium">Face verified &mdash; you&rsquo;re on campus</p>
-              <p className="text-xs text-muted-foreground">Add your reason above to finish checking in.</p>
+              <p className="text-xs text-muted-foreground">Enter your reason above to complete check-in.</p>
             </div>
           ) : stage === "error" ? (
             <div className="flex flex-col items-center gap-2 py-6 text-center">

@@ -313,9 +313,7 @@ export default function EditDepartmentPage() {
             </div>
             <span>Edit Department</span>
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Update department details and its supervising Department Head.
-          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Update the department details and its supervising Department Head.</p>
         </div>
       </div>
 
@@ -327,9 +325,7 @@ export default function EditDepartmentPage() {
               <Building2 className="h-4 w-4 text-primary" />
               <span>Department Information</span>
             </CardTitle>
-            <CardDescription className="text-xs">
-              Basic identification and classification details.
-            </CardDescription>
+            <CardDescription className="text-xs">Basic identification and classification details.</CardDescription>
           </CardHeader>
           <CardContent className="p-6 pt-2 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -337,7 +333,7 @@ export default function EditDepartmentPage() {
                 <Label className="text-xs font-semibold">Department Name *</Label>
                 <Input
                   required
-                  placeholder="e.g. Security, Housekeeping, Electrical, Transport"
+                  placeholder="Security, Housekeeping, Electrical, Transport"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="h-10 text-xs rounded-xl border-border/60 bg-muted/20"
@@ -349,7 +345,7 @@ export default function EditDepartmentPage() {
                   Department Code <span className="text-muted-foreground font-normal">(Optional)</span>
                 </Label>
                 <Input
-                  placeholder="e.g. SEC, HSK"
+                  placeholder="SEC, HSK"
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                   className="h-10 text-xs font-mono rounded-xl border-border/60 bg-muted/20 uppercase"
@@ -379,9 +375,7 @@ export default function EditDepartmentPage() {
                   <Shield className="h-4 w-4 text-primary" />
                   <span>Assign Department Head</span>
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Choose a staff member from your staff registry to supervise this department.
-                </CardDescription>
+                <CardDescription className="text-xs">Choose a staff member from the staff register to supervise this department.</CardDescription>
               </div>
 
               {/* Source Switcher Capsule */}

@@ -65,7 +65,7 @@ function FieldInput({ field, value, onChange, qualification = "" }: { field: Rec
     );
   }
   if (field.kind === "address") {
-    return <Textarea value={value} rows={2} maxLength={500} placeholder="Not on record - add it" onChange={(e) => onChange(e.target.value)} />;
+    return <Textarea value={value} rows={2} maxLength={500} placeholder="Not on record, add it" onChange={(e) => onChange(e.target.value)} />;
   }
   const isYear = field.key.endsWith("YearOfPass") || field.key === "entranceYear";
   const isRank = field.key === "entranceRank";
@@ -268,7 +268,7 @@ export function StudentInfoPage({ api, entries, editor, readOnly }: { api: strin
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Details of qualifying examination</CardTitle>
-          <p className="text-xs text-muted-foreground">From the student&apos;s previous-education details. Diploma is for diploma (lateral entry) students.</p>
+          <p className="text-xs text-muted-foreground">From the student&apos;s previous education details. Diploma applies to lateral entry students.</p>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm min-w-[640px]">
@@ -306,9 +306,7 @@ export function StudentInfoPage({ api, entries, editor, readOnly }: { api: strin
         <div className="space-y-3">
           <div>
             <h3 className="text-base font-semibold leading-tight">Other details on the student&apos;s record</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Read-only. The College Office keeps these (Students → Import → Update student data) and the student can update some of them.
-            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">Read only. The College Office maintains these (Students &gt; Import &gt; Update Student Data), and the student can update some of them.</p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             {(data.otherGroups ?? []).map((g) => (

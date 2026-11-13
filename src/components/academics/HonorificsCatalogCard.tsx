@@ -140,9 +140,7 @@ export function HonorificsCatalogCard() {
         <CardTitle className="text-base flex items-center gap-2">
           <Contact className="h-4 w-4" /> Honorifics
         </CardTitle>
-        <CardDescription>
-          The name prefixes (Mr., Mrs., Dr., Prof., ...) available to pick across the college.
-        </CardDescription>
+        <CardDescription>The name prefixes (Mr., Mrs., Dr., Prof. and others) available across the college.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/30 p-3">
@@ -151,7 +149,7 @@ export function HonorificsCatalogCard() {
             <Input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="e.g. Dr."
+              placeholder="Dr."
               onKeyDown={(e) => { if (e.key === "Enter") void addItem(); }}
             />
           </div>
@@ -165,9 +163,7 @@ export function HonorificsCatalogCard() {
             {[1, 2].map((i) => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}
           </div>
         ) : items.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No honorifics yet. Add them above (e.g. Mr., Mrs., Dr., Prof.) so they can be selected elsewhere.
-          </p>
+          <p className="text-sm text-muted-foreground text-center py-4">No honorifics yet. Add them above (for example Mr., Mrs., Dr., Prof.) so they can be selected elsewhere.</p>
         ) : (
           <ul className="divide-y rounded-lg border">
             {items.map((item) => {

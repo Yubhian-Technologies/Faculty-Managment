@@ -114,7 +114,7 @@ export default function NewLocationUserPage() {
 
   return (
     <div className="max-w-lg space-y-5">
-      <PageHeader title="Add Staff Member" description="Create a location-level staff account" />
+      <PageHeader title="Add Staff Member" description="Create a staff account at location level." />
       <form onSubmit={handleSubmit} className="space-y-5">
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Staff Details</CardTitle></CardHeader>
@@ -131,7 +131,7 @@ export default function NewLocationUserPage() {
             <div className="space-y-2">
               <Label>Email (sign-in) <span className="text-destructive">*</span></Label>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@college.edu.in" autoComplete="off" />
-              <p className="text-xs text-muted-foreground">They sign in with this email and the password below.</p>
+              <p className="text-xs text-muted-foreground">They sign in with this email address and the password below.</p>
             </div>
             <div className="space-y-2">
               <Label>Mobile Number <span className="text-destructive">*</span></Label>
@@ -172,9 +172,7 @@ export default function NewLocationUserPage() {
                 </p>
               )}
               {!loadingUsers && allSingletonsFilled && (
-                <p className="text-xs text-muted-foreground">
-                  All singleton roles (HR Admin, Admin Office, Accounts) are filled. You can still add Dept Heads.
-                </p>
+                <p className="text-xs text-muted-foreground">All single-holder roles (HR Admin, Admin Office, Accounts) are filled. You can still add Department Heads.</p>
               )}
             </div>
 
@@ -202,10 +200,7 @@ export default function NewLocationUserPage() {
             {MULTI_DEPT_ROLES.includes(role) && (
               <div className="space-y-2">
                 <Label>Departments</Label>
-                <p className="text-xs text-muted-foreground">
-                  Optional - which department(s) this staff member covers. Leave everything
-                  unchecked if they aren&apos;t tied to a specific department.
-                </p>
+                <p className="text-xs text-muted-foreground">Optional. The departments this staff member covers. Leave all unselected if they are not assigned to a specific department.</p>
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <Checkbox
                     checked={allLocationDepts}

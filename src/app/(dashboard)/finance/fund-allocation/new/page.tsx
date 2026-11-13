@@ -61,7 +61,7 @@ export default function NewFundAllocationPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Allocate Funds"
-        description="Allocate an approved budget to a department, project, event, or purchase"
+        description="Allocate an approved budget to a department, project, event or purchase."
       />
 
       <Card>
@@ -96,7 +96,7 @@ export default function NewFundAllocationPage() {
 
             <div className="space-y-2">
               <Label>Name *</Label>
-              <Input value={targetName} onChange={(e) => setTargetName(e.target.value)} placeholder="e.g. Annual Tech Fest" />
+              <Input value={targetName} onChange={(e) => setTargetName(e.target.value)} placeholder="Annual Tech Fest" />
             </div>
 
             <div className="space-y-2">

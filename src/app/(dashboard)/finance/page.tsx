@@ -49,7 +49,7 @@ export default function FinanceDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Hello, ${user?.name ?? "Finance"}`}
-        description="Budgets, approvals, payments, and financial reporting"
+        description="Budgets, approvals, payments and financial reports."
       />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">

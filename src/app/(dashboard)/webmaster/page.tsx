@@ -37,7 +37,7 @@ export default function WebmasterDashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="Webmaster Dashboard"
-        description="Create and manage login credentials for your college"
+        description="Create and manage login credentials for your college."
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -130,9 +130,7 @@ export function CircularForm({ onCreated }: { onCreated?: (id: string) => void }
         </div>
 
         {recipientKind === "STUDENTS" && (
-          <p className="text-xs text-muted-foreground -mt-2">
-            Students have no login - this will be emailed directly to each matched student&apos;s email on file. A student with no email recorded won&apos;t receive it.
-          </p>
+          <p className="text-xs text-muted-foreground -mt-2">Students do not have a login, so this is emailed to each matched student&apos;s email address on file. Students without an email address will not receive it.</p>
         )}
 
         <div>
@@ -148,7 +146,7 @@ export function CircularForm({ onCreated }: { onCreated?: (id: string) => void }
           </div>
         </div>
 
-        <div><Label>Subject</Label><Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Holiday on 26th Jan" /></div>
+        <div><Label>Subject</Label><Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Holiday on 26th Jan" /></div>
         <div><Label>Body</Label><Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} placeholder="Circular body..." /></div>
 
         <div>

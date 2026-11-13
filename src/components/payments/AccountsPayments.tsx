@@ -33,7 +33,7 @@ export function AccountsPayments() {
 
   return (
     <div className="max-w-6xl space-y-6">
-      <PageHeader title="Payments" description="Online fee payments through CCAvenue - one merchant account per college." />
+      <PageHeader title="Payments" description="Online fee payments through CCAvenue, with one merchant account for each college." />
       <div className="max-w-sm space-y-1.5">
         <Label htmlFor="pay-college">College</Label>
         <select id="pay-college" className={`${selectClass} w-full`} value={collegeId} onChange={(e) => setCollegeId(e.target.value)}>
@@ -103,7 +103,7 @@ function CcavenueCard({ collegeId, onProxy }: { collegeId: string; onProxy: (on:
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm font-medium">API keys for the static IPs (optional)</p>
-            <p className="text-xs text-muted-foreground">When CCAvenue gives each whitelisted proxy IP its own Access Code and Working Key, enter them here. Status checks and refunds try the key above first, then these.</p>
+            <p className="text-xs text-muted-foreground">If CCAvenue issues each whitelisted proxy IP its own Access Code and Working Key, enter them here. Status checks and refunds try the key above first, then these.</p>
           </div>
           {apiKeys.length < 5 && <Button size="sm" variant="outline" onClick={() => setApiKeys((k) => [...k, { label: "", accessCode: "", workingKey: "", hasWorkingKey: false }])}>Add key</Button>}
         </div>

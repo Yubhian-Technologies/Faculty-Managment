@@ -86,7 +86,7 @@ export default function NewStaffPage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Add Staff" description="Create a staff login for your college" />
+      <PageHeader title="Add Staff" description="Create a staff login for your college." />
       <Card>
         <CardHeader><CardTitle className="text-base">Staff Details</CardTitle></CardHeader>
         <CardContent>

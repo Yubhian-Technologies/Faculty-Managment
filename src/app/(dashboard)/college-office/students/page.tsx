@@ -933,7 +933,7 @@ function OfficeStudentsContent() {
       {!appliedFilters ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Users className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground mb-4">Set any filters (or none, for everyone), then load the student list.</p>
+          <p className="text-sm text-muted-foreground mb-4">Set filters (or none, for all students), then load the student list.</p>
           <Button onClick={handleLoad}>Load Students</Button>
         </div>
       ) : isLoading || (isFetching && students.length === 0 && total === 0) ? (
@@ -1074,12 +1074,7 @@ function OfficeStudentsContent() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Export Students</DialogTitle>
-            <DialogDescription>
-              Pick a Course first - Department only appears once at least one is selected, since
-              a department&apos;s options depend on it. Leave Department or Academic Year empty
-              to include all of it (Academic Year is independent - it doesn&apos;t require a
-              Course or Department to be picked). Every roster field is included in the CSV.
-            </DialogDescription>
+            <DialogDescription>Select a course first; the Department list depends on it. Leave Department or Academic Year empty to include all. Academic Year can be selected without a course or department. Every roster field is included in the CSV.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">

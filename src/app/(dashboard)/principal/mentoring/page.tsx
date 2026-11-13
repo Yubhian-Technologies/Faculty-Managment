@@ -45,7 +45,7 @@ export default function PrincipalMentoringPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Student Mentoring" description="Mentoring in your college: the numbers below, and any student's Mentoring Record (read-only) from the search." />
+      <PageHeader title="Student Mentoring" description="Mentoring figures for your college. Search for a student to view their Mentoring Record (read only)." />
 
       <StudentFinder byDepartment={data.byDepartment} byMentor={data.byMentor} />
 

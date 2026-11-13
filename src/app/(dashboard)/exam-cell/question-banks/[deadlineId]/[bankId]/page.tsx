@@ -14,7 +14,7 @@ export default function ExamCellBankPage({ params }: { params: Promise<{ deadlin
     <div className="space-y-6">
       <PageHeader
         title="Review"
-        description="Read-only: HOD approval status, progress, outstanding issues and a full preview. Only HOD-approved ones are used for the exam."
+        description="Read only: HOD approval status, progress, outstanding issues and a full preview. Only papers approved by the HOD are used for the examination."
         actions={<Button asChild variant="ghost" size="sm"><Link href={`/exam-cell/question-banks/${encodeURIComponent(deadlineId)}`}><ArrowLeft className="mr-1.5 h-4 w-4" />Progress</Link></Button>}
       />
       <BankReview id={bankId} />

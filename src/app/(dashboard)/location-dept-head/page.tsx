@@ -143,9 +143,7 @@ export default function LocationDeptHeadDashboard() {
               </div>
               <div className="min-w-0">
                 <h3 className="font-bold text-base text-foreground">Staff Members</h3>
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                  Manage staff profiles, Aadhaar, father name, payee/voucher, and photos.
-                </p>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">Manage staff profiles, Aadhaar, father&apos;s name, payee and voucher details, and photos.</p>
               </div>
             </div>
             <div className="mt-5 pt-3 border-t flex items-center justify-between">
@@ -171,9 +169,7 @@ export default function LocationDeptHeadDashboard() {
               </div>
               <div className="min-w-0">
                 <h3 className="font-bold text-base text-foreground">Shift Schedule</h3>
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                  Create shifts with start & end times and assign department staff.
-                </p>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">Create shifts with start and end times, and assign department staff.</p>
               </div>
             </div>
             <div className="mt-5 pt-3 border-t flex items-center justify-between">
@@ -199,9 +195,7 @@ export default function LocationDeptHeadDashboard() {
               </div>
               <div className="min-w-0">
                 <h3 className="font-bold text-base text-foreground">Daily Attendance</h3>
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                  1-tap auto check-in and check-out tracking for staff shifts.
-                </p>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">One-tap check-in and check-out for staff shifts.</p>
               </div>
             </div>
             <div className="mt-5 pt-3 border-t flex items-center justify-between">

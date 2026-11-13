@@ -59,7 +59,7 @@ export default function StudentResultsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Results" description="Your published semester results, SGPA and CGPA. After a revaluation the better of the two grades counts." />
+      <PageHeader title="Results" description="Your published semester results, SGPA and CGPA. After a revaluation, the better of the two grades counts." />
 
       {isLoading ? (
         <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />

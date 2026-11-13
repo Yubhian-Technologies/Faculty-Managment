@@ -77,7 +77,7 @@ export default function ExamCellMidTimingsPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Mid Timings & Dates"
-        description="Publish the date and time window for each Mid, per course and semester. Once published, entries can still be edited or removed."
+        description="Publish the date and time window of each Mid for each course and semester. Published entries can still be edited or removed."
         actions={
           <Button onClick={() => setFormOpen(true)} disabled={midCount === 0}>
             <Plus className="h-4 w-4 mr-2" />Publish Timings
@@ -105,7 +105,7 @@ export default function ExamCellMidTimingsPage() {
       ) : schedules.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center space-y-1">
-            <p className="text-sm text-muted-foreground">No mid timings published yet.</p>
+            <p className="text-sm text-muted-foreground">No Mid timings published yet.</p>
           </CardContent>
         </Card>
       ) : (
@@ -271,10 +271,7 @@ function MidScheduleFormDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{schedule ? "Edit Mid Timing" : "Publish Mid Timing"}</DialogTitle>
-          <DialogDescription>
-            There&apos;s no student login in this app yet, so publishing saves this here for now - it will
-            show automatically for the matching course and semester once student access exists.
-          </DialogDescription>
+          <DialogDescription>Students cannot sign in to view this yet, so publishing saves it here. It will be shown for the matching course and semester once student access is available.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">

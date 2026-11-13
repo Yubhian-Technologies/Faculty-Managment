@@ -75,7 +75,7 @@ export default function HRInterviewsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Interview Plans"
-        description="Create and manage faculty interview plans"
+        description="Create and manage faculty interview plans."
         actions={
           <Button asChild>
             <Link href="/hr-admin/interviews/new">+ New Interview Plan</Link>

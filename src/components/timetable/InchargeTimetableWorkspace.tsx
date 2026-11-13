@@ -172,7 +172,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
     <div className="space-y-6">
       <PageHeader
         title="Timetable"
-        description="Pick the course & year you are Timetable Incharge for, a semester and a section, then load its timetable"
+        description="Select the course and year you are Timetable Incharge for, a semester and a section, then load its timetable."
       />
 
       {isLoading ? (
@@ -193,7 +193,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Find a section</CardTitle>
-              <CardDescription>Nothing loads until you press Load.</CardDescription>
+              <CardDescription>Nothing is loaded until you choose Load.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

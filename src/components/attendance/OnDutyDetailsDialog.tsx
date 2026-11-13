@@ -32,7 +32,7 @@ export function OnDutyTag({ studentId, studentName, date, periodNumber }: { stud
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Permission - {studentName}</DialogTitle>
-            <DialogDescription>This mark comes from an approved permission and can&apos;t be changed here.</DialogDescription>
+            <DialogDescription>This mark comes from an approved permission and cannot be changed here.</DialogDescription>
           </DialogHeader>
           {error && <p className="text-sm text-destructive">Couldn&apos;t load the permission details. Try again.</p>}
           {!error && !details && <p className="text-sm text-muted-foreground">Loading…</p>}

@@ -86,7 +86,7 @@ export default function FinanceBudgetReportPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget Report"
-        description="Department-wise breakdown of Non Recurring and Recurring budget items"
+        description="Department-wise breakdown of recurring and non-recurring budget items."
         actions={
           <div className="flex items-center gap-2">
             <Select value={scope} onValueChange={(v) => setScope(v as ReportScope)}>

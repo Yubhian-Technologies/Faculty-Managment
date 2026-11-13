@@ -74,7 +74,7 @@ export default function NewPublicationPage() {
 
   return (
     <div className="max-w-2xl">
-      <PageHeader title="Add Publication" description="Record an official publication for a staff member" />
+      <PageHeader title="Add Publication" description="Record an official publication for a staff member." />
       <Card>
         <CardHeader><CardTitle className="text-base">Publication Details</CardTitle></CardHeader>
         <CardContent>

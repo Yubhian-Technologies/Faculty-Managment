@@ -340,7 +340,7 @@ export function ShiftRotationRosterView({
             <div className="rounded-xl border border-dashed p-8 text-center bg-card/30">
               <Users className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
               <p className="font-semibold text-foreground text-sm">No staff found</p>
-              <p className="text-xs text-muted-foreground mt-1">Try clearing filters or search terms.</p>
+              <p className="text-xs text-muted-foreground mt-1">Clear the filters or search terms.</p>
             </div>
           ) : (
             <div className="divide-y border rounded-xl overflow-hidden bg-card">

@@ -198,7 +198,7 @@ export function EmailRequestQueue({ status = "PENDING", limit, emptyTitle, empty
                           type="email"
                           value={assignedEmail}
                           onChange={(e) => { setAssignedEmail(e.target.value); setAvailability("unchecked"); }}
-                          placeholder="e.g. dharani@college.edu"
+                          placeholder="dharani@college.edu"
                           disabled={isActingThis}
                         />
                         <Button

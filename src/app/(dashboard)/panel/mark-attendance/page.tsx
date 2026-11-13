@@ -644,7 +644,7 @@ export default function MarkAttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Mark Attendance"
-        description="All classes assigned to you today from the published timetable. Continuous lab periods are grouped into single slots with per-period attendance."
+        description="Classes assigned to you today in the published timetable. Consecutive lab periods are grouped into one slot, with attendance for each period."
       />
 
       <div className="flex items-center gap-2">
@@ -861,7 +861,7 @@ export default function MarkAttendancePage() {
             )}
 
             {!isReadOnly && isExpandedOpen && !mode && (
-              <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">Pick one option above — the roster controls unlock once you do.</p>
+              <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">Select an option above to enable the roster controls.</p>
             )}
 
             {!isReadOnly && isExpandedOpen && mode && (

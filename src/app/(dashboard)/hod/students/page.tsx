@@ -1234,7 +1234,7 @@ function HodStudentsContent() {
   const studentsHeader = (
     <PageHeader
       title="Students"
-      description="View and manage student records across your department and its associated branches."
+      description="View and manage the student records of your department and its associated branches."
       actions={<StudentsViewTabs tabs={HOD_VIEWS} value={view} onChange={setView} />}
     />
   );
@@ -1367,9 +1367,7 @@ function HodStudentsContent() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    This department has unassigned students declared for more than one course - pick which one to distribute.
-                  </p>
+                  <p className="text-xs text-muted-foreground">This department has unassigned students in more than one course. Choose the course to distribute.</p>
                 </div>
               )}
 
@@ -1563,9 +1561,7 @@ function HodStudentsContent() {
           <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
             <Users className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="font-medium text-base">No Student Records Loaded</p>
-            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-              Select the required filters and click Load to view student records.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm">Select the filters and choose Load to view student records.</p>
           </div>
         ) : isFetching && students.length === 0 ? (
           <TableSkeleton rows={5} cols={visibleColumns.length} />
@@ -1720,7 +1716,7 @@ function HodStudentsContent() {
                   </div>
                 )}
                 {bulkPlan.skipped.length > 0 && bulkPlan.moves.length > 0 && (
-                  <p className="text-xs text-muted-foreground">Skipped students are left exactly as they are.</p>
+                  <p className="text-xs text-muted-foreground">Skipped students are not changed.</p>
                 )}
               </div>
             )}

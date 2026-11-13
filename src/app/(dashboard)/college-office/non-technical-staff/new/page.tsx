@@ -245,7 +245,7 @@ export default function NewNonTechnicalStaffPage() {
                   <Label htmlFor="password">Login Password *</Label>
                   <Input id="password" type="password" {...register("password")} placeholder="Min 8 characters" />
                   {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
-                  <p className="text-xs text-muted-foreground">Share this with the staff member so they can log in with their college email.</p>
+                  <p className="text-xs text-muted-foreground">Share this with the staff member so they can sign in with their college email.</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -259,7 +259,7 @@ export default function NewNonTechnicalStaffPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="highestQualification">Highest Qualification *</Label>
-                    <Input id="highestQualification" {...register("highestQualification")} placeholder="e.g. Diploma, B.Com, ITI" />
+                    <Input id="highestQualification" {...register("highestQualification")} placeholder="Diploma, B.Com, ITI" />
                     {errors.highestQualification && <p className="text-sm text-destructive">{errors.highestQualification.message}</p>}
                   </div>
                 </div>
@@ -268,7 +268,7 @@ export default function NewNonTechnicalStaffPage() {
                   <div className="space-y-2">
                     <Label>Department</Label>
                     <Input value="Library" disabled />
-                    <p className="text-xs text-muted-foreground">Library staff are always filed under the Library unit.</p>
+                    <p className="text-xs text-muted-foreground">Library staff are always recorded under the Library unit.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -280,7 +280,7 @@ export default function NewNonTechnicalStaffPage() {
                         {departments.map((d) => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">Optional - leave unassigned for centrally-managed roles like Librarian or Accountant.</p>
+                    <p className="text-xs text-muted-foreground">Optional. Leave unassigned for centrally managed roles such as Librarian or Accountant.</p>
                   </div>
                 )}
 
@@ -293,9 +293,7 @@ export default function NewNonTechnicalStaffPage() {
                     <Label htmlFor="joiningDate">Date of Joining *</Label>
                     <Input id="joiningDate" type="date" {...register("joiningDate")} />
                     {errors.joiningDate && <p className="text-sm text-destructive">{errors.joiningDate.message}</p>}
-                    <p className="text-xs text-muted-foreground">
-                      Total Years of Experience is calculated automatically from this date.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Total years of experience is calculated from this date.</p>
                   </div>
                 </div>
 
@@ -344,7 +342,7 @@ export default function NewNonTechnicalStaffPage() {
                             label="Label (optional)"
                             value={item.label}
                             onChange={(v) => setExtraPhones((prev) => prev.map((p, idx) => (idx === i ? { ...p, label: v } : p)))}
-                            placeholder="e.g. Personal, WhatsApp, or a name"
+                            placeholder="Personal, WhatsApp, or a name"
                           />
                           <TextInput
                             label="Mobile Number"

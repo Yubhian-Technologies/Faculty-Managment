@@ -166,7 +166,7 @@ export default function HODSupportingStaffPage() {
   if (isCentrallyManaged) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Supporting Staff" description="Centrally managed by Principal for your college" />
+        <PageHeader title="Supporting Staff" description="Managed centrally by the Principal for your college." />
         <Card>
           <CardContent className="py-16">
             <EmptyState
@@ -184,7 +184,7 @@ export default function HODSupportingStaffPage() {
     <div className="space-y-6">
       <PageHeader
         title="Staff Profiles"
-        description="Manage teaching and supporting staff records for your department."
+        description="Manage the teaching and supporting staff records of your department."
         actions={
           <div className="flex gap-2">
             <Button

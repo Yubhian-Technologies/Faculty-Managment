@@ -244,7 +244,7 @@ export default function StudentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Students"
-        description="Roster for your assigned sections"
+        description="Student list of your assigned sections."
       />
 
       {!isLoading && !sectionsLoading && sections.length === 0 ? (
@@ -299,9 +299,7 @@ export default function StudentsPage() {
             {isLoading || sectionsLoading ? (
               <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}</div>
             ) : !applied ? (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                Pick a section (and batch, if any), then press Load to view students.
-              </p>
+              <p className="text-sm text-muted-foreground text-center py-8">Select a section (and batch, if any), then choose Load to view students.</p>
             ) : visibleStudents.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
                 {applied.batch !== ALL_BATCHES
@@ -363,16 +361,13 @@ export default function StudentsPage() {
               list="edit-lab-batch-suggestions"
               value={editLabBatch}
               onChange={(e) => setEditLabBatch(e.target.value)}
-              placeholder="e.g. Batch 1"
+              placeholder="Batch 1"
               autoComplete="off"
             />
             <datalist id="edit-lab-batch-suggestions">
               {editLabBatchSuggestions.map((label) => <option key={label} value={label} />)}
             </datalist>
-            <p className="text-xs text-muted-foreground">
-              Which split-lab sub-group this student sits in for a PRACTICAL subject - must match the batch
-              label on the Timetable exactly. Leave blank if this section&rsquo;s labs aren&rsquo;t split.
-            </p>
+            <p className="text-xs text-muted-foreground">The lab batch this student attends for practical subjects. It must match the batch label in the timetable exactly. Leave blank if the section&apos;s labs are not divided.</p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>

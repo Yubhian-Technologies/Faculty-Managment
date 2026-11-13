@@ -99,7 +99,7 @@ export default function FinanceReportsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Financial Reports"
-        description="Monthly, quarterly, and annual budget utilization and expenditure reports"
+        description="Monthly, quarterly and annual reports of budget utilisation and expenditure."
         actions={
           <div className="flex items-center gap-2">
             <Select value={period} onValueChange={(v) => setPeriod(v as FinanceReportPeriod)}>

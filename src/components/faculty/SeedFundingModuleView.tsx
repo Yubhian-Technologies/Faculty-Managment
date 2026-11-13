@@ -334,7 +334,7 @@ function ProjectFormFields({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 rounded-lg border p-3">
               <DateInput label="Date of Project Sanctioned" value={form.dateSanctioned} onChange={(v) => set("dateSanctioned", v)} />
               <DateInput label="Date of Start" value={form.dateOfStart} onChange={(v) => set("dateOfStart", v)} />
-              <TextInput label="F.Y. of Start" value={form.financialYearOfStart} onChange={(v) => set("financialYearOfStart", v)} placeholder="e.g. 2024-25" />
+              <TextInput label="F.Y. of Start" value={form.financialYearOfStart} onChange={(v) => set("financialYearOfStart", v)} placeholder="2024-25" />
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -439,7 +439,7 @@ function ProjectFormFields({
               ) },
               { header: "Upload Proof (Link/PDF)", render: (item, update) => {
                 const status = patentStatusKey(item.status);
-                if (!status) return <p className="text-xs text-muted-foreground pt-1.5">Select a status first</p>;
+                if (!status) return <p className="text-xs text-muted-foreground pt-1.5">Select a status first.</p>;
                 return (
                   <div className="space-y-1">
                     <p className="text-xs font-medium text-muted-foreground">{status} Proof</p>

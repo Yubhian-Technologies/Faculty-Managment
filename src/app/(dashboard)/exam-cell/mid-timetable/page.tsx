@@ -100,12 +100,12 @@ export default function MidTimetableListPage() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      <PageHeader title="Mid Timetable" description="One exam timetable per branch for each Mid - built from the Mid's dates and each branch's Theory subjects." />
+      <PageHeader title="Mid Timetable" description="One examination timetable for each branch and Mid, built from the Mid's dates and each branch's theory subjects." />
 
       <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle className="text-base">Make a Mid timetable</CardTitle>
-          <CardDescription>Pick the course, year, semester and Mid, and the exam dates (filled in from Mid Timings &amp; Dates when that Mid&rsquo;s dates are published). Every branch of that year then gets its own timetable; Sundays are left out.</CardDescription>
+          <CardDescription>Select the course, year, semester and Mid, and the examination dates (filled in from Mid Timings and Dates once that Mid&apos;s dates are published). Each branch of that year then gets its own timetable; Sundays are excluded.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

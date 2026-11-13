@@ -94,7 +94,7 @@ export default function TopicsCoveredPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Topics Covered" description="The class work you recorded while marking student attendance, day by day" />
+      <PageHeader title="Topics Covered" description="The class work you recorded while marking attendance, day by day." />
       {subjects === null ? (
         <div className="h-40 rounded-lg border bg-muted/30 animate-pulse" />
       ) : subjects.length === 0 ? (

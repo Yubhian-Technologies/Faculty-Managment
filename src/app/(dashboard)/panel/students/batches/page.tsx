@@ -317,7 +317,7 @@ export default function LabBatchesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Lab Batches" description="Split your section's roster into lab sub-groups (Batch 1, Batch 2, ...)" />
+      <PageHeader title="Lab Batches" description="Divide your section's students into lab batches (Batch 1, Batch 2 and so on)." />
 
       {!isLoading && sections.length === 0 ? (
         <Card>
@@ -350,7 +350,7 @@ export default function LabBatchesPage() {
                       value={batchCount}
                       onChange={(e) => setBatchCount(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleSaveBatchCount(); } }}
-                      placeholder="e.g. 2"
+                      placeholder="2"
                       disabled={!selectedSection}
                     />
                     <Button type="button" onClick={() => void handleSaveBatchCount()} loading={isSavingBatches} disabled={!selectedSection || !batchCount.trim()}>
@@ -397,11 +397,11 @@ export default function LabBatchesPage() {
               {isLoading || isLoadingStudents ? (
                 <div className="h-64 bg-muted animate-pulse rounded-lg" />
               ) : !selectedSection ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Select a section to get started.</p>
+                <p className="text-sm text-muted-foreground text-center py-8">Select a section to begin.</p>
               ) : (
                 <>
                   {batchOptions.length === 0 && (
-                    <p className="mb-3 text-xs text-muted-foreground">No batches yet - set the number of batches above and save.</p>
+                    <p className="mb-3 text-xs text-muted-foreground">No batches yet. Set the number of batches above and save.</p>
                   )}
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {columns.map((col) => {

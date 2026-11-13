@@ -14,7 +14,7 @@ export default function HodEmployeeLeaveHistoryPage({ params }: { params: Promis
     <div className="space-y-6">
       <PageHeader
         title="Leave History"
-        description="Full leave record for this faculty member"
+        description="Complete leave record of this faculty member."
         actions={
           <Button asChild variant="outline" size="sm">
             <Link href="/hod/leave-history">

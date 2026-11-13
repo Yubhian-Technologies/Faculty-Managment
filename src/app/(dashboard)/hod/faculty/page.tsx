@@ -818,9 +818,7 @@ function HODFacultyContent() {
         <Card>
           <CardContent className="p-4">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Sub-Department HODs</p>
-            <p className="text-xs text-muted-foreground mb-3">
-              Click a Sub-HOD to view their full faculty profile, or complete it if it hasn&apos;t been added yet.
-            </p>
+            <p className="text-xs text-muted-foreground mb-3">Select a Sub-HOD to view their faculty profile, or complete it if it has not been added.</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {subDepartments.map((d) => {
                 const facultyId = d.hodUid ? facultyIdByUserUid.get(d.hodUid) : undefined;

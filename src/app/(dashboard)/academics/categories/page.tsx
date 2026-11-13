@@ -33,7 +33,7 @@ function CategoriesPageInner() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Subject categories"
-        description="Define each category as a short code and its full form. Course Structure files can then use the code or the full form in their Category column."
+        description="Define each category with a short code and its full form. Course Structure files may use either in their Category column."
         actions={
           <Button variant="outline" asChild>
             <Link href="/academics"><ArrowLeft className="h-4 w-4 mr-1" />Back to Academics</Link>

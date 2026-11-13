@@ -120,7 +120,7 @@ export function PayrollLineDialog({ collegeId, run, line, actor, editable, onClo
               {lopOn && (
                 <div className="flex flex-wrap gap-3 pl-6">
                   <div className="space-y-1"><Label className="text-xs">LOP days (0-{employed}, halves allowed)</Label><Input inputMode="decimal" className="h-8 w-28" value={lopDays} onChange={(e) => setLopDays(e.target.value)} /></div>
-                  <div className="min-w-[16rem] flex-1 space-y-1"><Label className="text-xs">Reason</Label><Input className="h-8" value={lopReason} onChange={(e) => setLopReason(e.target.value)} placeholder="e.g. 12 Oct was approved permission" /></div>
+                  <div className="min-w-[16rem] flex-1 space-y-1"><Label className="text-xs">Reason</Label><Input className="h-8" value={lopReason} onChange={(e) => setLopReason(e.target.value)} placeholder="12 Oct was approved permission" /></div>
                 </div>
               )}
             </div>
@@ -165,7 +165,7 @@ export function PayrollLineDialog({ collegeId, run, line, actor, editable, onClo
                 {itOn && (
                   <div className="flex flex-wrap gap-3 pl-6">
                     <div className="space-y-1"><Label className="text-xs">IT (Rs.)</Label><Input className="h-8 w-28" inputMode="numeric" value={itAmount} onChange={(e) => setItAmount(e.target.value.replace(/[^\d]/g, ""))} /></div>
-                    <div className="min-w-[14rem] flex-1 space-y-1"><Label className="text-xs">Reason</Label><Input className="h-8" value={itReason} onChange={(e) => setItReason(e.target.value)} placeholder="e.g. employee asked for more" /></div>
+                    <div className="min-w-[14rem] flex-1 space-y-1"><Label className="text-xs">Reason</Label><Input className="h-8" value={itReason} onChange={(e) => setItReason(e.target.value)} placeholder="employee asked for more" /></div>
                   </div>
                 )}
               </>

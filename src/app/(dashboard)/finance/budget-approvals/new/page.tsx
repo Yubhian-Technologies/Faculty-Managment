@@ -48,7 +48,7 @@ export default function NewBudgetRequestPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Log Budget Request"
-        description="Log a budget request received from a department"
+        description="Record a budget request received from a department."
       />
 
       <Card>
@@ -69,7 +69,7 @@ export default function NewBudgetRequestPage() {
 
             <div className="space-y-2">
               <Label>Purpose *</Label>
-              <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="e.g. New lab equipment" />
+              <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="New lab equipment" />
             </div>
 
             <div className="space-y-2">

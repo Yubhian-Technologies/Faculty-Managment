@@ -57,7 +57,7 @@ export default function PrincipalPurchaseClearancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Purchase Clearance"
-        description="Emergency purchase requests raised with Purchase Dept"
+        description="Emergency purchase requests raised with the Purchase Department."
         actions={
           <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
             <RefreshCw className="h-4 w-4 mr-1" />

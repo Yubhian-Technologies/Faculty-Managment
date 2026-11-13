@@ -72,7 +72,7 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
 
   return (
     <div className="max-w-lg space-y-6">
-      <PageHeader title="Edit Leave Profile" description="Correct an auto-derived category or joining date" />
+      <PageHeader title="Edit Leave Profile" description="Correct a derived category or joining date." />
       <Card>
         <CardContent className="p-4 space-y-4">
           <div className="space-y-2">
@@ -86,10 +86,7 @@ export function LeaveProfileEditForm({ backHref }: LeaveProfileEditFormProps) {
                 <SelectItem value="non-vacation">Non-Vacation Staff (Supporting)</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Auto-derived from their designation. The category this employee converts into once past the
-              college&apos;s new-joining threshold.
-            </p>
+            <p className="text-xs text-muted-foreground">Derived from the designation: the category this employee moves to after the college&apos;s new-joining period.</p>
           </div>
 
           <div className="space-y-2">

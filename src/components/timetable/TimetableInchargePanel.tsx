@@ -235,9 +235,7 @@ export function TimetableInchargePanel({
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Timetable Incharge</CardTitle>
-        <CardDescription>
-          Who builds and publishes this year&rsquo;s timetable and teaching assignments. They get the same pages from their own dashboard; you keep full access too.
-        </CardDescription>
+        <CardDescription>Who builds and publishes this year&apos;s timetable and teaching assignments. They get the same pages on their own dashboard; you keep full access.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
         {units.map((u) => {
@@ -275,9 +273,7 @@ export function TimetableInchargePanel({
               {assignUnit && holders[assignUnit.key]?.kind === "NONE" ? "Assign" : "Change"} Timetable Incharge
               {assignUnit ? ` · ${ordinalYear(assignUnit.year)}${assignUnit.shared ? ` · ${assignUnit.ownerName}` : ""}` : ""}
             </DialogTitle>
-            <DialogDescription>
-              They&rsquo;ll be able to build, edit and publish this timetable and assign faculty to subjects from their own dashboard. You keep full access too.
-            </DialogDescription>
+            <DialogDescription>They will be able to build, edit and publish this timetable and assign faculty to subjects from their own dashboard. You keep full access.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label>Faculty / Supporting Staff</Label>

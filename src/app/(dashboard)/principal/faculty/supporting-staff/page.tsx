@@ -136,7 +136,7 @@ function PrincipalSupportingStaffViewContent() {
     <div className="space-y-6">
       <PageHeader
         title="Faculty"
-        description="Supporting staff records across the college - view only"
+        description="Supporting staff records across the college (read only)."
       />
 
       <SegmentedTabs

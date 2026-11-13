@@ -497,7 +497,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-        <p className="text-sm text-muted-foreground">Pick a course, semester and section, load the report, then narrow it down with filters.</p>
+        <p className="text-sm text-muted-foreground">Select a course, semester and section, load the report, then refine it with filters.</p>
       </div>
 
       <Card>
@@ -549,7 +549,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={() => void load()} disabled={!ready || loading}>{loading && !reports ? "Loading…" : "Load Report"}</Button>
             {!ready && !isLoadingSections && sections.length > 0 && (
-              <p className="text-xs text-muted-foreground">Choose a course, department, semester and section to load the report.</p>
+              <p className="text-xs text-muted-foreground">Select a course, department, semester and section to load the report.</p>
             )}
           </div>
         </CardContent>
@@ -559,7 +559,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Filters</CardTitle>
-            <p className="text-xs text-muted-foreground">Tick the ones you want, fill them in, then press Apply filter.</p>
+            <p className="text-xs text-muted-foreground">Select the filters you need, enter their values, then choose Apply Filter.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -633,7 +633,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
       )}
       {loading && !reports && <div className="h-24 animate-pulse rounded-md border bg-muted/30" />}
       {reports && reports.length === 0 && (
-        <p className="text-sm text-muted-foreground">There are no sections for this selection.</p>
+        <p className="text-sm text-muted-foreground">No sections for this selection.</p>
       )}
 
       {reports && reports.length > 0 && (

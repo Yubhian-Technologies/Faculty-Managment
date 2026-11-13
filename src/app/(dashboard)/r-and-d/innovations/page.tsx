@@ -187,7 +187,7 @@ export default function RAndDInnovationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Innovations"
-        description="Verify staff-submitted innovation records"
+        description="Verify innovation records submitted by staff."
       />
 
       <div className="flex gap-2 border-b">

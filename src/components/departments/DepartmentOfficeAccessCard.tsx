@@ -82,9 +82,7 @@ export function DepartmentOfficeAccessCard() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Student attendance</CardTitle>
-        <CardDescription>
-          You can always correct your department&rsquo;s student attendance. Turn this on to let the office head do the same.
-        </CardDescription>
+        <CardDescription>You can always correct your department&apos;s student attendance. Turn this on to allow the Department Office Head to do the same.</CardDescription>
       </CardHeader>
       <CardContent>
         <label className="flex items-start gap-3 text-sm">

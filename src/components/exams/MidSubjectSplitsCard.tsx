@@ -86,7 +86,7 @@ export function MidSubjectSplitsCard({ midCount }: { midCount: number }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Subject exceptions - Mid units</CardTitle>
-        <CardDescription>For a subject whose syllabus doesn&rsquo;t follow the course&rsquo;s split: its own units for each Mid, used instead of the rule. Question banks already started keep their units.</CardDescription>
+        <CardDescription>For a subject whose syllabus does not follow the course&apos;s split: its own units for each Mid, used instead of the rule. Question banks already started keep their units.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {splits.length > 0 && (

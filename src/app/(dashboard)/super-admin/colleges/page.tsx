@@ -220,7 +220,7 @@ export default function CollegesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Colleges"
-        description="Manage all institutions in the system"
+        description="Manage all institutions in the system."
         actions={
           <Button onClick={() => router.push("/super-admin/colleges/new")}>
             <Plus className="h-4 w-4 mr-2" />

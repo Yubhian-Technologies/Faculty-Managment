@@ -161,7 +161,7 @@ export default function EditCollegePage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Edit College" description="Update institution details" />
+      <PageHeader title="Edit College" description="Update the institution's details." />
 
       <Card>
         <CardHeader>
@@ -227,9 +227,7 @@ export default function EditCollegePage() {
             <div className="space-y-3 pt-2 border-t">
               <div className="pt-4">
                 <Label className="text-sm font-medium">Campus Location (Attendance Geofence)</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Faculty must be inside this boundary to mark self-attendance. Super Admin only.
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Faculty must be inside this boundary to mark their own attendance. Super Admin only.</p>
               </div>
 
               <div className="space-y-2">

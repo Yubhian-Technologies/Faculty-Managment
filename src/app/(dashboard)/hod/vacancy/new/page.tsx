@@ -270,7 +270,7 @@ export default function NewVacancyPage() {
     <div className="max-w-4xl space-y-5">
       <PageHeader
         title="New Hiring Request"
-        description="Submit one or more faculty vacancy requests to the Principal"
+        description="Submit one or more faculty vacancy requests to the Principal."
       />
 
       {reqLoading ? (

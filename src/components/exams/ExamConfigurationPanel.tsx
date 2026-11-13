@@ -314,11 +314,11 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
   return (
     <div className="space-y-6">
       {embedded ? (
-        <p className="text-sm text-muted-foreground">Select a course, year and branch, then set the Internal/External marks and breakdown that applies to every subject taught under it.</p>
+        <p className="text-sm text-muted-foreground">Select a course, year and branch, then set the Internal and External marks and their breakdown for every subject taught under it.</p>
       ) : (
         <PageHeader
           title="Configure Examination"
-          description="Select a course, year and branch, then set the Internal/External marks and breakdown that applies to every subject taught under it."
+          description="Select a course, year and branch, then set the Internal and External marks and their breakdown for every subject taught under it."
         />
       )}
 
@@ -409,11 +409,11 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
               <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Internal Maximum Marks</Label>
-                  <Input type="number" min={0} value={internalMaxMarks} onChange={(e) => setInternalMaxMarks(e.target.value)} placeholder="e.g. 30" disabled={isViewOnly} />
+                  <Input type="number" min={0} value={internalMaxMarks} onChange={(e) => setInternalMaxMarks(e.target.value)} placeholder="30" disabled={isViewOnly} />
                 </div>
                 <div className="space-y-2">
                   <Label>External Maximum Marks</Label>
-                  <Input type="number" min={0} value={externalMaxMarks} onChange={(e) => setExternalMaxMarks(e.target.value)} placeholder="e.g. 70" disabled={isViewOnly} />
+                  <Input type="number" min={0} value={externalMaxMarks} onChange={(e) => setExternalMaxMarks(e.target.value)} placeholder="70" disabled={isViewOnly} />
                 </div>
                 {(internalMax > 0 || Number(externalMaxMarks) > 0) && (
                   <p className="sm:col-span-2 text-xs text-muted-foreground">
@@ -435,7 +435,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
                         <Input
                           value={c.name}
                           onChange={(e) => updateComponent(c.id, { name: e.target.value })}
-                          placeholder="Component name (e.g. Quizzes)"
+                          placeholder="Component name (for example Quizzes)"
                           disabled={isViewOnly}
                         />
                         <Input

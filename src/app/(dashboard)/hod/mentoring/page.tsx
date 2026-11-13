@@ -44,7 +44,7 @@ export default function HodMentoringPage() {
     <div>
       <PageHeader
         title="Mentoring"
-        description="Assign faculty mentors to students and monitor their academic progress, attendance, results, and internal assessment performance."
+        description="Assign faculty mentors to students and monitor their academic progress, attendance, results and internal assessment."
       />
       <div className="flex flex-wrap gap-1 border-b mb-4">
         {VIEWS.map((v) => (
@@ -270,10 +270,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
               </Select>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Only sections whose year you run are listed - a year another department runs (the shared first year) is assigned by that department&apos;s HOD.
-            A student who already has a mentor must be removed from that mentor first.
-          </p>
+          <p className="text-xs text-muted-foreground">Only sections of years your department runs are listed; a year run by another department (the common first year) is assigned by that department&apos;s HOD. A student who already has a mentor must be removed from that mentor first.</p>
         </CardContent>
       </Card>
 
@@ -486,7 +483,7 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
       {sectionsLoaded && sections.length === 0 && (
         <p className="text-sm text-amber-700">No classes were found for your department, so the Course, Year and Section lists are empty. Search by name or Regd. No meanwhile.</p>
       )}
-      {!plan && <p className="text-sm text-muted-foreground">Pick a course, year, section or mentor - or type at least 3 characters of a name or Regd. No.</p>}
+      {!plan && <p className="text-sm text-muted-foreground">Select a course, year, section or mentor, or type at least 3 characters of a name or Regd. No.</p>}
       {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
       {plan && !loading && (
         <div className="space-y-2">

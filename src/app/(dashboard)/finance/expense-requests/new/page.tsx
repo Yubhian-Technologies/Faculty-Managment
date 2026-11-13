@@ -59,7 +59,7 @@ export default function NewExpenseRequestPage() {
     <div className="max-w-xl">
       <PageHeader
         title="Log Expense Request"
-        description="Log an expenditure request received from a department"
+        description="Record an expenditure request received from a department."
       />
 
       <Card>

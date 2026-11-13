@@ -354,7 +354,7 @@ export default function PrincipalDecisionDetailPage({ params }: { params: Promis
                     <Star className="h-3 w-3" />Student Feedback{sf ? ` (${sf.count} response${sf.count !== 1 ? "s" : ""})` : ""}
                   </p>
                   {!sf ? (
-                    <p className="text-sm text-muted-foreground">No student feedback yet</p>
+                    <p className="text-sm text-muted-foreground">No student feedback yet.</p>
                   ) : (
                     <div className="grid gap-1.5 sm:grid-cols-2">
                       {(

@@ -160,7 +160,7 @@ export default function LibraryLoansPage() {
     <div className="space-y-6">
       <PageHeader
         title="Book Loans"
-        description="Issue, renew and return books"
+        description="Issue, renew and return books."
         actions={
           <Button onClick={() => setDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -213,7 +213,7 @@ export default function LibraryLoansPage() {
                 </SelectContent>
               </Select>
               {borrowableBooks.length === 0 && (
-                <p className="text-xs text-muted-foreground">No books currently have a copy available - use the Reservations page to queue a student instead.</p>
+                <p className="text-xs text-muted-foreground">No book has a copy available. Use the Reservations page to add a student to the queue.</p>
               )}
             </div>
           </div>

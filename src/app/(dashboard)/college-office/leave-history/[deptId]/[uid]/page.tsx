@@ -18,7 +18,7 @@ export default function CollegeOfficeEmployeeLeaveHistoryPage({
     <div className="space-y-6">
       <PageHeader
         title="Leave History"
-        description="Full leave record for this employee"
+        description="Complete leave record of this employee."
         actions={
           <Button asChild variant="outline" size="sm">
             <Link href={`/college-office/leave-history/${deptId}`}>

@@ -86,7 +86,7 @@ export function SectionRoster({ sectionId: id, onBack, backLabel = "Back to Sect
   if (!section) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Section not found" description="It may have been removed." actions={backButton} />
+        <PageHeader title="Section not found" description="It may have been deleted." actions={backButton} />
       </div>
     );
   }

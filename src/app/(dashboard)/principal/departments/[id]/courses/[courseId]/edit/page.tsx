@@ -142,7 +142,7 @@ export default function EditCoursePage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title="Edit Course" description="Update course details" />
+      <PageHeader title="Edit Course" description="Update the course details." />
 
       <Card>
         <CardHeader>
@@ -151,9 +151,7 @@ export default function EditCoursePage() {
         <CardContent>
           {catalog.length === 0 ? (
             <div className="space-y-4 text-center py-4">
-              <p className="text-sm text-muted-foreground">
-                No courses are set up yet. Add your college&apos;s courses in the Courses module first.
-              </p>
+              <p className="text-sm text-muted-foreground">No courses are set up yet. Add your college&apos;s courses in the Courses module first.</p>
               <Button asChild variant="outline">
                 <Link href="/principal/courses">Go to Courses</Link>
               </Button>

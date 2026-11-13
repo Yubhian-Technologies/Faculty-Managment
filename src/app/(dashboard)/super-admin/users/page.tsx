@@ -490,7 +490,7 @@ export default function UsersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Users"
-        description="Manage staff accounts across colleges"
+        description="Manage staff accounts across colleges."
         actions={
           <Button onClick={() => router.push("/super-admin/users/new")}>
             <UserPlus className="h-4 w-4 mr-2" />

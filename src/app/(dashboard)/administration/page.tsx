@@ -69,7 +69,7 @@ export default function AdministrationDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name ?? "Admin"}`}
-        description="Location-level administration overview"
+        description="Overview of location administration."
       />
 
       <div className="flex flex-col gap-1.5 sm:max-w-xs">
@@ -104,7 +104,7 @@ export default function AdministrationDashboard() {
 
         {managementActions.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Location Staff & Campus Operations</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Location Staff and Campus Operations</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {managementActions.map((action) => (
                 <Card key={action.href} className="hover:shadow-md transition-shadow">

@@ -505,7 +505,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
     <div className="space-y-6">
       <PageHeader
         title={course ? `${course.name} · ${ordinalYear(Number(year))} · Teaching Assignments` : "Teaching Assignments"}
-        description="Find staffing gaps and assign faculty to subjects"
+        description="Find staffing gaps and assign faculty to subjects."
         actions={
           <Button variant="outline" onClick={() => router.push(backHref)}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back
@@ -534,9 +534,9 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
             {isLoading || isLoadingSemesterAssignments ? (
               <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>
             ) : assignedSubjects.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No subjects assigned by Dean Academics for this semester yet.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">No subjects have been assigned by Academics for this semester yet.</p>
             ) : sections.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for this year.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">No sections created for this year yet.</p>
             ) : (
               <div className="space-y-3">
                 {gapRows.map(({ subject, unstaffedSections }) => (
@@ -562,7 +562,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
           <CardHeader className="pb-3"><CardTitle className="text-base">Assign Faculty</CardTitle></CardHeader>
           <CardContent>
             {sections.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for this year.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">No sections created for this year yet.</p>
             ) : (
             <form onSubmit={handleAssign} className="space-y-3">
               <div className="space-y-2">
@@ -666,9 +666,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
               >
                 {extraFacultyIds.length > 0 ? `Assign ${1 + extraFacultyIds.length} faculty` : "Assign"}
               </Button>
-              <p className="text-xs text-muted-foreground">
-                Periods for this subject are picked afterwards from the Timetable tab.
-              </p>
+              <p className="text-xs text-muted-foreground">Periods for this subject are selected afterwards in the Timetable tab.</p>
 
               {assignForm.sectionId && assignForm.subjectId && (
                 <div className="pt-3 mt-3 border-t space-y-2">
@@ -677,7 +675,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                       be asked of more departments later even if it already has faculty. */}
                   <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2">
                     {requestableDepartments.length === 0 ? (
-                      <p className="px-1 text-xs text-muted-foreground">No other departments</p>
+                      <p className="px-1 text-xs text-muted-foreground">No other departments.</p>
                     ) : requestableDepartments.map((d) => {
                       const parentName = d.parentDepartmentId ? departments.find((p) => p.id === d.parentDepartmentId)?.name : null;
                       const alreadyAsked = assignmentRequests.some((r) =>
@@ -705,9 +703,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                     <Send className="h-4 w-4 mr-2" />
                     {requestTargetIds.length > 1 ? `Send requests to ${requestTargetIds.length} departments` : "Send Request"}
                   </Button>
-                  <p className="text-xs text-muted-foreground">
-                    They&rsquo;ll pick one of their own faculty for it - track its status below.
-                  </p>
+                  <p className="text-xs text-muted-foreground">They will assign one of their own faculty to it. Track its status below.</p>
                 </div>
               )}
             </form>

@@ -77,7 +77,7 @@ export default function MyInvigilationPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="My Invigilation Duties" description="Exam duties the Exam Cell has given you. Acknowledge each one so the Exam Cell knows you have seen it." />
+      <PageHeader title="My Invigilation Duties" description="Examination duties assigned to you by the Exam Cell. Acknowledge each duty to confirm you have seen it." />
       {duties === null ? <div className="h-32 animate-pulse rounded-lg border bg-muted/30" /> : duties.length === 0 ? (
         <EmptyState title="No exam duties" description="Duties appear here once the Exam Cell publishes them." />
       ) : (

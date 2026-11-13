@@ -181,10 +181,7 @@ export function DepartmentCourseCard({
             <p className="text-sm font-semibold text-foreground">
               No years assigned to this department
             </p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-              Configure this department&apos;s academic structure or course scope to designate which years
-              are taught here.
-            </p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">Configure this department&apos;s academic structure or course scope to set the years taught here.</p>
           </div>
         ) : (
           years.map((y) => {

@@ -122,7 +122,7 @@ export default function ManagementUsersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Administrators"
-        description="Location-wise Administrators and Accounts contacts you've appointed"
+        description="Administrators and Accounts contacts you have appointed for each location."
         actions={
           <Button onClick={() => router.push("/management/users/new")}>
             <UserPlus className="h-4 w-4 mr-2" />

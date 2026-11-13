@@ -252,15 +252,10 @@ export default function DepartmentOfficePage() {
                 </SelectContent>
               </Select>
               {faculty.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  No faculty in this department yet. Add one from the Faculty page first.
-                </p>
+                <p className="text-xs text-muted-foreground">No faculty in this department yet. Add faculty from the Faculty page first.</p>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              They keep their own login and their own faculty work - this department&rsquo;s modules
-              simply appear alongside it, with the same access you have.
-            </p>
+            <p className="text-xs text-muted-foreground">They keep their own login and faculty work; this department&apos;s modules appear alongside it, with the same access you have.</p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>

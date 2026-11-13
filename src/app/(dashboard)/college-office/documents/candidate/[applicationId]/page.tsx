@@ -486,7 +486,7 @@ ${institution}`;
           {(phase === "AWAITING_DOCS" || phase === "NOTIFIED") && (
             <>
               {docs.length === 0 && (
-                <p className="text-sm text-muted-foreground">No required documents set for this batch — add one below.</p>
+                <p className="text-sm text-muted-foreground">No required documents are set for this batch. Add one below.</p>
               )}
               <div className="space-y-2">
                 {docs.map((doc) => (

@@ -45,7 +45,7 @@ function BreakdownForm({ initial, onSave, onCancel, saving, isNew }: {
   return (
     <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
       <div className="grid gap-3 sm:grid-cols-4">
-        <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="emc-name">Category name</Label><Input id="emc-name" value={name} maxLength={80} placeholder="e.g. Theory - no Quiz" onChange={(e) => setName(e.target.value)} /></div>
+        <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="emc-name">Category name</Label><Input id="emc-name" value={name} maxLength={80} placeholder="Theory, no Quiz" onChange={(e) => setName(e.target.value)} /></div>
         <div className="space-y-1.5">
           <Label htmlFor="emc-type">Subjects</Label>
           <select id="emc-type" className={selectClass} value={examType} disabled={!isNew} onChange={(e) => setExamType(e.target.value as "THEORY" | "LAB")}>
@@ -61,7 +61,7 @@ function BreakdownForm({ initial, onSave, onCancel, saving, isNew }: {
         <legend className="text-sm font-medium">Components</legend>
         {rows.map((r, i) => (
           <div key={i} className="flex items-center gap-2">
-            <Input aria-label={`Component ${i + 1} name`} value={r.name} placeholder="e.g. Mid" className="flex-1 bg-background" onChange={(e) => setRows((x) => x.map((y, j) => (j === i ? { ...y, name: e.target.value } : y)))} />
+            <Input aria-label={`Component ${i + 1} name`} value={r.name} placeholder="Mid" className="flex-1 bg-background" onChange={(e) => setRows((x) => x.map((y, j) => (j === i ? { ...y, name: e.target.value } : y)))} />
             <Input aria-label={`Component ${i + 1} marks`} type="number" min={1} value={r.maxMarks} placeholder="Marks" className="w-28 bg-background" onChange={(e) => setRows((x) => x.map((y, j) => (j === i ? { ...y, maxMarks: e.target.value } : y)))} />
             {paperMids > 0 && (
               <select aria-label={`Where component ${i + 1}'s marks come from`} className="h-9 rounded-md border border-input bg-background px-2 text-xs" value={r.midNumber ?? ""}
@@ -170,7 +170,7 @@ function AddSubjects({ category, all, onDone }: { category: ExamMarksCategory; a
           <div className="flex justify-end"><Button size="sm" loading={busy} disabled={picked.size === 0} onClick={() => void add({ add: [...picked] })}>Add {picked.size || ""} ticked</Button></div>
           <div className="space-y-1.5 border-t pt-3">
             <Label htmlFor={`codes-${category.id}`} className="flex items-center gap-1.5"><ClipboardPaste className="h-4 w-4" />Or paste subject codes</Label>
-            <Textarea id={`codes-${category.id}`} rows={2} value={codes} placeholder="e.g. UG26CS1T01, UG26MA1T02 (commas, spaces or one per line)" onChange={(e) => setCodes(e.target.value)} />
+            <Textarea id={`codes-${category.id}`} rows={2} value={codes} placeholder="UG26CS1T01, UG26MA1T02 (commas, spaces or one per line)" onChange={(e) => setCodes(e.target.value)} />
             <div className="flex justify-end"><Button size="sm" variant="outline" loading={busy} disabled={!codes.trim()} onClick={() => void add({ addCodes: codes.split(/[\s,;]+/).filter(Boolean), catalogId: courseKey })}>Add by codes</Button></div>
           </div>
         </>
@@ -224,10 +224,7 @@ export function ExamMarksCategoriesCard() {
       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
         <div>
           <CardTitle className="text-base">Marks categories</CardTitle>
-          <CardDescription className="mt-1.5">
-            For subjects whose internal marks differ from their branch&rsquo;s breakdown: make a category (e.g. &ldquo;Theory - no Quiz&rdquo;: Mid 25 + Assignment 5) and add the subjects to it.
-            They use it in every branch; all other subjects keep their branch&rsquo;s configuration. Nothing changes for a subject once marks are entered for it.
-          </CardDescription>
+          <CardDescription className="mt-1.5">For subjects whose internal marks differ from their branch&apos;s breakdown, create a category (for example &quot;Theory without Quiz&quot;: Mid 25 + Assignment 5) and add the subjects to it. The category applies in every branch; other subjects keep their branch&apos;s configuration. A subject&apos;s category cannot change once marks are entered for it.</CardDescription>
         </div>
         {!creating && <Button size="sm" onClick={() => setCreating(true)}><Plus className="mr-1 h-4 w-4" />New category</Button>}
       </CardHeader>
@@ -237,7 +234,7 @@ export function ExamMarksCategoriesCard() {
             onSave={async (v) => { const c = await send("/api/college/exam-marks-categories", "POST", v, "Category created - now add its subjects"); if (c) { setCreating(false); setCategories((l) => [...(l ?? []), c]); setOpen(c.id); } }} />
         )}
         {categories === null ? <div className="h-24 animate-pulse rounded-xl bg-muted" /> : categories.length === 0 && !creating ? (
-          <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">No categories yet - every subject uses its branch&rsquo;s breakdown.</p>
+          <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">No categories yet. Every subject uses its branch&apos;s breakdown.</p>
         ) : categories.map((c) => {
           const isOpen = open === c.id;
           return (

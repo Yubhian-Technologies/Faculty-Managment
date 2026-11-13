@@ -116,7 +116,7 @@ export default function HolidaysImportPage() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Import Holidays"
-        description="Bulk-add the academic calendar's holidays at once instead of one at a time"
+        description="Add the holidays of the academic calendar in bulk."
         actions={
           <Button variant="outline" asChild>
             <Link href={holidaysBase}><ArrowLeft className="h-4 w-4 mr-1" />Back to Holidays</Link>
@@ -128,9 +128,7 @@ export default function HolidaysImportPage() {
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><span className="h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>Download Template</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Download the CSV template, fill in the academic calendar&apos;s holidays, and upload it below.
-          </p>
+          <p className="text-sm text-muted-foreground">Download the CSV template, enter the holidays of the academic calendar and upload it below.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
             {HINTS.map((h) => <p key={h} className="flex items-start gap-1"><span className="text-primary mt-0.5">•</span>{h}</p>)}
           </div>
@@ -153,7 +151,7 @@ export default function HolidaysImportPage() {
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
             <div className="text-center">
               <p className="font-medium text-sm">Click to select a CSV or Excel file</p>
-              <p className="text-xs text-muted-foreground mt-1">.csv or .xlsx supported - headers matched loosely, extra columns are ignored</p>
+              <p className="text-xs text-muted-foreground mt-1">CSV and XLSX files are supported. Column headings are matched flexibly and extra columns are ignored.</p>
             </div>
           </button>
           {parseError && (

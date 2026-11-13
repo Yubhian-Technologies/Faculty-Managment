@@ -484,7 +484,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department, previou
                   <Input
                     value={row.assignmentAcademicYear ?? ""}
                     onChange={(e) => updateRow(row.localId, { assignmentAcademicYear: e.target.value })}
-                    placeholder="e.g. 2025-2026"
+                    placeholder="2025-2026"
                   />
                 </div>
                 <div className="space-y-1">
@@ -492,7 +492,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department, previou
                   <Input
                     value={row.assignmentSemester ?? ""}
                     onChange={(e) => updateRow(row.localId, { assignmentSemester: e.target.value })}
-                    placeholder="e.g. I Semester"
+                    placeholder="I Semester"
                   />
                 </div>
                 {row.isPast && (
@@ -517,7 +517,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department, previou
                     <Input
                       value={row.labBatch ?? ""}
                       onChange={(e) => updateRow(row.localId, { labBatch: e.target.value })}
-                      placeholder="e.g. Batch 1"
+                      placeholder="Batch 1"
                     />
                     <p className="text-[10px] text-muted-foreground">
                       Label this row&rsquo;s periods as a lab sub-group - add a second row for the

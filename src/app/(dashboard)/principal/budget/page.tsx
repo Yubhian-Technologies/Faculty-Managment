@@ -62,7 +62,7 @@ export default function PrincipalBudgetPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget"
-        description="Departmental budget requests, approvals, and fund tracking"
+        description="Department budget requests, approvals and fund tracking."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>

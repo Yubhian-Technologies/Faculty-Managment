@@ -101,7 +101,7 @@ export default function SuperAdminDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user?.name ?? "Admin"}`}
-        description="System-wide overview of all colleges and operations"
+        description="System-wide overview of all colleges and operations."
         actions={
           !isHidden("/super-admin/colleges") && (
             <Button asChild>

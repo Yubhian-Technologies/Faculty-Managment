@@ -11,7 +11,7 @@ export default function LibraryDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "Library"}`}
-        description="Library - college library administration"
+        description="Administration of the college library."
       />
       <p className="text-muted-foreground text-sm">Library features are being set up. Check back soon.</p>
     </div>

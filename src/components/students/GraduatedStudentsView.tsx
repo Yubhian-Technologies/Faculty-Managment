@@ -166,7 +166,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
       {showHeader && (
         <PageHeader
           title="Graduated Students"
-          description="Every student who has completed their programme, grouped by course and batch"
+          description="Students who have completed their programme, grouped by course and batch."
         />
       )}
 

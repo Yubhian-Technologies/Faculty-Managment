@@ -415,13 +415,13 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
                           {inMid && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">Mid {deadline.midNumber}</span>}
                           {filled && <Check className="ml-auto h-4 w-4 text-emerald-600" aria-label="filled" />}
                         </div>
-                        <Input id={`unit-${i}`} value={t} disabled={readOnly} maxLength={LIMITS.unitTitle} placeholder="e.g. Linear data structures"
+                        <Input id={`unit-${i}`} value={t} disabled={readOnly} maxLength={LIMITS.unitTitle} placeholder="Linear data structures"
                           className="border-0 bg-transparent px-0 text-[15px] shadow-none focus-visible:ring-0"
                           onChange={(e) => setDraft((d) => ({ ...d, units: d.units.map((x, j) => (j === i ? e.target.value : x)) }))} />
                         <div className="mt-2 border-t pt-2">
                           <Label htmlFor={`unit-syl-${i}`} className="text-xs font-medium text-muted-foreground">Syllabus (topics of this unit)</Label>
                           <Textarea id={`unit-syl-${i}`} rows={3} value={draft.syllabi[i] ?? ""} disabled={readOnly} maxLength={LIMITS.unitSyllabus}
-                            placeholder="e.g. Arrays, linked lists - singly, doubly, circular; stacks and queues - applications"
+                            placeholder="Arrays, linked lists - singly, doubly, circular; stacks and queues - applications"
                             className="mt-1 min-h-20 resize-y bg-background text-sm"
                             onChange={(e) => setDraft((d) => ({ ...d, syllabi: d.units.map((_, j) => (j === i ? e.target.value : d.syllabi[j] ?? "")) }))} />
                         </div>

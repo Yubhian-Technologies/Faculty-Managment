@@ -54,7 +54,7 @@ export default function NewPaymentPage() {
     <div className="max-w-xl">
       <PageHeader
         title="New Payment"
-        description="Create a payment for a vendor, staff reimbursement, or student refund"
+        description="Create a payment for a vendor, a staff reimbursement or a student refund."
       />
 
       <Card>

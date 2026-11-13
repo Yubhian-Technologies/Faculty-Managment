@@ -92,7 +92,7 @@ export default function HODBatchesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hiring Batches"
-        description="Interview panel proposals and progress"
+        description="Interview panel proposals and their progress."
         actions={
           <Button asChild>
             <Link href="/hod/batches/new">

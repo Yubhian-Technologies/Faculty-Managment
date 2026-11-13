@@ -227,9 +227,7 @@ export function CollegeBrandingDashboardCard() {
               <Building2 className="h-4 w-4 text-primary" />
               Manage College Logo
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              Upload a custom institution logo or reset to the default Vishnu logo.
-            </DialogDescription>
+            <DialogDescription className="text-xs">Upload an institution logo or restore the default Vishnu logo.</DialogDescription>
           </DialogHeader>
 
           <div className="py-3 space-y-4">
@@ -335,9 +333,7 @@ export function CollegeBrandingDashboardCard() {
               <AlertCircle className="h-4 w-4" />
               Reset to Default Vishnu Logo?
             </DialogTitle>
-            <DialogDescription className="text-xs pt-1">
-              This will remove the current custom logo and revert to the default Vishnu logo on all timetables and letterheads.
-            </DialogDescription>
+            <DialogDescription className="text-xs pt-1">The current logo will be removed and the default Vishnu logo used on all timetables and letterheads.</DialogDescription>
           </DialogHeader>
 
           <DialogFooter className="gap-2 sm:gap-0 pt-2">

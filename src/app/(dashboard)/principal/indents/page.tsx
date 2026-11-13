@@ -64,7 +64,7 @@ export default function PrincipalIndentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Indents"
-        description="Past indent requests raised by departments"
+        description="Past indent requests raised by departments."
         actions={
           <Button variant="outline" size="sm" onClick={load} loading={isLoading}>
             <RefreshCw className="h-4 w-4 mr-1" />

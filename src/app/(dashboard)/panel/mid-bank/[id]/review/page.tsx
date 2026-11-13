@@ -16,7 +16,7 @@ export default function MidBankReviewPage({ params, searchParams }: { params: Pr
     <div className="space-y-6">
       <PageHeader
         title="Review"
-        description="Everything still missing, a full preview, and the PDF once it is complete."
+        description="Outstanding items, a full preview and, once complete, the PDF."
         actions={
           <Button asChild variant="ghost" size="sm"><Link href="/panel/mid-bank"><ArrowLeft className="mr-1.5 h-4 w-4" />All subjects</Link></Button>
         }

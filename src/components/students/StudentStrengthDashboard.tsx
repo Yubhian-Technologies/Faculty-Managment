@@ -287,7 +287,7 @@ export function StudentStrengthDashboard() {
           <CardContent className="flex flex-col items-center gap-2 py-14 text-center">
             <Users className="h-7 w-7 text-muted-foreground" />
             <p className="text-sm font-medium">No students yet</p>
-            <p className="text-xs text-muted-foreground">Strength appears here automatically as soon as students are added or imported.</p>
+            <p className="text-xs text-muted-foreground">Strength appears here as soon as students are added or imported.</p>
           </CardContent>
         </Card>
       ) : (
@@ -325,9 +325,7 @@ export function StudentStrengthDashboard() {
               <h2 className="text-base font-semibold">Strength report - Department × Year</h2>
             </div>
             {scoped && (
-              <p className="text-xs text-muted-foreground">
-                Only the students you are responsible for are counted. A branch you teach in one year (for example a shared first year) shows just those students - its other years belong to that branch&apos;s own HOD.
-              </p>
+              <p className="text-xs text-muted-foreground">Only the students you are responsible for are counted. A branch you teach in one year (for example, a common first year) shows only those students; its other years belong to that branch&apos;s own HOD.</p>
             )}
             {report.matrices.length === 0 ? (
               <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">0 students match this selection.</CardContent></Card>

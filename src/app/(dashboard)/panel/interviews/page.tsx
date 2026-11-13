@@ -137,7 +137,7 @@ export default function PanelInterviewsPage() {
     <div className="space-y-6">
       <PageHeader
         title="My Interviews"
-        description="Assigned interview batches and feedback submissions"
+        description="Assigned interview batches and feedback submissions."
       />
 
       <div className="flex gap-2">

@@ -624,13 +624,11 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 <SelectItem value="OTHER">Other</SelectItem>
               </SelectContent>
             </Select>
-            {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you&rsquo;re extending.</p>}
+            {extendId && <p className="text-xs text-muted-foreground">Kept the same as the leave you are extending.</p>}
             {/* Explains why EL is missing from the list above, rather than
                 leaving it silently absent. */}
             {!!types.find((t) => t.code === "CL")?.remaining && (
-              <p className="text-xs text-muted-foreground">
-                Earned Leave becomes available once your Casual Leave balance is fully used.
-              </p>
+              <p className="text-xs text-muted-foreground">Earned Leave becomes available once your Casual Leave balance is used.</p>
             )}
             {/* Right after the leave type: the reasons offered depend on it (and are cleared when it changes),
                 so it only appears once a type is picked. */}
@@ -694,7 +692,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                   id="place-of-visit"
                   value={placeOfVisit}
                   onChange={(e) => setPlaceOfVisit(e.target.value)}
-                  placeholder="e.g. XYZ College, Hyderabad"
+                  placeholder="XYZ College, Hyderabad"
                 />
               </div>
             </div>
@@ -789,9 +787,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 </SelectContent>
               </Select>
               {isForenoonBlocked && (
-                <p className="text-xs text-muted-foreground">
-                  Forenoon is no longer available for today after 11am - only Afternoon can be selected.
-                </p>
+                <p className="text-xs text-muted-foreground">Forenoon is not available for today after 11 am; only Afternoon can be selected.</p>
               )}
             </div>
           )}
@@ -806,9 +802,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                 <Users className="h-4 w-4 text-muted-foreground" />
                 <Label>Work Adjustment</Label>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Choose a faculty member to take each of your classes during this leave. Only faculty who are free at that time are shown, and faculty from your department are listed first.
-              </p>
+              <p className="text-xs text-muted-foreground">Choose a faculty member to take each of your classes during this leave. Only faculty free at that time are shown, with faculty from your department listed first.</p>
               {substituteDepartments.length > 1 && (
                 <div className="flex items-center gap-2">
                   <Label className="text-xs text-muted-foreground shrink-0">Department</Label>
@@ -881,10 +875,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
           {HANDOVER_ENABLED && handoverCandidates.length > 0 && (
             <div className="space-y-2">
               <Label>Handover / point of contact (optional)</Label>
-              <p className="text-xs text-muted-foreground">
-                Name someone to handle anything else you look after while you&rsquo;re out - separate from any classes above.
-                Only people available on your dates are listed.
-              </p>
+              <p className="text-xs text-muted-foreground">Name someone to handle your other responsibilities while you are away, separate from the classes above. Only people available on your dates are listed.</p>
               <Select value={handoverToUid || "NONE"} onValueChange={(v) => setHandoverToUid(v === "NONE" ? "" : v)}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>

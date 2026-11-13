@@ -57,7 +57,7 @@ export default function ExamCellCircularsPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Circulars"
-        description="Upload a PDF/Word notice as-is, or share a short structured notice typed in directly - both land in the same list below, newest first."
+        description="Upload a PDF or Word notice as it is, or type a short structured notice. Both appear in the list below, newest first."
         actions={
           <>
             <Button variant="outline" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4 mr-2" />Upload Circular</Button>
@@ -72,7 +72,7 @@ export default function ExamCellCircularsPage() {
         <Card>
           <CardContent className="py-10 text-center space-y-1">
             <p className="text-sm text-muted-foreground">No circulars uploaded yet.</p>
-            <p className="text-xs text-muted-foreground">Upload a PDF or Word file to get started.</p>
+            <p className="text-xs text-muted-foreground">Upload a PDF or Word file to begin.</p>
           </CardContent>
         </Card>
       ) : (
@@ -195,12 +195,12 @@ function UploadDialog({ open, onClose, onDone }: { open: boolean; onClose: () =>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Upload Circular</DialogTitle>
-          <DialogDescription>Shown exactly as uploaded - no text extraction.</DialogDescription>
+          <DialogDescription>Shown exactly as uploaded, without text extraction.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-2">
             <Label>Title <span className="font-normal text-muted-foreground">(optional, defaults to the file name)</span></Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Revised Exam Timetable" disabled={busy} />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Revised Exam Timetable" disabled={busy} />
           </div>
           <div className="space-y-2">
             <Label>File (PDF or Word .docx, max 10 MB)</Label>
@@ -271,7 +271,7 @@ function EditTitleDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit Circular Title</DialogTitle>
-          <DialogDescription>Renaming only - re-upload to replace the file itself.</DialogDescription>
+          <DialogDescription>This changes only the name. Upload the file again to replace it.</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           <Label>Title</Label>
@@ -424,7 +424,7 @@ function NoticeFormDialog({
           </div>
           <div className="space-y-2">
             <Label>Subject <span className="font-normal text-muted-foreground">(the circular&apos;s own heading, not a course subject)</span></Label>
-            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Revised Timetable for Mid-Semester Exams" disabled={busy} />
+            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Revised Timetable for Mid-Semester Exams" disabled={busy} />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label>Body</Label>

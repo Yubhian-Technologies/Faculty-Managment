@@ -132,7 +132,7 @@ export function BranchTimetableList({ slots, sessions }: { slots: MidExamSlot[];
   const exams = [...new Set(slots.map((x) => `${x.date}|${x.sessionId}`))]
     .map((k) => { const [d, sid] = k.split("|"); return { d, ses: sessions.find((x) => x.id === sid), list: slots.filter((x) => x.date === d && x.sessionId === sid) }; })
     .sort((a, b) => a.d.localeCompare(b.d) || (a.ses?.from ?? "").localeCompare(b.ses?.from ?? ""));
-  if (exams.length === 0) return <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">No exams placed yet.</p>;
+  if (exams.length === 0) return <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">No examinations placed yet.</p>;
   return (
     <ol className="divide-y rounded-xl border">
       {exams.map(({ d, ses, list }) => (

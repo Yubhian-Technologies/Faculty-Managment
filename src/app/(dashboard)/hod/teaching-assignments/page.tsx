@@ -1176,7 +1176,7 @@ const effectiveSemester = semesterOptions.length === 0
     <div className="space-y-6">
       <PageHeader
         title="Subject Allocation"
-        description="Find staffing gaps and assign faculty to subjects, course &amp; year wise"
+        description="Find staffing gaps and assign faculty to subjects by course and year."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={handleExportPdf} disabled={isExportingPdf}>
@@ -1294,7 +1294,7 @@ const effectiveSemester = semesterOptions.length === 0
           <CardHeader className="pb-3"><CardTitle className="text-base">Unstaffed Subjects</CardTitle></CardHeader>
           <CardContent>
             {!applied ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then press Load to see staffing gaps.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then choose Load to see staffing gaps.</p>
             ) : !subjectsSemesterReady ? (
               <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted animate-pulse rounded-lg" />)}</div>
             ) : subjects.length === 0 ? (
@@ -1339,7 +1339,7 @@ const effectiveSemester = semesterOptions.length === 0
           <CardHeader className="pb-3"><CardTitle className="text-base">Assign Faculty</CardTitle></CardHeader>
           <CardContent>
             {!applied ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then press Load to assign faculty.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">Select the course, year, semester and sub-department, then choose Load to assign faculty.</p>
             ) : sections.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No sections created yet for {course?.name} · {ordinalYear(Number(year))}.</p>
             ) : (
@@ -1447,9 +1447,7 @@ const effectiveSemester = semesterOptions.length === 0
                 >
                   {extraFacultyIds.length > 0 ? `Assign ${1 + extraFacultyIds.length} faculty` : "Assign"}
                 </Button>
-                <p className="text-xs text-muted-foreground">
-                  Periods for this subject are picked afterwards from the faculty member&rsquo;s Edit page.
-                </p>
+                <p className="text-xs text-muted-foreground">Periods for this subject are selected afterwards on the faculty member&apos;s Edit page.</p>
 
                 {assignForm.sectionId && assignForm.subjectId && (
                   <div className="pt-3 mt-3 border-t space-y-2">
@@ -1458,7 +1456,7 @@ const effectiveSemester = semesterOptions.length === 0
                         be asked of more departments later even if it already has faculty. */}
                     <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2">
                       {requestableDepartments.length === 0 ? (
-                        <p className="px-1 text-xs text-muted-foreground">No other departments</p>
+                        <p className="px-1 text-xs text-muted-foreground">No other departments.</p>
                       ) : requestableDepartments.map((d) => {
                         const parentName = d.parentDepartmentId ? departments.find((p) => p.id === d.parentDepartmentId)?.name : null;
                         const alreadyAsked = assignmentRequests.some((r) =>

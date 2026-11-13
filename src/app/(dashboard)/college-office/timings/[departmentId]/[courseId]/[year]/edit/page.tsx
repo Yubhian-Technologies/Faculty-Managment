@@ -28,7 +28,7 @@ export default function CollegeOfficeCourseYearTimingPage() {
     <div className="max-w-2xl">
       <PageHeader
         title={loading ? "Course Timings" : `${course?.name ?? "Course"} - Year ${yearNum} Timings`}
-        description="Set college hours, periods and breaks for this course-year"
+        description="Set the college hours, periods and breaks for this course and year."
       />
       {loading ? (
         <div className="h-64 rounded-lg border bg-muted/30 animate-pulse" />

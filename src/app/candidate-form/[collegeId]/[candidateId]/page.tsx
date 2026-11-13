@@ -492,7 +492,7 @@ export default function CandidateFormPage() {
                     const subCasteOptions = subCasteOptionsFor(form.caste ?? "");
                     if (subCasteOptions.length === 0) {
                       return (
-                        <Input id="subCaste" value={form.subCaste ?? ""} onChange={(e) => updateForm({ subCaste: e.target.value })} placeholder="e.g. Kapu, Reddy, Naidu..." />
+                        <Input id="subCaste" value={form.subCaste ?? ""} onChange={(e) => updateForm({ subCaste: e.target.value })} placeholder="Kapu, Reddy, Naidu..." />
                       );
                     }
                     const isOther = !!form.subCaste && (form.subCaste === "OTHER" || !subCasteOptions.includes(form.subCaste));
@@ -512,7 +512,7 @@ export default function CandidateFormPage() {
                           <Input
                             value={form.subCaste === "OTHER" ? "" : form.subCaste ?? ""}
                             onChange={(e) => updateForm({ subCaste: e.target.value || "OTHER" })}
-                            placeholder="Please specify"
+                            placeholder="specify"
                           />
                         )}
                       </>
@@ -555,7 +555,7 @@ export default function CandidateFormPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor={`qual-degree-${row.id}`}>Degree / Course</Label>
-                      <Input id={`qual-degree-${row.id}`} value={row.degree} disabled={!!row.sourceLabel} onChange={(e) => updateQualificationRow(row.id, { degree: e.target.value })} placeholder="e.g. M.Tech" />
+                      <Input id={`qual-degree-${row.id}`} value={row.degree} disabled={!!row.sourceLabel} onChange={(e) => updateQualificationRow(row.id, { degree: e.target.value })} placeholder="M.Tech" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`qual-institution-${row.id}`}>Institution</Label>
@@ -565,11 +565,11 @@ export default function CandidateFormPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor={`qual-year-${row.id}`}>Year of Passing</Label>
-                      <Input id={`qual-year-${row.id}`} value={row.yearOfPassing} inputMode="numeric" maxLength={4} onChange={(e) => updateQualificationRow(row.id, { yearOfPassing: onlyDigits(e.target.value, 4) })} placeholder="e.g. 2020" />
+                      <Input id={`qual-year-${row.id}`} value={row.yearOfPassing} inputMode="numeric" maxLength={4} onChange={(e) => updateQualificationRow(row.id, { yearOfPassing: onlyDigits(e.target.value, 4) })} placeholder="2020" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`qual-pct-${row.id}`}>Percentage / CGPA</Label>
-                      <Input id={`qual-pct-${row.id}`} value={row.percentageOrCGPA} inputMode="decimal" onChange={(e) => updateQualificationRow(row.id, { percentageOrCGPA: decimalOnly(e.target.value) })} placeholder="e.g. 8.5" />
+                      <Input id={`qual-pct-${row.id}`} value={row.percentageOrCGPA} inputMode="decimal" onChange={(e) => updateQualificationRow(row.id, { percentageOrCGPA: decimalOnly(e.target.value) })} placeholder="8.5" />
                     </div>
                   </div>
                   <FileUpload
@@ -607,7 +607,7 @@ export default function CandidateFormPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`exp-designation-${row.id}`}>Designation</Label>
-                      <Input id={`exp-designation-${row.id}`} value={row.designation} onChange={(e) => updateExperienceRow(row.id, { designation: e.target.value })} placeholder="e.g. Assistant Professor" />
+                      <Input id={`exp-designation-${row.id}`} value={row.designation} onChange={(e) => updateExperienceRow(row.id, { designation: e.target.value })} placeholder="Assistant Professor" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -640,7 +640,7 @@ export default function CandidateFormPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="firstAuthorPublications">Publications (first/corresponding author)</Label>
-                  <Input id="firstAuthorPublications" value={form.researchProfile?.firstAuthorPublications ?? ""} onChange={(e) => updateResearchProfile({ firstAuthorPublications: e.target.value })} placeholder="e.g. 5 (SCOPUS/WOS)" />
+                  <Input id="firstAuthorPublications" value={form.researchProfile?.firstAuthorPublications ?? ""} onChange={(e) => updateResearchProfile({ firstAuthorPublications: e.target.value })} placeholder="5 (SCOPUS/WOS)" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="publicationsQ1OrHighIF">Publications in Q1 or IF &gt; 4.0</Label>
@@ -728,7 +728,7 @@ export default function CandidateFormPage() {
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor={`rel-relationship-${row.id}`}>Relationship</Label>
-                          <Input id={`rel-relationship-${row.id}`} value={row.relationship} onChange={(e) => updateRelativeRow(row.id, { relationship: e.target.value })} placeholder="e.g. Brother, Spouse" />
+                          <Input id={`rel-relationship-${row.id}`} value={row.relationship} onChange={(e) => updateRelativeRow(row.id, { relationship: e.target.value })} placeholder="Brother, Spouse" />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
@@ -743,7 +743,7 @@ export default function CandidateFormPage() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor={`rel-experience-${row.id}`}>Experience</Label>
-                        <Input id={`rel-experience-${row.id}`} value={row.experience} onChange={(e) => updateRelativeRow(row.id, { experience: e.target.value })} placeholder="e.g. 5 years" />
+                        <Input id={`rel-experience-${row.id}`} value={row.experience} onChange={(e) => updateRelativeRow(row.id, { experience: e.target.value })} placeholder="5 years" />
                       </div>
                     </div>
                   ))}
@@ -779,7 +779,7 @@ export default function CandidateFormPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="noticePeriod">Notice Period</Label>
-                <Input id="noticePeriod" value={form.noticePeriod ?? ""} onChange={(e) => updateForm({ noticePeriod: e.target.value })} placeholder="e.g. Immediate / 30 days" />
+                <Input id="noticePeriod" value={form.noticePeriod ?? ""} onChange={(e) => updateForm({ noticePeriod: e.target.value })} placeholder="Immediate / 30 days" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="references">References</Label>

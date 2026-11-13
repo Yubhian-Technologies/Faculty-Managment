@@ -77,7 +77,7 @@ export default function FinanceBudgetCyclesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Budget Cycles"
-        description="Institution-wide budget releases and their Principal approval status"
+        description="Institution-wide budget releases and their approval status with the Principal."
         actions={
           <>
             <Button variant="outline" size="sm" onClick={load} loading={isLoading}>

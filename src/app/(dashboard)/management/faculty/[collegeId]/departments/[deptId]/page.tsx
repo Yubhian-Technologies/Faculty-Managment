@@ -76,7 +76,7 @@ export default function ManagementDepartmentFacultyPage() {
     <div className="space-y-6">
       <PageHeader
         title="Staff Profiles"
-        description="Staff records of the Department"
+        description="Staff records of the department."
         actions={
           <Button variant="outline" onClick={() => router.push(`/management/faculty/${collegeId}/departments`)}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back

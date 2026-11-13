@@ -127,7 +127,7 @@ export default function EmailRequestsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Official Emails"
-        description="Request the Webmaster create an official institutional email for a hired candidate"
+        description="Request the Webmaster to create an official institutional email account for a selected candidate."
         actions={
           <Button onClick={() => router.push("/college-office/email-requests/new")}>
             <Plus className="h-4 w-4 mr-1" />

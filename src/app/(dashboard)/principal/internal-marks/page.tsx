@@ -482,7 +482,7 @@ export default function PrincipalInternalMarksPage() {
     <div className="space-y-6">
       <PageHeader
         title="Internal Marks"
-        description="Institution-wide internal assessment management"
+        description="Internal assessment management for the institution."
         actions={
           <Button variant="outline" size="sm" onClick={() => { void loadData(); setApplied((a) => (a ? { ...a } : a)); }} disabled={isLoadingData || isLoadingBatches}>
             <RefreshCw className="h-3.5 w-3.5" /> Refresh

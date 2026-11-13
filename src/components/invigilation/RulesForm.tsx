@@ -201,7 +201,7 @@ export function RulesForm({ overview, approvers, mids, departments, onSaved }: {
           <div className="space-y-1.5"><Label htmlFor="r-same">Same room again in this schedule</Label><ModeSelect id="r-same" value={r.sameRoomRule} onChange={(v) => set("sameRoomRule", v)} /></div>
           <div className="space-y-1.5"><Label htmlFor="r-cons">Same room in consecutive sessions</Label><ModeSelect id="r-cons" value={r.consecutiveSameRoomRule} onChange={(v) => set("consecutiveSameRoomRule", v)} /></div>
         </div>
-        <p className="text-xs text-muted-foreground">Suggestions already prefer people who haven&rsquo;t had the room.</p>
+        <p className="text-xs text-muted-foreground">Suggestions already favour people who have not had the room.</p>
       </Section>
 
       <Section title="Overrides and approvals" description="Only these Exam Cell users may give a duty that breaks a Warn rule; each override needs a reason and is kept in the audit log. Block rules can't be overridden.">

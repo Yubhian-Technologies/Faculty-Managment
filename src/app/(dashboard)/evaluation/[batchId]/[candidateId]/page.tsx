@@ -244,9 +244,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
           <CardContent className="p-8 text-center space-y-2">
             <Clock className="h-8 w-8 text-muted-foreground mx-auto" />
             <p className="font-medium">Scoring Not Yet Open</p>
-            <p className="text-sm text-muted-foreground">
-              Evaluation opens once the HOD opens panel scoring for this batch.
-            </p>
+            <p className="text-sm text-muted-foreground">Evaluation opens once the HOD starts panel scoring for this batch.</p>
           </CardContent>
         </Card>
       ) : alreadySubmitted ? (
@@ -254,9 +252,7 @@ export default function EvaluationPage({ params }: { params: Promise<{ batchId: 
           <CardContent className="p-8 text-center space-y-2">
             <CheckCircle2 className="h-8 w-8 text-green-600 mx-auto" />
             <p className="font-medium">Already Submitted</p>
-            <p className="text-sm text-muted-foreground">
-              You have already submitted your evaluation for this candidate.
-            </p>
+            <p className="text-sm text-muted-foreground">You have already submitted your evaluation for this candidate.</p>
             <Button variant="outline" onClick={() => router.back()}>Back</Button>
           </CardContent>
         </Card>

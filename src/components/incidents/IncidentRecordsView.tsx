@@ -141,7 +141,7 @@ export function IncidentRecordsView() {
             <>
               <DialogHeader>
                 <DialogTitle>{openReport.title}</DialogTitle>
-                <DialogDescription>Incident record</DialogDescription>
+                <DialogDescription>Incident Record</DialogDescription>
               </DialogHeader>
               <dl className="grid gap-3 text-sm sm:grid-cols-3">
                 <div><dt className="text-xs text-muted-foreground">Incident Date</dt><dd className="font-medium">{formatIncidentDate(openReport.incidentDate)}</dd></div>

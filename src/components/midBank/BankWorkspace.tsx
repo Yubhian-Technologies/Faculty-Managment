@@ -454,7 +454,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
                     <PopoverContent align="end" className="w-96 max-w-[calc(100vw-2rem)] p-0">
                       <div className="border-b px-3 py-2.5">
                         <p className="text-sm font-semibold">Start from a copy</p>
-                        <p className="text-xs text-muted-foreground">The copy replaces what is in this question; change it before saving - an identical question can&rsquo;t be completed.</p>
+                        <p className="text-xs text-muted-foreground">The copy replaces the content of this question. Change it before saving; an identical question cannot be completed.</p>
                       </div>
                       <ul className="max-h-80 overflow-y-auto p-1.5" aria-label="Questions to copy from">
                         {others.map((q) => (
@@ -619,7 +619,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
 
           {sw.cos && <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Target className="h-3.5 w-3.5" />Outcomes</p>
-            {allCos.length === 0 ? <p className="text-xs text-muted-foreground">Pick a Course Outcome to see its POs and PSOs.</p> : (
+            {allCos.length === 0 ? <p className="text-xs text-muted-foreground">Select a Course Outcome to see its POs and PSOs.</p> : (
               <>
                 <ul className="mb-3 space-y-2">{allCos.map((c) => <li key={c} className="flex gap-2 text-xs"><span className="h-fit shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 font-bold text-primary">{c}</span><span>{outcomes.cos.find((x) => x.id === c)?.statement}</span></li>)}</ul>
                 {sw.poMapping && <div className="flex flex-wrap gap-1">

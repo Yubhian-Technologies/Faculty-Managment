@@ -108,11 +108,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Paired plan from the Mid Timetable</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          One arrangement for the whole Mid - every exam day. Pick the Mid timetable (its branches load), put each branch in a seat of the
-          bench - e.g. Seat A: CSE, Seat B: Civil then Mech. Every bench gets one student from each seat&rsquo;s list, room after room in
-          the order you tick them; when a list runs out its seat stays empty. Within a branch: section by section, each in Regd. No order.
-        </p>
+        <p className="text-sm text-muted-foreground">One arrangement for the whole Mid, covering every examination day. Select the Mid timetable (its branches are loaded), then place each branch in a seat of the bench, for example Seat A: CSE, Seat B: Civil then Mechanical. Each bench takes one student from each seat&apos;s list, room after room in the order selected; when a list runs out, its seat stays empty. Within a branch, students are seated section by section in Regd. No order.</p>
       </CardHeader>
       <CardContent className="space-y-5">
         <div>
@@ -120,7 +116,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
             <p className="text-sm font-medium">Mid timetable{mids && mids.length > 1 ? "s (tick more than one to seat several years together)" : ""}</p>
             <div className="space-y-1.5 rounded-lg border p-3">
               {mids === null && <p className="text-sm text-muted-foreground">Loading...</p>}
-              {mids?.length === 0 && <p className="text-sm text-muted-foreground">No Mid timetable with branches yet - make one under Mid Timetable.</p>}
+              {mids?.length === 0 && <p className="text-sm text-muted-foreground">No Mid timetable with branches yet. Create one under Mid Timetable.</p>}
               {(mids ?? []).map((m) => (
                 <label key={m.id} className="flex items-center gap-2 text-sm">
                   <input type="checkbox" className="h-4 w-4" checked={planIds.includes(m.id)}
@@ -150,7 +146,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
         {groups && (
           <div className="space-y-2">
             <p className="text-sm font-medium">Branches - choose the seat for each</p>
-            {groups.length === 0 && <p className="text-sm text-muted-foreground">No branch in the Mid timetable picked.</p>}
+            {groups.length === 0 && <p className="text-sm text-muted-foreground">No branch selected in the Mid timetable.</p>}
             {Array.from({ length: maxSeats + 1 }, (_, s) => (s === maxSeats ? -1 : s)).map((s) => {
               const keys = s === -1 ? order.filter((k) => seatOf[k] === undefined) : streams[s];
               if (s === -1 && keys.length === 0) return null;
@@ -206,7 +202,7 @@ export function PairedPlanCard({ rooms }: { rooms: ExamRoom[] }) {
                 </label>
               );
             })}
-            {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet - add them under Exam Rooms.</p>}
+            {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet. Add them under Exam Rooms.</p>}
           </div>
         </div>
 

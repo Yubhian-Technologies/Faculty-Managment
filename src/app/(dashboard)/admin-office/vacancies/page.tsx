@@ -39,7 +39,7 @@ export default function AdminOfficeVacanciesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hiring Requests"
-        description="Faculty vacancy requests for location departments"
+        description="Faculty vacancy requests for location departments."
         actions={
           <Button asChild>
             <Link href="/admin-office/vacancies/new">+ New Request</Link>

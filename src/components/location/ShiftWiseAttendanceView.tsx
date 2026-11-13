@@ -829,9 +829,7 @@ export function ShiftWiseAttendanceView({
               <ShieldAlert className="h-5 w-5" />
               <span>Record Emergency Duty Entry</span>
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Call in an employee urgently outside or beyond their scheduled shift. This enters them under Emergency Duty with immediate on-time validation.
-            </DialogDescription>
+            <DialogDescription className="text-xs text-muted-foreground">Call an employee for urgent duty outside their scheduled shift. They are recorded under Emergency Duty and checked for on-time arrival immediately.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -854,7 +852,7 @@ export function ShiftWiseAttendanceView({
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">Emergency Purpose / Reason *</label>
               <Input
-                placeholder="e.g. Campus power outage, water pipeline burst, urgent security backup"
+                placeholder="Campus power outage, water pipeline burst, urgent security backup"
                 value={emergencyReason}
                 onChange={(e) => setEmergencyReason(e.target.value)}
                 className="h-10 text-xs rounded-xl border-border/60 bg-muted/20"

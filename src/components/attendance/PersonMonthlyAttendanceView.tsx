@@ -195,7 +195,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
     <div className="space-y-6">
       <PageHeader
         title={personName ? `${personName}'s Attendance` : "Attendance"}
-        description="Review and correct any day this month"
+        description="Review and correct any day of this month."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={handleExport} disabled={days.length === 0}>

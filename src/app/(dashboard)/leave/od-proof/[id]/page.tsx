@@ -69,7 +69,7 @@ export default function ODProofPage() {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
   if (!request) {
-    return <p className="text-sm text-muted-foreground">This leave request could not be found.</p>;
+    return <p className="text-sm text-muted-foreground">This leave request was not found.</p>;
   }
 
   const evaluation = evaluateODProof(request);
@@ -78,7 +78,7 @@ export default function ODProofPage() {
     <div className="space-y-6">
       <PageHeader
         title="Proof of Duty"
-        description="Upload the certificate, letter or order for this On Duty leave"
+        description="Upload the certificate, letter or order for this On Duty leave."
         actions={
           <Button variant="outline" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back

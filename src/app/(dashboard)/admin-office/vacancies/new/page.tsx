@@ -61,7 +61,7 @@ export default function NewAdminOfficeVacancyPage() {
 
   return (
     <div className="max-w-2xl space-y-5">
-      <PageHeader title="New Hiring Request" description="Raise a faculty vacancy for a location department — submitted to HR Admin for review" />
+      <PageHeader title="New Hiring Request" description="Raise a faculty vacancy for a location department. It is submitted to HR Admin for review." />
       <form onSubmit={handleSubmit} className="space-y-5">
         <Card>
           <CardHeader className="pb-3">
@@ -71,7 +71,7 @@ export default function NewAdminOfficeVacancyPage() {
             <div className="space-y-2">
               <Label>Position</Label>
               <Input value="Faculty" disabled className="bg-muted text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">All hiring requests are for Faculty positions.</p>
+              <p className="text-xs text-muted-foreground">All hiring requests are for faculty positions.</p>
             </div>
 
             <div className="space-y-2">
@@ -97,7 +97,7 @@ export default function NewAdminOfficeVacancyPage() {
               <Input
                 value={qualification}
                 onChange={(e) => setQualification(e.target.value)}
-                placeholder="e.g. M.Tech / Ph.D in relevant field"
+                placeholder="M.Tech / Ph.D in relevant field"
               />
             </div>
 

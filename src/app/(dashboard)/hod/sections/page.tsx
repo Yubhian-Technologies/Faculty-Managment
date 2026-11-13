@@ -616,7 +616,7 @@ function HODSectionsContent() {
     <div className="space-y-6">
       <PageHeader
         title="Sections"
-        description="Manage class sections, assign faculty in-charge, and monitor student enrollment."
+        description="Manage class sections, assign the faculty in-charge and monitor student enrolment."
         actions={
           <Button onClick={openCreate} disabled={courses.length === 0}>
             <Plus className="h-4 w-4 mr-2" />Add Section

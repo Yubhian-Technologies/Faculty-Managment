@@ -84,7 +84,7 @@ export function FacultyCredentialsPage({ facultyId, listHref }: { facultyId: str
     <div className="max-w-xl">
       <PageHeader
         title={`Create Login - ${facultyName}`}
-        description="This will create a system login account for this faculty member. They can sign in as a Panel Member."
+        description="Create a login for this faculty member. They will sign in as a Panel Member."
       />
 
       <Card>
@@ -101,7 +101,7 @@ export function FacultyCredentialsPage({ facultyId, listHref }: { facultyId: str
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@college.edu.in"
               />
-              <p className="text-xs text-muted-foreground">Pre-filled from college email. Change if needed.</p>
+              <p className="text-xs text-muted-foreground">Filled in from the college email. Change it if needed.</p>
             </div>
             <div className="space-y-2">
               <Label>Password *</Label>
@@ -121,7 +121,7 @@ export function FacultyCredentialsPage({ facultyId, listHref }: { facultyId: str
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground">Share this password with the faculty member so they can log in.</p>
+              <p className="text-xs text-muted-foreground">Share this password with the faculty member so they can sign in.</p>
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t">

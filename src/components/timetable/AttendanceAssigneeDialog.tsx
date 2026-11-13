@@ -134,7 +134,7 @@ export function AttendanceAssigneeDialog({ onOpenChange, sectionId, semesterBody
         </DialogHeader>
 
         {step === 0 && (subjects.length === 0
-          ? <p className="text-sm text-muted-foreground">The picked cells have no subject in common. Go back and pick cells that hold the same subject.</p>
+          ? <p className="text-sm text-muted-foreground">The selected cells have no subject in common. Go back and select cells with the same subject.</p>
           : (
             <Select value={subjectId} onValueChange={pickSubject}>
               <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
@@ -167,7 +167,7 @@ export function AttendanceAssigneeDialog({ onOpenChange, sectionId, semesterBody
                 </Select>
               </div>
             ))}
-            {batches.length === 0 && <p className="text-xs text-muted-foreground">No lab batches are set up for this section, so only Whole section is offered.</p>}
+            {batches.length === 0 && <p className="text-xs text-muted-foreground">No lab batches are set up for this section, so only Whole Section is available.</p>}
           </div>
         )}
 
@@ -185,7 +185,7 @@ export function AttendanceAssigneeDialog({ onOpenChange, sectionId, semesterBody
                 </Select>
               </div>
             ))}
-            {midCount === 0 && <p className="text-xs text-muted-foreground">The Exam Cell hasn&apos;t set up mid exams yet, so only Whole semester is offered.</p>}
+            {midCount === 0 && <p className="text-xs text-muted-foreground">The Exam Cell has not set up Mid examinations yet, so only Whole Semester is available.</p>}
             <p className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
               {chosen.map((a) => `${a.facultyName} (${batchOf(a) || "whole section"}, ${midOf(a) ? `up to Mid ${midOf(a)}` : "whole semester"})`).join("; ")}.
               After the last mid, attendance for a mid-scoped period is closed.

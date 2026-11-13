@@ -34,7 +34,7 @@ export default function ManagementDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Dashboard" description="System-wide overview across all colleges" />
+      <PageHeader title="Dashboard" description="System-wide overview of all colleges." />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {statCards.map((stat) => (
@@ -58,7 +58,7 @@ export default function ManagementDashboardPage() {
           <CardContent className="p-5 flex items-center justify-between">
             <div>
               <p className="font-medium">Budget</p>
-              <p className="text-sm text-muted-foreground">Browse colleges to view budget information</p>
+              <p className="text-sm text-muted-foreground">Browse colleges to view budget information.</p>
             </div>
             <Link href="/management/budget" className="text-sm font-medium text-primary hover:underline">
               View →
@@ -71,7 +71,7 @@ export default function ManagementDashboardPage() {
           <CardContent className="p-5 flex items-center justify-between">
             <div>
               <p className="font-medium">Faculty Details</p>
-              <p className="text-sm text-muted-foreground">Browse colleges, principals, and departments</p>
+              <p className="text-sm text-muted-foreground">Browse colleges, Principals and departments.</p>
             </div>
             <Link href="/management/faculty" className="text-sm font-medium text-primary hover:underline">
               View →

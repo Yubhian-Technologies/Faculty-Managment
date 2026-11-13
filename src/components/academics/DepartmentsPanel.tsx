@@ -282,7 +282,7 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
       <div className="flex items-center justify-between">
         <PageHeader
           title={`Review: move "${subDepartment.name}" into core departments`}
-          description="Nothing is written to the database until you confirm below."
+          description="Nothing is saved until you confirm below."
         />
         <Button variant="outline" size="sm" onClick={onBack}><ArrowLeft className="h-4 w-4 mr-1" />Back</Button>
       </div>
@@ -297,7 +297,7 @@ function MigrationReviewPage({ subDepartment, branchIds, allBranches, collegeSec
             <CardContent className="p-4 space-y-3">
               <p className="text-sm font-medium">Sections ({currentSections.length})</p>
               {currentSections.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No sections filed under this department.</p>
+                <p className="text-sm text-muted-foreground">No sections under this department.</p>
               ) : (
                 <>
                   <div className="overflow-x-auto">
@@ -870,7 +870,7 @@ export function DepartmentsPanel() {
     <div className="space-y-6">
       <PageHeader
         title="Departments"
-        description="Manage college departments and assign Heads of Department"
+        description="Manage college departments and assign HODs."
         actions={
           <>
             <Button variant="outline" onClick={() => router.push("/principal/departments/import")}>
@@ -977,7 +977,7 @@ export function DepartmentsPanel() {
                         {dept.assignedYears.map(yearOrdinalLabel).join(", ")}
                       </p>
                     ) : (
-                      <p className="text-xs text-muted-foreground">No courses configured</p>
+                      <p className="text-xs text-muted-foreground">No courses configured.</p>
                     )}
 
                     {subDeptCount > 0 && (

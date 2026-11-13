@@ -131,9 +131,7 @@ export default function LocationStaffAttendanceOverviewPage() {
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Location Staff Attendance</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-              Live campus attendance tracking, punch records, and department shift monitoring.
-            </p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Live campus attendance, punch records and department shift monitoring.</p>
           </div>
         </div>
 
@@ -246,9 +244,7 @@ export default function LocationStaffAttendanceOverviewPage() {
             <ClipboardCheck className="h-7 w-7 opacity-70" />
           </div>
           <h3 className="font-bold text-foreground text-base">No attendance records found</h3>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            No check-in activity registered for this date and department selection.
-          </p>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">No check-ins recorded for this date and department.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -22,7 +22,7 @@ export function MasterSubjectsStep({ picker }: { picker: ReturnType<typeof useRe
   const courseName = picker.selectedCatalogItem?.name ?? course?.name ?? "";
 
   if (!picker.isLoaded) {
-    return <p className="text-sm text-muted-foreground">Pick a Regulation and Course above, then click Load.</p>;
+    return <p className="text-sm text-muted-foreground">Select a regulation and course above, then choose Load.</p>;
   }
   if (!course) {
     return <p className="text-sm text-muted-foreground">No active course found for this selection. Check the Course Catalog.</p>;

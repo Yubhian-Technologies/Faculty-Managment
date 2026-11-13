@@ -89,7 +89,7 @@ export function QuestionBankOverview({ base, examCell }: { base: string; examCel
                 className={cn("rounded-lg px-3.5 py-1.5 font-medium", show === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</button>
             ))}
           </div>
-          {shown.length === 0 && <p className="text-sm text-muted-foreground">Every deadline has passed - see All.</p>}
+          {shown.length === 0 && <p className="text-sm text-muted-foreground">Every deadline has passed. See All.</p>}
           <div className="grid gap-4 md:grid-cols-2">
             {shown.map((r) => {
               const s = summaries[r.id];

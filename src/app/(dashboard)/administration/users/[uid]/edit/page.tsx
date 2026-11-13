@@ -132,10 +132,7 @@ export default function EditLocationUserPage() {
             {MULTI_DEPT_ROLES.includes(target.role) && (
               <div className="space-y-2">
                 <Label>Departments</Label>
-                <p className="text-xs text-muted-foreground">
-                  Optional - which department(s) this staff member covers. Leave everything
-                  unchecked if they aren&apos;t tied to a specific department.
-                </p>
+                <p className="text-xs text-muted-foreground">Optional. The departments this staff member covers. Leave all unselected if they are not assigned to a specific department.</p>
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <Checkbox
                     checked={allLocationDepts}

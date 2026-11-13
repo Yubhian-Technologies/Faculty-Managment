@@ -75,7 +75,7 @@ export default function NewCollegePage() {
     <div className="max-w-xl">
       <PageHeader
         title="Add College"
-        description="Register a new institution and assign it to a location"
+        description="Register a new institution and assign it to a location."
       />
 
       <Card>
@@ -112,7 +112,7 @@ export default function NewCollegePage() {
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Vishnu Institute of Technology"
+                placeholder="Vishnu Institute of Technology"
               />
             </div>
 

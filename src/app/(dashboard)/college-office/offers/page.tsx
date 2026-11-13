@@ -240,7 +240,7 @@ ${institution}`;
     <div className="space-y-6">
       <PageHeader
         title="Offer Letters"
-        description="Send offer letters and request candidate login credentials once the appointment letter is released"
+        description="Send offer letters, and request login credentials for candidates once their appointment letter is issued."
         actions={
           <Button onClick={() => router.push("/college-office/offers/new")}>
             <Plus className="h-4 w-4 mr-1" />
@@ -271,9 +271,7 @@ ${institution}`;
           <CardContent className="p-12 text-center">
             <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium">No offer letters yet</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Send offer letters for candidates in the final decision stage.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">Send offer letters to candidates in the final decision stage.</p>
           </CardContent>
         </Card>
       ) : (

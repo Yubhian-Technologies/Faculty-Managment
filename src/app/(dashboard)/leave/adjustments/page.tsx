@@ -116,7 +116,7 @@ export default function LeaveAdjustmentsPage() {
     <div className="max-w-2xl space-y-6">
       <PageHeader
         title="Work Adjustments"
-        description="Requests from colleagues asking you to cover a class or be their point of contact while they're on leave."
+        description="Requests from colleagues to cover a class or act as their point of contact while they are on leave."
       />
       {isLoading ? (
         <div className="h-32 rounded-lg border bg-muted/30 animate-pulse" />
@@ -146,7 +146,7 @@ export default function LeaveAdjustmentsPage() {
 
                 {item.kind === "SUBSTITUTE" ? (
                   <>
-                    <p className="text-xs text-muted-foreground">Uncheck any period you can&rsquo;t cover - the rest are accepted as-is.</p>
+                    <p className="text-xs text-muted-foreground">Unselect any period you cannot cover; the others are accepted.</p>
                     <div className="space-y-1.5 rounded-lg border p-3">
                       {(item.periods ?? []).map((p) => {
                         const key = `${p.date}|${p.timetableSlotId}`;

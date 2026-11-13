@@ -121,7 +121,7 @@ export default function ReviseAdjustmentPage() {
     <div className="max-w-lg space-y-6">
       <PageHeader
         title="Pick Someone Else"
-        description="Replace a declined substitute or handover pick on your leave request."
+        description="Replace a substitute or handover colleague who declined your leave request."
         actions={
           <Button variant="outline" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4 mr-2" />Back

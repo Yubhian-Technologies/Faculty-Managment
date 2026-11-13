@@ -320,7 +320,7 @@ export default function LocationStaffBulkImportPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
           title="Bulk Import Staff"
-          description="Register multiple campus staff members simultaneously using CSV or Excel"
+          description="Register several campus staff members at once from a CSV or Excel file."
         />
         <div className="flex items-center gap-2 shrink-0">
           <Button asChild variant="outline" size="sm">
@@ -380,9 +380,7 @@ export default function LocationStaffBulkImportPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-5 space-y-3 flex-1 flex flex-col justify-center">
-            <p className="text-xs text-muted-foreground">
-              Download pre-filled templates with your campus departments and shifts included as samples:
-            </p>
+            <p className="text-xs text-muted-foreground">Download templates with your campus departments and shifts filled in as examples:</p>
             <div className="space-y-2">
               <Button
                 type="button"
@@ -434,9 +432,7 @@ export default function LocationStaffBulkImportPage() {
             <h3 className="font-bold text-base text-foreground">
               {fileName ? fileName : "Upload Staff CSV or Excel Workbook"}
             </h3>
-            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              Select or drag and drop your completed spreadsheet to preview and validate records.
-            </p>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">Select or drag and drop the completed spreadsheet to preview and validate the records.</p>
           </div>
 
           <div className="flex items-center justify-center gap-2">

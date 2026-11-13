@@ -48,7 +48,7 @@ export default function CollegeOfficeDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={`Hello, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "Office"}`}
-        description="Principal-approved candidates sent to Accounts"
+        description="Candidates approved by the Principal and sent to Accounts."
       />
 
       <MyDashboardOverview />
@@ -92,7 +92,7 @@ export default function CollegeOfficeDashboard() {
                 <Users className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Pay &amp; Promotions</p>
+                <p className="text-xs text-muted-foreground">Pay and Promotions</p>
                 <p className="text-sm font-semibold">Promotion &amp; salary</p>
               </div>
             </CardContent>
@@ -113,9 +113,7 @@ export default function CollegeOfficeDashboard() {
           {isLoading ? (
             <div className="space-y-3">{[1, 2].map((i) => <CardSkeleton key={i} />)}</div>
           ) : !candidates.length ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              No candidates sent to Accounts yet
-            </p>
+            <p className="text-sm text-muted-foreground text-center py-8">No candidates have been sent to Accounts yet.</p>
           ) : (
             <div className="divide-y">
               {candidates.slice(0, 5).map((c) => (

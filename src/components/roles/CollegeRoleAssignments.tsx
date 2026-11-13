@@ -45,7 +45,7 @@ export function CollegeRoleAssignments({ collegesUrl }: { collegesUrl: string })
       {collegeId ? (
         <RoleAssignmentsPage key={collegeId} collegeId={collegeId} />
       ) : (
-        loaded && <p className="text-sm text-muted-foreground">Pick a college to manage its role assignments.</p>
+        loaded && <p className="text-sm text-muted-foreground">Select a college to manage its role assignments.</p>
       )}
     </div>
   );

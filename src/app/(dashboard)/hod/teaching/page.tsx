@@ -262,7 +262,7 @@ export default function HODTeachingPage() {
       <div className="space-y-6">
         <PageHeader
           title="My Timetable"
-          description="Your subject allocations and weekly timetable, period by period"
+          description="Your subject allocations and weekly timetable, period by period."
         />
         <div className="h-96 rounded-lg border bg-muted/30 animate-pulse" />
       </div>
@@ -273,7 +273,7 @@ export default function HODTeachingPage() {
     <div className="space-y-6">
       <PageHeader
         title="My Timetable"
-        description="Your subject allocations and weekly timetable, period by period"
+        description="Your subject allocations and weekly timetable, period by period."
       />
 
       {filteredSlots.length === 0 ? (
