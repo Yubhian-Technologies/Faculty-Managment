@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments, invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -40,7 +41,7 @@ export default function EditCoursePage() {
         .then((r) => r.json() as Promise<{ courses: Course[] }>),
       fetch("/api/college/course-catalog")
         .then((r) => r.json() as Promise<{ items: CourseCatalogItem[] }>),
-      fetch("/api/college/departments")
+      fetchDepartments()
         .then((r) => r.json() as Promise<{ departments: Department[] }>),
     ])
       .then(([{ courses }, { items }, { departments }]) => {
@@ -118,6 +119,7 @@ export default function EditCoursePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deptId: department.id, courseScope: { catalogId, assignedYears: years } }),
         });
+        invalidateDepartments();
         if (!scopeRes.ok) {
           const json = await scopeRes.json() as { error?: string };
           throw new Error(json.error ?? "Course saved, but its years could not be updated");

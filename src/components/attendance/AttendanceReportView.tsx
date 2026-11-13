@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, ShieldCheck, Search, Download, Upload, Pencil, CalendarDays, Clock3 } from "lucide-react";
@@ -334,7 +335,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
 
   useEffect(() => {
     if (!groupByDepartmentAndCourse) return;
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive).sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => toast({ variant: "destructive", title: "Unable to load departments" }));

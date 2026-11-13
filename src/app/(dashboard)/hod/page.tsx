@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -105,7 +106,7 @@ export default function HODDashboard() {
       .then((d) => setTeamStats(d))
       .catch(() => {});
 
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => {
         const departments = d.departments ?? [];

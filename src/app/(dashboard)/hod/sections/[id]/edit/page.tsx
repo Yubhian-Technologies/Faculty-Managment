@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { resolveListBack } from "@/lib/listReturn";
@@ -104,7 +105,7 @@ export default function EditSectionPage() {
   }, [facultyDept]);
 
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments(d.departments ?? []))
       .catch(() => { /* non-critical */ });

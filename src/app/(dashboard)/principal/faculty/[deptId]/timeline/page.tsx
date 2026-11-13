@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
@@ -21,7 +22,7 @@ function PrincipalDepartmentFacultyTimelineContent() {
   const { data: departments = [] } = useQuery({
     queryKey: ["principal-faculty-departments"],
     queryFn: () =>
-      fetch("/api/college/departments")
+      fetchDepartments()
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
         .then((d) => d.departments ?? []),
   });

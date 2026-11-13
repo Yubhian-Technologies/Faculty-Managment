@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -137,7 +138,7 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
   useEffect(() => {
     // An HOD's Edit Attendance has no Department / Course filters - it is their own department only.
     if (hodScoped) return;
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => {
         const active = (d.departments ?? []).filter((dep) => dep.isActive);

@@ -1,3 +1,4 @@
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import type { AcademicYear, Course, Department } from "@/types";
 import { selectableYears } from "@/lib/college/courseYears";
 
@@ -20,7 +21,7 @@ export interface RosterFormMetadata {
  */
 export async function fetchRosterFormMetadata(): Promise<RosterFormMetadata> {
   const [deptsRes, yearsRes, coursesRes] = await Promise.all([
-    fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+    fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>),
     fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears?: AcademicYear[] }>).catch(() => ({ academicYears: [] })),
     fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>).catch(() => ({ courses: [] })),
   ]);

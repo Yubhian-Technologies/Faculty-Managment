@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Department } from "@/types";
@@ -22,7 +23,7 @@ export function CollegeDepartmentSelect({ value, onChange, placeholder = "Select
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments?: Department[] }>)
       .then((d) =>
         setNames(

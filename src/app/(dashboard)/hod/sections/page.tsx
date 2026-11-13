@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { Suspense, useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -115,7 +116,7 @@ function HODSectionsContent() {
       const [sectionsRes, coursesRes, deptsRes] = await Promise.all([
         fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: SectionRow[] }>),
         fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
-        fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+        fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>),
       ]);
       setSections(sectionsRes.sections ?? []);
       setCourses((coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name)));

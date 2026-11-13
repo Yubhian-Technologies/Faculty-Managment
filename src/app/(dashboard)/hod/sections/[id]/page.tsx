@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { resolveListBack, withListBack } from "@/lib/listReturn";
@@ -79,7 +80,7 @@ export default function SectionRosterPage() {
                 .then((cd) => cd.courses?.find((c) => c.id === sec.courseId)?.catalogId)
                 .catch(() => undefined)
             : Promise.resolve(undefined),
-          fetch("/api/college/departments")
+          fetchDepartments()
             .then((r) => r.json() as Promise<{ departments?: Department[] }>)
             .then((dd) => dd.departments?.find((d) => d.name === sec.department)?.id)
             .catch(() => undefined),

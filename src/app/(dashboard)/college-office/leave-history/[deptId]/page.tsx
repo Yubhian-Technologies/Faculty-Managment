@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,7 +22,7 @@ export default function CollegeOfficeLeaveHistoryDepartmentPage({ params }: { pa
   const { data: departments } = useQuery({
     queryKey: ["college-office-leave-history-departments-all"],
     queryFn: () =>
-      fetch("/api/college/departments")
+      fetchDepartments()
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
         .then((d) => d.departments ?? []),
     enabled: !staffRole,

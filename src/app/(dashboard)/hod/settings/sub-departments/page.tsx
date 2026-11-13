@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments, invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -58,7 +59,7 @@ export default function SubDepartmentsSettingsPage() {
     setIsLoading(true);
     try {
       const [deptsRes, sectionsRes, studentsRes] = await Promise.all([
-        fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+        fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: (Section & { id: string })[] }>),
         fetch("/api/college/students").then((r) => r.json() as Promise<{ students: StudentListItem[] }>),
       ]);
@@ -119,6 +120,7 @@ export default function SubDepartmentsSettingsPage() {
     setIsDeleting(true);
     try {
       const res = await fetch(`/api/college/departments?deptId=${deleteTarget.id}`, { method: "DELETE" });
+      invalidateDepartments();
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Unable to delete");
 

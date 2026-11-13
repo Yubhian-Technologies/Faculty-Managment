@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { FileDown, Loader2, Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,7 +62,7 @@ export function IndividualTimetablePanel({ scopeLabel = "in your department" }: 
       const [assignRes, coursesRes, deptsRes, allTimingsRes] = await Promise.all([
         fetch(`/api/college/teaching-assignments?facultyId=${encodeURIComponent(id)}&week=${isoDateKey(weekStart)}`),
         fetch("/api/college/courses"),
-        fetch("/api/college/departments"),
+        fetchDepartments(),
         fetch("/api/college/course-year-timings"),
       ]);
       if (!assignRes.ok) throw new Error("Unable to load this faculty's timetable");

@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -65,7 +66,7 @@ export default function HODTeachingPage() {
         const [assignRes, coursesRes, deptsRes] = await Promise.all([
           fetch(`/api/college/teaching-assignments?${qs}`),
           fetch("/api/college/courses"),
-          fetch("/api/college/departments"),
+          fetchDepartments(),
         ]);
         if (!assignRes.ok) throw new Error("Unable to load teaching assignments");
         const json = await assignRes.json() as {

@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, ChevronsUpDown, GraduationCap, Users, Upload, FileSpreadsheet, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -144,7 +145,7 @@ export function StudentPromotionsPanel({ showHeader = true }: { showHeader?: boo
       fetch("/api/college/sections").then((r) => r.json() as Promise<{ sections: Section[] }>).then((d) => d.sections ?? []),
       fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears: AcademicYear[] }>).then((d) => (d.academicYears ?? []).filter((y) => y.isActive)),
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>).then((d) => d.courses ?? []),
-      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>).then((d) => d.departments ?? []).catch(() => []),
+      fetchDepartments().then((r) => r.json() as Promise<{ departments?: Department[] }>).then((d) => d.departments ?? []).catch(() => []),
     ])
       .then(([sections, years, courses, departments]) => {
         setSections(sections);

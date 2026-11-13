@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -406,7 +407,7 @@ export function CourseCatalogSettingsCard({ readOnly = false, regulationsOnly = 
     const departmentsLoad = showDepartments
       ? Promise.all([
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: { departmentId: string; catalogId?: string }[] }>),
-          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: { id: string; name: string; code: string }[] }>),
+          fetchDepartments().then((r) => r.json() as Promise<{ departments: { id: string; name: string; code: string }[] }>),
         ])
           .then(([coursesRes, deptsRes]) => {
             const deptById = new Map((deptsRes.departments ?? []).map((d) => [d.id, d]));

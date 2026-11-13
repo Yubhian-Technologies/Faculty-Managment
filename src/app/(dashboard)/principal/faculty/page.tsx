@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useFacultyListFilters } from "@/components/faculty/FacultyListFilters";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -91,7 +92,7 @@ function PrincipalFacultyContent() {
   const { data: departments = [], isLoading: isDeptsLoading } = useQuery({
     queryKey: ["principal-faculty-departments"],
     queryFn: () =>
-      fetch("/api/college/departments")
+      fetchDepartments()
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
         .then((d) => d.departments ?? []),
   });

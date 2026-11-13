@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,7 +72,7 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
   const [syllabusBusy, setSyllabusBusy] = useState("");
 
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments?: { id: string; name?: string }[] }>)
       .then((d) => setDepartments((d.departments ?? []).filter((x) => x.name?.trim()).map((x) => ({ id: x.id, name: x.name!.trim() })).sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => setDepartments([]));

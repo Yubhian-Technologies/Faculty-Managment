@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ProfilePhotoUpload } from "@/components/shared/ProfilePhotoUpload";
@@ -20,7 +21,7 @@ function HodProfilePageContent() {
   const [departments, setDepartments] = useState<Department[]>([]);
 
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments(d.departments ?? []))
       .catch(() => {});

@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ClipboardList, Search, UserCog, Users } from "lucide-react";
@@ -99,7 +100,7 @@ export function InchargeTimetableWorkspace({ basePath }: { basePath: string }) {
       try {
         const [res, deptRes] = await Promise.all([
           fetch("/api/college/timetable-incharges?mine=true"),
-          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>).catch(() => ({ departments: [] as Department[] })),
+          fetchDepartments().then((r) => r.json() as Promise<{ departments?: Department[] }>).catch(() => ({ departments: [] as Department[] })),
         ]);
         const data = (await res.json()) as { incharges?: TimetableIncharge[] };
         const mine = data.incharges ?? [];

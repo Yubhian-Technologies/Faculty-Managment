@@ -1,4 +1,5 @@
 "use client";
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ export function CircularForm({ onCreated }: { onCreated?: (id: string) => void }
 
   useEffect(() => {
     fetch("/api/college/circular-settings").then((r) => r.json()).then((j) => { if (j.settings?.messageFromOptions?.length) setMessageFromOptions(j.settings.messageFromOptions); }).catch(() => {});
-    fetch("/api/college/departments").then((r) => r.json()).then((j) => setDepartments(j.departments ?? j.data ?? [])).catch(() => {});
+    fetchDepartments().then((r) => r.json()).then((j) => setDepartments(j.departments ?? j.data ?? [])).catch(() => {});
     fetch("/api/college/sections").then((r) => r.json()).then((j) => {
       if (Array.isArray(j.sections)) {
         setStudentYears(Array.from(new Set((j.sections as { year?: number }[]).map((s) => Number(s.year)).filter((y) => Number.isInteger(y) && y >= 1))).sort((a, b) => a - b));

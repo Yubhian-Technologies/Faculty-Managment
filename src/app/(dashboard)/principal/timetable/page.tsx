@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { Search, Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -100,7 +101,7 @@ export default function PrincipalTimetablePage() {
     void Promise.all([
       fetch("/api/college/timetable-slots/export-all?optionsOnly=1").then((r) => r.json() as Promise<{ sections?: OptionSection[]; error?: string }>),
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
-      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
+      fetchDepartments().then((r) => r.json() as Promise<{ departments?: Department[] }>),
     ])
       .then(([sec, cou, dep]) => {
         if (cancelled) return;

@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments, invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { Suspense, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
@@ -81,7 +82,7 @@ function PrincipalDepartmentFacultyContent() {
   const { data: departments = [] } = useQuery({
     queryKey: ["principal-faculty-departments"],
     queryFn: () =>
-      fetch("/api/college/departments")
+      fetchDepartments()
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
         .then((d) => d.departments ?? []),
   });
@@ -182,6 +183,7 @@ function PrincipalDepartmentFacultyContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deptId: department.id, hodUid: "", hodName: "" }),
       });
+      invalidateDepartments();
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Unable to remove HOD");
       toast({

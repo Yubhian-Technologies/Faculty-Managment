@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments, invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -47,7 +48,7 @@ export default function NewDepartmentPage() {
       .catch(() => toast({ variant: "destructive", title: "Unable to load courses" }))
       .finally(() => setCatalogLoaded(true));
 
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments((d.departments ?? []).sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => {});
@@ -101,6 +102,7 @@ export default function NewDepartmentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      invalidateDepartments();
       if (!res.ok) {
         const json = await res.json() as { error?: string };
         throw new Error(json.error ?? "Failed");

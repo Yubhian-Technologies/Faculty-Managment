@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -168,7 +169,7 @@ export default function NewFacultyPage() {
   type DeptRow = FacultyDepartmentLike & { isActive?: boolean };
   const [allDepartments, setAllDepartments] = useState<DeptRow[]>([]);
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments?: DeptRow[] }>)
       .then((d) => setAllDepartments((d.departments ?? []).filter((dep) => dep.isActive !== false)))
       .catch(() => {});

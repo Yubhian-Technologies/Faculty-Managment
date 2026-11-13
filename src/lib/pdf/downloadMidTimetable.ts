@@ -1,3 +1,4 @@
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
@@ -75,7 +76,7 @@ export async function downloadMidTimetablePdf(sheet: MidTimetableSheetPrint, fil
   // Branches print by their short code (CSE, ECE ...) so the sheet fits one page.
   const codes = new Map<string, string>();
   try {
-    const res = await fetch("/api/college/departments");
+    const res = await fetchDepartments();
     if (res.ok) for (const d of ((await res.json()) as { departments?: { name?: string; code?: string }[] }).departments ?? []) if (d.name && d.code?.trim()) codes.set(d.name.trim(), d.code.trim());
   } catch { /* names then */ }
   sheet = { ...sheet, academicYear: sheet.academicYear ?? info.academicYear, rows: sheet.rows.map((r) => ({ ...r, branchCode: r.branchCode ?? codes.get(r.branch.trim()) })) };

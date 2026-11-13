@@ -1,5 +1,6 @@
 "use client";
 
+import { invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronsUpDown, History, Plus, RotateCcw, Trash2, UserCog, UserMinus } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -91,6 +92,7 @@ export function RoleAssignmentsPage({ collegeId }: { collegeId?: string }) {
     const res = await fetch(`/api/college/role-seats/${id}${qs}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     });
+    invalidateDepartments();
     const data = await res.json() as { error?: string; code?: string };
     return res.ok ? { ok: true } : { ok: false, error: data.error, code: data.code };
   }
@@ -598,6 +600,7 @@ function AddSeatDialog({
           label: label.trim() || undefined,
         }),
       });
+      invalidateDepartments();
       const data = await res.json() as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
       toast({ variant: "success", title: "Role added" });

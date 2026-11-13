@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, ChevronRight, ClipboardList, Layers, Users, UserCog, X } from "lucide-react";
@@ -165,7 +166,7 @@ export default function HODTimetableSectionsPage() {
       try {
         const [coursesData, deptsData] = await Promise.all([
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
-          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+          fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>),
         ]);
         if (cancelled) return;
         const allCourses = coursesData.courses ?? [];

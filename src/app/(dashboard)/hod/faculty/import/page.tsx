@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -91,7 +92,7 @@ export default function FacultyImportPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/college/departments");
+        const res = await fetchDepartments();
         const data = await res.json() as { departments?: typeof allDepartments };
         setAllDepartments((data.departments ?? []).filter((d) => d.isActive !== false));
       } catch {

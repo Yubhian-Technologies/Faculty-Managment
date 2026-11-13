@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, GraduationCap, History, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -77,7 +78,7 @@ export default function IncidentReportPage() {
     void (async () => {
       try {
         const [deptsRes, yearsRes, coursesRes] = await Promise.all([
-          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
+          fetchDepartments().then((r) => r.json() as Promise<{ departments?: Department[] }>),
           fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears?: AcademicYear[] }>).catch(() => ({ academicYears: [] })),
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>).catch(() => ({ courses: [] })),
         ]);

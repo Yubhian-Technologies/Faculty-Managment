@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { MAX_FACULTY_PER_SUBJECT } from "@/lib/teaching/facultyCap";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -80,7 +81,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
     setIsLoading(true);
     Promise.all([
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
-      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+      fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>),
       fetch(`/api/college/sections?courseId=${encodeURIComponent(courseId)}&year=${encodeURIComponent(year)}`)
         .then((r) => r.json() as Promise<{ sections: Section[] }>),
       fetch(`/api/college/subjects?courseId=${encodeURIComponent(courseId)}`)

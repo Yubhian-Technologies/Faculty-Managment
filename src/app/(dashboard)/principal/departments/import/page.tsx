@@ -1,5 +1,6 @@
 "use client";
 
+import { invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -110,6 +111,7 @@ export default function DepartmentsImportPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ records: rows, courses: courseSelections }),
       });
+      invalidateDepartments();
       const json = await res.json() as ImportResult & { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: json.error ?? "Import failed" }); return; }
       setResult(json);

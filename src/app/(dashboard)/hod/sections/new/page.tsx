@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -118,7 +119,7 @@ export default function NewSectionPage() {
 
     // Departments carry `assignedYears` (the "Years Taught" the Principal set) -
     // needed to scope the Year dropdown to what this department actually teaches.
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => { setDepartments(d.departments ?? []); setDepartmentsLoaded(true); })
       .catch(() => { setDepartmentsLoaded(true); /* no Years Taught known - the Year list stays empty rather than guessing */ });

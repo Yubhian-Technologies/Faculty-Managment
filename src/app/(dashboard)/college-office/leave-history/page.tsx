@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -20,7 +21,7 @@ export default function CollegeOfficeLeaveHistoryDepartmentsPage() {
   const { data: departments = [], isLoading } = useQuery({
     queryKey: ["college-office-leave-history-departments"],
     queryFn: () =>
-      fetch("/api/college/departments")
+      fetchDepartments()
         .then((r) => r.json() as Promise<{ departments: Department[] }>)
         .then((d) => d.departments ?? []),
   });
