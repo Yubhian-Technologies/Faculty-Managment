@@ -1,4 +1,5 @@
 "use client";
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -121,7 +122,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
         try {
           const [c, d] = await Promise.all([
             fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
-            fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
+            fetchDepartments().then((r) => r.json() as Promise<{ departments?: Department[] }>),
           ]);
           setCourseDocs(c.courses ?? []);
           setDepartmentDocs(d.departments ?? []);

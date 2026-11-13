@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/authStore";
@@ -84,7 +85,7 @@ export function DepartmentScopeSelect({
     let cancelled = false;
     void (async () => {
       try {
-        const d = await fetch("/api/college/departments")
+        const d = await fetchDepartments()
           .then((r) => r.json() as Promise<{ departments: Department[] }>);
         if (!cancelled) setDepartments(d.departments ?? []);
       } catch {

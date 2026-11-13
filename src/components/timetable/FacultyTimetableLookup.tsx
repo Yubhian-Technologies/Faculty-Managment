@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { CalendarSearch, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -65,7 +66,7 @@ export function FacultyTimetableLookup({ ownOnly = false, embedded = false }: { 
     void (async () => {
       setIsLoadingOptions(true);
       try {
-        const deptRes = await fetch("/api/college/departments");
+        const deptRes = await fetchDepartments();
         const deptJson = await deptRes.json() as { departments?: Department[] };
         setDepartments(deptJson.departments ?? []);
       } catch {

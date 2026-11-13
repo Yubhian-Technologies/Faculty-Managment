@@ -1,3 +1,4 @@
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState } from "react";
 import type { Department } from "@/types";
 
@@ -10,7 +11,7 @@ export function useActiveDepartments() {
   const [departments, setDepartments] = useState<Department[]>([]);
 
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments((d.departments ?? []).filter((dep) => dep.isActive)))
       .catch(() => { /* department assignment is optional */ });

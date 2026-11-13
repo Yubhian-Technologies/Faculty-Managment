@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments, invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -87,6 +88,7 @@ async function callMigrateRoute(subDepartmentId: string, branchDepartmentId: str
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ subDepartmentId, branchDepartmentId, dryRun }),
   });
+  invalidateDepartments();
   const json = await res.json() as MigrationCounts & { error?: string };
   if (!res.ok) throw new Error(json.error ?? "Failed");
   return json;
@@ -805,7 +807,7 @@ export function DepartmentsPanel() {
       // badge (a department can offer several courses with different
       // structures - see resolveDepartmentCourseScope).
       const [deptRes, coursesRes] = await Promise.all([
-        fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+        fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
       ]);
       setDepartments(deptRes.departments ?? []);
@@ -828,6 +830,7 @@ export function DepartmentsPanel() {
       const res = await fetch(`/api/college/departments?deptId=${encodeURIComponent(dept.id)}`, {
         method: "DELETE",
       });
+      invalidateDepartments();
       if (!res.ok) {
         const json = await res.json() as { error?: string };
         throw new Error(json.error ?? "Failed");

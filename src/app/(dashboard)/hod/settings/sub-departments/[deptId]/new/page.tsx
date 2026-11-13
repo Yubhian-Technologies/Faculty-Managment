@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments, invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -48,7 +49,7 @@ export default function NewSubDepartmentPage() {
     setIsLoading(true);
     try {
       const [deptsRes, hodsRes] = await Promise.all([
-        fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+        fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>),
         // A Sub-HOD is a seat held by one of the department's own faculty - not a separate login.
         fetch("/api/college/users?role=PANEL_MEMBER").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
       ]);
@@ -95,6 +96,7 @@ export default function NewSubDepartmentPage() {
           parentDepartmentId: ownDept.id,
         }),
       });
+      invalidateDepartments();
       const json = (await res.json()) as { error?: string; deptId?: string };
       if (!res.ok) throw new Error(json.error ?? "Unable to add sub-department");
 
@@ -106,6 +108,7 @@ export default function NewSubDepartmentPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deptId: json.deptId, hodUid }),
         });
+        invalidateDepartments();
         if (!seatRes.ok) {
           const seatJson = (await seatRes.json()) as { error?: string };
           toast({

@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, BookOpen, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -135,7 +136,7 @@ export function TeachingAssignmentsEditor({ value, onChange, department, previou
     // e.g. two "Section A"s both owned by Basic Science but cross-listed to
     // different branches (CSE vs ECE), or one owned by a parent department and
     // another by its sub-department - see sectionDisplayLabel.
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => setDepartments(d.departments ?? []))
       .catch(() => { /* non-critical */ });

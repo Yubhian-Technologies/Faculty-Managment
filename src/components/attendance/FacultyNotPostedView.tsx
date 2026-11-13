@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -70,7 +71,7 @@ export function FacultyNotPostedView({
   const hodOwnDepartments = hodScoped ? myDepartments.filter(Boolean) : null;
 
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => {
         const active = (d.departments ?? []).filter((dep) => dep.isActive);

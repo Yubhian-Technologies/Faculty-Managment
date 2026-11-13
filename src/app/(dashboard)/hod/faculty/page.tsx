@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments, invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
@@ -210,7 +211,7 @@ function HODFacultyContent() {
   // own child-lookup (parentDepartmentId === my department's id) and its
   // `hodName` display (hod/settings/sub-departments/page.tsx).
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments?: Department[] }>)
       .then((d) => setDepartments(d.departments ?? []))
       .catch(() => {});
@@ -234,6 +235,7 @@ function HODFacultyContent() {
         // the same call the Sub-Departments settings page already makes.
         body: JSON.stringify({ deptId: removingSubHod.id, hodUid: "", hodName: "" }),
       });
+      invalidateDepartments();
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Unable to remove Sub-HOD");
       toast({

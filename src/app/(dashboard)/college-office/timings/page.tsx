@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Clock, CheckCircle2 } from "lucide-react";
@@ -29,7 +30,7 @@ export default function CollegeOfficeTimingsPage() {
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
 
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments: Department[] }>)
       .then((d) => {
         const topLevel = (d.departments ?? []).filter((dept) => !dept.parentDepartmentId);

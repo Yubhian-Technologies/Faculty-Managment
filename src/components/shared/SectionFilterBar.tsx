@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -53,7 +54,7 @@ export function SectionFilterBar({
         // to the sections' own years without them.
         try {
           const [d, c] = await Promise.all([
-            fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
+            fetchDepartments().then((r) => r.json() as Promise<{ departments?: Department[] }>),
             fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
           ]);
           setDepartmentDocs(d.departments ?? []);

@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments, invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -49,7 +50,7 @@ export default function EditSubDepartmentPage() {
     setIsLoading(true);
     try {
       const [deptsRes, hodsRes] = await Promise.all([
-        fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+        fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>),
         // A Sub-HOD is a seat held by one of the department's own faculty - not a separate login.
         fetch("/api/college/users?role=PANEL_MEMBER").then((r) => r.json() as Promise<{ users: FMSUser[] }>),
       ]);
@@ -117,6 +118,7 @@ export default function EditSubDepartmentPage() {
           hodUid: hodUid || "",
         }),
       });
+      invalidateDepartments();
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Unable to update sub-department");
 

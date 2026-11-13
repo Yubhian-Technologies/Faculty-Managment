@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { UsersRound, Plus, Mail, Phone, Eye, Trash2 } from "lucide-react";
@@ -42,7 +43,7 @@ export function StaffAccountsSection() {
     try {
       const [staffRes, deptsRes] = await Promise.all([
         fetch("/api/college/users"),
-        fetch("/api/college/departments"),
+        fetchDepartments(),
       ]);
       const json = await staffRes.json() as { users: StaffUser[] };
       const deptsJson = await deptsRes.json() as { departments: Department[] };

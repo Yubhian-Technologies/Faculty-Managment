@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plus, Save, Search, Trash2 } from "lucide-react";
@@ -69,7 +70,7 @@ function ExamCellConfigureForm({ embedded }: { embedded: boolean }) {
       try {
         const [courseRes, deptRes] = await Promise.all([
           fetch("/api/college/courses"),
-          fetch("/api/college/departments"),
+          fetchDepartments(),
         ]);
         const courseJson = (await courseRes.json()) as { courses?: Course[] };
         const deptJson = (await deptRes.json()) as { departments?: Department[] };

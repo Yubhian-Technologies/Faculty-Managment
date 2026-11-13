@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/hooks/useToast";
 import type { Course, CourseCatalogItem, Department } from "@/types";
@@ -42,7 +43,7 @@ export function useRegulationCourseDepartmentPicker() {
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments?: Department[] }>)
       .then((d) => {
         const all = d.departments ?? [];

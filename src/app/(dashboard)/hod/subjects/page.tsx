@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { BookOpen, FileText, Search } from "lucide-react";
@@ -96,7 +97,7 @@ export default function HODSubjectsPage() {
     try {
       const [coursesRes, deptsRes] = await Promise.all([
         fetch("/api/college/courses"),
-        fetch("/api/college/departments"),
+        fetchDepartments(),
       ]);
       const coursesData = await coursesRes.json() as { courses: Course[] };
       const deptsData = await deptsRes.json() as { departments: Department[] };

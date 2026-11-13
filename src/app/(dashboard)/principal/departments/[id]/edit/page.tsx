@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments, invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -64,7 +65,7 @@ export default function EditDepartmentPage() {
     async function load() {
       setLoading(true);
       try {
-        const deptRes = await fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>);
+        const deptRes = await fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>);
         const dept = (deptRes.departments ?? []).find((d) => d.id === id) ?? null;
         if (!dept) {
           toast({ variant: "destructive", title: "Department not found" });
@@ -117,6 +118,7 @@ export default function EditDepartmentPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(extra ? { ...payload, ...extra } : payload),
     });
+    invalidateDepartments();
     if (!res.ok) {
       const json = await res.json() as { error?: string; code?: string };
       if (json.code === "HAS_EXISTING_SECTIONS") {

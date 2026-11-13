@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -67,7 +68,7 @@ export function AssignByCodeStep({ catalogId, regulation, courseName, initialDep
       try {
         const [c, d] = await Promise.all([
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: CourseOption[] }>),
-          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
+          fetchDepartments().then((r) => r.json() as Promise<{ departments?: Department[] }>),
         ]);
         setCourses((c.courses ?? []).filter((x) => x.isActive !== false));
         setDepartments(d.departments ?? []);

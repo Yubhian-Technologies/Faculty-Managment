@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments, invalidateDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Pencil, Trash2, Clock, GraduationCap, CheckCircle2, CalendarClock, Layers, GitBranch, RotateCcw, ChevronRight, AlertCircle } from "lucide-react";
@@ -126,7 +127,7 @@ export default function DepartmentDetailPage() {
     setIsLoading(true);
     try {
       const [deptRes, coursesRes] = await Promise.all([
-        fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+        fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>),
         fetch(`/api/college/courses?departmentId=${encodeURIComponent(id)}`).then((r) => r.json() as Promise<{ courses: Course[] }>),
       ]);
       const allDepts = deptRes.departments ?? [];
@@ -332,6 +333,7 @@ export default function DepartmentDetailPage() {
           courseExclusion: { catalogId: course.catalogId, excluded },
         }),
       });
+      invalidateDepartments();
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Unable to update");
       toast({
@@ -429,6 +431,7 @@ export default function DepartmentDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ neighbourDepartmentId: managerDeptId || null }),
       });
+      invalidateDepartments();
       const json = await res.json() as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Unable to save");
 

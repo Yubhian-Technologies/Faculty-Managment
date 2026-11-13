@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sectionMatchesPick } from "@/lib/departments/sectionDepartmentPick";
 import { AlertTriangle, Eye, Pencil, RefreshCw, Search, Users, CheckCircle2, Clock, BarChart3 } from "lucide-react";
@@ -78,7 +79,7 @@ export default function PrincipalInternalMarksPage() {
     try {
       const [courseRes, deptRes, batchRes] = await Promise.all([
         fetch("/api/college/courses"),
-        fetch("/api/college/departments"),
+        fetchDepartments(),
         fetch("/api/college/internal-exam-marks?stats=1"),
       ]);
       // Every one of these must actually succeed — a fetch resolving with a

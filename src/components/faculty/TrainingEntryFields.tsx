@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState } from "react";
 import { courseYearNumbers } from "@/lib/college/courseYears";
 import { Plus, Trash2 } from "lucide-react";
@@ -65,7 +66,7 @@ interface SectionOption { id: string; name: string; year: number; }
 function useDepartmentOptions(): DepartmentOption[] {
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   useEffect(() => {
-    fetch("/api/college/departments")
+    fetchDepartments()
       .then((r) => r.json() as Promise<{ departments?: { id: string; name: string }[] }>)
       .then((d) => setDepartments((d.departments ?? []).map((x) => ({ id: x.id, name: x.name }))))
       .catch(() => {});

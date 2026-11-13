@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { BookMarked, GraduationCap, UserRound, Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -109,7 +110,7 @@ export function SectionsPanel() {
       try {
         const [courseRes, deptRes] = await Promise.all([
           fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>),
-          fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>),
+          fetchDepartments().then((r) => r.json() as Promise<{ departments?: Department[] }>),
         ]);
         setCourses(courseRes.courses ?? []);
         setDepartments(deptRes.departments ?? []);

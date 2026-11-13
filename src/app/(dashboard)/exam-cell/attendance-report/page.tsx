@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileDown, FileSpreadsheet, Search } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -82,7 +83,7 @@ export default function ExamCellAttendanceReportPage() {
       try {
         const [courseRes, deptRes] = await Promise.all([
           fetch("/api/college/courses"),
-          fetch("/api/college/departments"),
+          fetchDepartments(),
         ]);
         const courseJson = (await courseRes.json()) as { courses?: Course[] };
         const deptJson = (await deptRes.json()) as { departments?: Department[] };

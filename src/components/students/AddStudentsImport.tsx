@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -219,7 +220,7 @@ export function AddStudentsImport() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>).catch(() => ({ departments: [] })),
+      fetchDepartments().then((r) => r.json() as Promise<{ departments?: Department[] }>).catch(() => ({ departments: [] })),
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses?: Course[] }>).catch(() => ({ courses: [] })),
       fetch("/api/college/academic-years").then((r) => r.json() as Promise<{ academicYears?: AcademicYear[] }>).catch(() => ({ academicYears: [] })),
     ]).then(([deptsRes, coursesRes, yearsRes]) => {

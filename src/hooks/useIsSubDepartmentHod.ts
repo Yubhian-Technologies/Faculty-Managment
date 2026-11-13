@@ -1,3 +1,4 @@
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
@@ -38,7 +39,7 @@ export function useIsSubDepartmentHod() {
       }
 
       try {
-        const d = await fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments?: Department[] }>);
+        const d = await fetchDepartments().then((r) => r.json() as Promise<{ departments?: Department[] }>);
         const departments = d.departments ?? [];
         // Visible the moment ANY owned department (not itself a sub-department)
         // has sub-departments enabled - an HOD running several departments at

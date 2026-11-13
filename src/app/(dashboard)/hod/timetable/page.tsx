@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, Users } from "lucide-react";
@@ -72,7 +73,7 @@ function SectionTimetable() {
   useEffect(() => {
     Promise.all([
       fetch("/api/college/courses").then((r) => r.json() as Promise<{ courses: Course[] }>),
-      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>),
+      fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>),
     ])
       .then(([coursesRes, deptsRes]) => {
         const loadedCourses = (coursesRes.courses ?? []).sort((a, b) => a.name.localeCompare(b.name));

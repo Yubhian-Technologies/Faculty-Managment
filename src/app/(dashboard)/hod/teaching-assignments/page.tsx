@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Search, Trash2, Send, Plus, X, FileDown, FileSpreadsheet } from "lucide-react";
@@ -138,7 +139,7 @@ export default function TeachingAssignmentsPage() {
       // doc-comment on this param.
       fetch("/api/college/faculty?availableOnly=true&includeParent=true").then((r) => r.json() as Promise<{ faculty: FacultyRow[] }>).then((d) => setFaculty((d.faculty ?? []).map((f) => ({ ...f, name: facultyDisplayName(f) })))),
       fetch("/api/college/teaching-assignments?dept=true").then((r) => r.json() as Promise<{ assignments: AssignmentRow[] }>).then((d) => setAssignments(d.assignments ?? [])),
-      fetch("/api/college/departments").then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => setDepartments(d.departments ?? [])),
+      fetchDepartments().then((r) => r.json() as Promise<{ departments: Department[] }>).then((d) => setDepartments(d.departments ?? [])),
       fetch("/api/college/faculty-assignment-requests").then((r) => r.json() as Promise<{ requests: FacultyAssignmentRequest[] }>).then((d) => setAssignmentRequests(d.requests ?? [])),
     ])
       .catch(() => toast({ variant: "destructive", title: "Unable to load teaching data" }))
