@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useHiringBatchesList } from "@/hooks/useHiringBatchesList";
 import { useAuthStore } from "@/store/authStore";
 import type { UserRole } from "@/types";
 
@@ -18,42 +18,16 @@ const HIRING_BATCH_ROLES: ReadonlySet<UserRole> = new Set([
 
 export function useAssignedInterviews() {
   const user = useAuthStore((s) => s.user);
-  const [count, setCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const role = user?.role;
-    if (!role || !HIRING_BATCH_ROLES.has(role)) {
-      setLoading(false);
-      return;
-    }
-
-    // PANEL_MEMBER is already filtered server-side by their uid; all other
-    // roles need the asPanelMember flag to see batches they've been added to.
-    const url =
-      role === "PANEL_MEMBER"
-        ? "/api/college/hiring-batches"
-        : "/api/college/hiring-batches?asPanelMember=true";
-
-    fetch(url)
-      .then((r) => r.json() as Promise<{ batches?: { currentPhase?: string }[] }>)
-      .then((d) => {
-        const batches = d.batches ?? [];
-        if (role === "PANEL_MEMBER") {
-          setCount(batches.length);
-        } else {
-          // For non-PANEL_MEMBER roles only show the nav when scoring is open
-          const active = batches.filter(
-            (b) =>
-              b.currentPhase === "PANEL_INTERVIEW" ||
-              b.currentPhase === "PRINCIPAL_FINAL_REVIEW"
-          );
-          setCount(active.length);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [user?.role, user?.uid]);
-
-  return { hasInterviews: count > 0, interviewCount: count, loading };
+  const role = user?.role;
+  const enabled = !!role && HIRING_BATCH_ROLES.has(role);
+  // PANEL_MEMBER is already filtered server-side by their uid; all other
+  // roles need the asPanelMember flag to see batches they've been added to.
+  const url = role === "PANEL_MEMBER" ? "/api/college/hiring-batches" : "/api/college/hiring-batches?asPanelMember=true";
+  const { data, isLoading } = useHiringBatchesList(url, user?.uid, enabled);
+  const batches = enabled ? data ?? [] : [];
+  // For non-PANEL_MEMBER roles only show the nav when scoring is open
+  const count = role === "PANEL_MEMBER"
+    ? batches.length
+    : batches.filter((b) => b.currentPhase === "PANEL_INTERVIEW" || b.currentPhase === "PRINCIPAL_FINAL_REVIEW").length;
+  return { hasInterviews: count > 0, interviewCount: count, loading: enabled && isLoading };
 }
