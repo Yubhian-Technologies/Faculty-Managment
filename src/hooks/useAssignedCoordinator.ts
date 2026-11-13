@@ -1,30 +1,14 @@
-import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
-import type { HiringBatch } from "@/types";
+import { useHiringBatchesList } from "@/hooks/useHiringBatchesList";
 
+// The hiring batch this panel member coordinates, while it is still before demo day.
+// Shares the hiring-batches read with useAssignedInterviews (same URL for a panel member).
 export function useAssignedCoordinator() {
   const user = useAuthStore((s) => s.user);
-  const [coordinatorBatchId, setCoordinatorBatchId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (user?.role !== "PANEL_MEMBER") {
-      setLoading(false);
-      return;
-    }
-    fetch("/api/college/hiring-batches")
-      .then((r) => r.json() as Promise<{ batches?: (HiringBatch & { id: string })[] }>)
-      .then((d) => {
-        const coordinatorBatch = (d.batches ?? []).find(
-          (b) =>
-            b.coordinatorUid === user.uid &&
-            b.currentPhase === "INTERVIEW_READY" // only before demo day
-        );
-        setCoordinatorBatchId(coordinatorBatch?.id ?? null);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [user?.role, user?.uid]);
-
-  return { coordinatorBatchId, loading };
+  const enabled = user?.role === "PANEL_MEMBER";
+  const { data, isLoading } = useHiringBatchesList("/api/college/hiring-batches", user?.uid, enabled);
+  const coordinatorBatch = enabled
+    ? (data ?? []).find((b) => b.coordinatorUid === user?.uid && b.currentPhase === "INTERVIEW_READY") // only before demo day
+    : undefined;
+  return { coordinatorBatchId: coordinatorBatch?.id ?? null, loading: enabled && isLoading };
 }

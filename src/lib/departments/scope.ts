@@ -213,23 +213,7 @@ export async function getHodDepartmentScope(
   options: { activeOnly?: boolean } = {}
 ): Promise<HodDepartmentScope> {
   const { activeOnly = true } = options;
-  const userSnap = await db.collection("colleges").doc(collegeId).collection("users").doc(uid).get();
-  const userData = userSnap.data() as { department?: string; departments?: string[] } | undefined;
-  // Departments whose HOD seat was handed to this person for the holder's
-  // leave, live only while that leave is in progress (see
-  // lib/leave/roleDelegation.ts).
-  const delegation = await activeDelegatedRoles(db, collegeId, uid).catch(() => ({ roles: [] as string[], departments: [] as string[] }));
-  const delegatedDepartments = delegation.roles.includes("HOD") ? delegation.departments : [];
-  // `departments` is the source of truth once present; a doc that predates it
-  // (or was only ever touched by the old single-field write path) falls back
-  // to its one `department` string.
-  const allOwnDepartmentNames = Array.from(
-    new Set(
-      [...(userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""]), ...delegatedDepartments]
-        .map((n) => n.trim())
-        .filter(Boolean)
-    )
-  ).slice(0, 30);
+  const allOwnDepartmentNames = await cached(db, `own|${collegeId}|${uid}`, () => loadOwnDepartmentNames(db, collegeId, uid));
   // An HOD of several departments works in one at a time (the "Working as"
   // switcher); narrow to it so an ambient/ownerless listing only shows that
   // department - unless the caller already knows exactly which department it
@@ -241,7 +225,71 @@ export async function getHodDepartmentScope(
   if (ownDepartmentNames.length === 0) {
     return emptyScope;
   }
+  const scope = await cached(db, `tree|${collegeId}|${ownDepartmentNames.join("\u0000")}`, () => scopeForDepartmentNames(db, collegeId, ownDepartmentNames));
+  return copyScope(scope);
+}
 
+// Both lookups below are kept for SCOPE_CACHE_MS per server instance (the same window liveRoles.ts already
+// allows for a role change), so the 80-odd HOD routes don't repeat 3-6 Firestore round trips on every call.
+// Keyed per Firestore instance, so a test's fresh fake database never sees another test's answer.
+const SCOPE_CACHE_MS = 20_000;
+const scopeCache = new WeakMap<FirebaseFirestore.Firestore, Map<string, { at: number; value: Promise<unknown> }>>();
+
+function cached<T>(db: FirebaseFirestore.Firestore, key: string, load: () => Promise<T>): Promise<T> {
+  let byKey = scopeCache.get(db);
+  if (!byKey) { byKey = new Map(); scopeCache.set(db, byKey); }
+  // Off against the Firestore emulator: those tests change departments and logins between calls in one process.
+  if (process.env.FIRESTORE_EMULATOR_HOST) return load();
+  const hit = byKey.get(key);
+  const now = Date.now();
+  if (hit && now - hit.at < SCOPE_CACHE_MS) return hit.value as Promise<T>;
+  if (byKey.size > 2000) byKey.clear();
+  const value = load();
+  const entry = { at: now, value: value as Promise<unknown> };
+  byKey.set(key, entry);
+  // A failed lookup is never reused.
+  value.catch(() => { if (byKey!.get(key) === entry) byKey!.delete(key); });
+  return value;
+}
+
+// Callers get their own arrays, so nothing they do changes the kept answer.
+function copyScope(s: HodDepartmentScope): HodDepartmentScope {
+  return {
+    ...s,
+    ownDepartmentNames: [...s.ownDepartmentNames],
+    ownDepartmentIds: [...s.ownDepartmentIds],
+    childDepartmentNames: [...s.childDepartmentNames],
+    childDepartmentIds: [...s.childDepartmentIds],
+    managedDepartmentNames: [...s.managedDepartmentNames],
+    managedDepartmentIds: [...s.managedDepartmentIds],
+    parentDepartmentIds: [...(s.parentDepartmentIds ?? [])],
+  };
+}
+
+async function loadOwnDepartmentNames(db: FirebaseFirestore.Firestore, collegeId: string, uid: string): Promise<string[]> {
+  // Departments whose HOD seat was handed to this person for the holder's
+  // leave, live only while that leave is in progress (see
+  // lib/leave/roleDelegation.ts). Read side by side with the login.
+  const [userSnap, delegation] = await Promise.all([
+    db.collection("colleges").doc(collegeId).collection("users").doc(uid).get(),
+    activeDelegatedRoles(db, collegeId, uid).catch(() => ({ roles: [] as string[], departments: [] as string[] })),
+  ]);
+  const userData = userSnap.data() as { department?: string; departments?: string[] } | undefined;
+  const delegatedDepartments = delegation.roles.includes("HOD") ? delegation.departments : [];
+  // `departments` is the source of truth once present; a doc that predates it
+  // (or was only ever touched by the old single-field write path) falls back
+  // to its one `department` string.
+  const allOwnDepartmentNames = Array.from(
+    new Set(
+      [...(userData?.departments && userData.departments.length > 0 ? userData.departments : [userData?.department ?? ""]), ...delegatedDepartments]
+        .map((n) => n.trim())
+        .filter(Boolean)
+    )
+  ).slice(0, 30);
+  return allOwnDepartmentNames;
+}
+
+async function scopeForDepartmentNames(db: FirebaseFirestore.Firestore, collegeId: string, ownDepartmentNames: string[]): Promise<HodDepartmentScope> {
   const deptsColl = db.collection("colleges").doc(collegeId).collection("departments");
   const ownSnaps = await Promise.all(ownDepartmentNames.map((n) => deptsColl.where("name", "==", n).limit(1).get()));
 
