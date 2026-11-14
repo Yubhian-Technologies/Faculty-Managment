@@ -221,7 +221,7 @@ export function PaperSetWorkspace({ detail }: { detail: MidBankDetail }) {
       {newer && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <div className="min-w-0 flex-1">
-            <p className="font-medium">The Exam Cell changed the question paper pattern after you started.</p>
+            <p className="font-medium">The question paper pattern or the CIE plan changed after you started.</p>
             <p className="text-xs">Now: {newer.parts.map((x) => `${x.label} - ${x.unitLayout ? `${x.questions} questions (units ${x.unitLayout.join(", ")})` : x.questions ? `${x.questions} questions` : "your own questions"}`).join(" · ")}.
               {newer.dropped.length ? ` ${newer.dropped.length} written question(s) have no place yet - fix or clear each one below, then update.` : " Your written questions keep their units."}</p>
             {newer.dropped.length > 0 && (
