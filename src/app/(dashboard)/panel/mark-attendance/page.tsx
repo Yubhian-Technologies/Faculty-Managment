@@ -13,6 +13,7 @@ import { toast } from "@/hooks/useToast";
 import { discardQueued, enqueueSubmission, getQueue, trySyncQueue, type QueuedSubmission } from "@/lib/attendance/offlineSubmitQueue";
 import { istMinutesNow, istToday, loadDay, saveDay } from "@/lib/attendance/offlineDayCache";
 import { keepPageForOffline } from "@/lib/attendance/offlinePage";
+import { AddToHomeScreen } from "@/components/attendance/AddToHomeScreen";
 import { useAuthStore } from "@/store/authStore";
 import { checkedMeaningFor, defaultFillFor, type AttendanceMode } from "@/lib/studentAttendance/markMode";
 import type { StudentAttendanceMark, StudentAttendanceSession } from "@/types";
@@ -785,6 +786,8 @@ export default function MarkAttendancePage() {
           </Button>
         </div>
       )}
+
+      <AddToHomeScreen />
 
       {savedDayAt && (
         <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
