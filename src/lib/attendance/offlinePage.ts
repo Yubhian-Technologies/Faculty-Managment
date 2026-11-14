@@ -22,7 +22,9 @@ export async function keepPageForOffline(path: string): Promise<void> {
     const html = await res.clone().text();
     await (await caches.open(PAGE_CACHE)).put(path, res);
     // Every built file the page loads (scripts, styles, fonts) - names are unique per release.
-    const files = [...new Set([...html.matchAll(/\/_next\/static\/[^"'\s)<>\\]+/g)].map((m) => m[0]))];
+    // The HTML names some as "/_next/static/..." and lists the rest inside its page data as "static/chunks/...".
+    const files = [...new Set([...html.matchAll(/(?:\/_next\/)?static\/(?:chunks|css|media)\/[^"'\s)<>\\]+/g)]
+      .map((m) => (m[0].startsWith("/_next/") ? m[0] : `/_next/${m[0]}`)))];
     const statics = await caches.open(STATIC_CACHE);
     await Promise.all(files.map(async (f) => {
       if (await statics.match(f)) return;

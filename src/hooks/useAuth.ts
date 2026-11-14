@@ -21,6 +21,13 @@ export function useAuth() {
     // as the client stays signed in.
     const unsub = onIdTokenChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
+        // With no internet, an app reopened from the home screen may not get its Firebase sign-in back right away.
+        // Keep the person stored on this phone (Mark Attendance works offline; nothing reaches the server until
+        // the connection - and with it a real sign-in - is back). A real sign-out clears the stored person first.
+        if (typeof navigator !== "undefined" && navigator.onLine === false && useAuthStore.getState().user) {
+          setLoading(false);
+          return;
+        }
         logout();
         return;
       }
