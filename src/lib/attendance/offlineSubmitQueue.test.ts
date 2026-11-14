@@ -80,13 +80,43 @@ describe("offlineSubmitQueue", () => {
       expect(getQueue()).toHaveLength(0);
     });
 
-    it.each([[409, "conflict"], [403, "rejected"], [400, "rejected"]])("still removes a terminal %i (%s)", async (status, result) => {
+    it("removes a 409 (updated / submitted elsewhere meanwhile)", async () => {
+      const { enqueueSubmission, getQueue, trySyncQueue } = await import("./offlineSubmitQueue");
+      enqueueSubmission(baseItem);
+      respond(409);
+      expect((await trySyncQueue())[0].result).toBe("conflict");
+      expect(getQueue()).toHaveLength(0);
+    });
+
+    it.each([403, 400])("keeps a refused %i on the device with its reason - never silently dropped", async (status) => {
       const { enqueueSubmission, getQueue, trySyncQueue } = await import("./offlineSubmitQueue");
       enqueueSubmission(baseItem);
       respond(status);
-      expect((await trySyncQueue())[0].result).toBe(result);
-      expect(getQueue()).toHaveLength(0);
+      const first = (await trySyncQueue())[0];
+      expect(first.result).toBe("rejected");
+      expect(getQueue()).toHaveLength(1);
+      expect(getQueue()[0].lastError).toBeTruthy();
+      // The same refusal again is not announced twice.
+      respond(status);
+      expect((await trySyncQueue())[0]).toMatchObject({ result: "rejected", repeat: true });
     });
+  });
+
+  it("a period opened with no internet is created on the server first, then submitted - both marked offline", async () => {
+    const { enqueueSubmission, getQueue, trySyncQueue } = await import("./offlineSubmitQueue");
+    enqueueSubmission({ ...baseItem, isNew: true, markedAt: "2026-09-25T04:10:00.000Z" });
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: { body: string }) => {
+      calls.push({ url, body: JSON.parse(init.body) as Record<string, unknown> });
+      return url.endsWith("/student-attendance")
+        ? { ok: true, status: 201, json: async () => ({ session: { id: baseItem.sessionId } }) }
+        : { ok: true, status: 200, json: async () => ({}) };
+    }));
+    expect((await trySyncQueue())[0].result).toBe("synced");
+    expect(calls.map((c) => c.url)).toEqual(["/api/college/student-attendance", `/api/college/student-attendance/${baseItem.sessionId}`]);
+    expect(calls[0].body.offline).toEqual({ markedAt: "2026-09-25T04:10:00.000Z" });
+    expect(calls[1].body).toMatchObject({ submit: true, offline: { markedAt: "2026-09-25T04:10:00.000Z" } });
+    expect(getQueue()).toHaveLength(0);
   });
 
   it("keeps queued submissions for different sessions independent", async () => {

@@ -115,6 +115,11 @@ export interface StudentAttendanceSession {
   submittedAt?: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+
+  // Marked on the faculty's phone with no internet and sent when the connection came back (the Mark Attendance
+  // offline queue). `markedAt` = the phone's own time when they pressed Submit (as reported - a phone clock can be
+  // wrong), `syncedAt` = when the server received it. Accepted the same day only; shown to the HOD as "Marked offline".
+  markedOffline?: { markedAt: string; syncedAt: string } | null;
 }
 
 // ─── Lab attendance allocation ───

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { effectiveLabBatch, loadLabBatchModes } from "@/lib/students/labBatchMode";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { offlineStamp, parseOfflineMark } from "@/lib/studentAttendance/offlineMark";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -24,7 +25,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER");
-    const body = (await readJsonBody(request)) as { assignmentId?: string; date?: string; periodNumber?: number };
+    const body = (await readJsonBody(request)) as { assignmentId?: string; date?: string; periodNumber?: number; offline?: unknown };
     const assignmentId = body.assignmentId?.trim();
     const date = body.date?.trim();
 
@@ -141,6 +142,12 @@ export async function POST(request: Request) {
     if (!windowCheck.ok) {
       const allocated = await checkAllocatedAccess(db, session.collegeId, facultyMemberId, assignmentId, date, requestedPeriod);
       if (allocated.ok) { windowCheck = allocated; viaAllocation = true; }
+    }
+    // Marked on the phone with no internet and synced later (Mark Attendance offline queue): accepted from the
+    // period's start until the end of that day, for the period the phone marked; flagged on the session.
+    const offline = parseOfflineMark(body.offline, now);
+    if (!windowCheck.ok && offline && requestedPeriod != null) {
+      windowCheck = await checkFacultyPeriodWindow(db, session.collegeId, facultyMemberId, assignmentId, date, now, requestedPeriod, { untilEndOfDay: true });
     }
     if (!windowCheck.ok) {
       return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
@@ -312,6 +319,7 @@ export async function POST(request: Request) {
         submittedAt: null,
         createdAt: now,
         updatedAt: now,
+        ...(offline ? { markedOffline: offlineStamp(offline, now) } : {}),
       };
       tx.set(ref, attendanceSession);
       resultSession = { id, ...attendanceSession } as unknown as StudentAttendanceSession & { id: string };

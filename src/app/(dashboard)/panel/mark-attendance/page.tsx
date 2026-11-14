@@ -10,7 +10,9 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
-import { enqueueSubmission, getQueue, trySyncQueue, type QueuedSubmission } from "@/lib/attendance/offlineSubmitQueue";
+import { discardQueued, enqueueSubmission, getQueue, trySyncQueue, type QueuedSubmission } from "@/lib/attendance/offlineSubmitQueue";
+import { istMinutesNow, istToday, loadDay, saveDay } from "@/lib/attendance/offlineDayCache";
+import { useAuthStore } from "@/store/authStore";
 import { checkedMeaningFor, defaultFillFor, type AttendanceMode } from "@/lib/studentAttendance/markMode";
 import type { StudentAttendanceMark, StudentAttendanceSession } from "@/types";
 
@@ -41,6 +43,8 @@ interface TodayPeriod {
   phase?: "UPCOMING" | "OPEN" | "ENDED";
   labBatch: string | null;
   allocated?: boolean;
+  // The period's student list, kept on the phone for marking with no internet (today-periods?withRosters=1).
+  roster?: { studentId: string; rollNumber: string; name: string; status: "ON_DUTY" | null }[] | null;
 }
 
 interface LabAllocationSummary {
@@ -234,6 +238,24 @@ function updatedAtIso(s: StudentAttendanceSession | null): string | undefined {
   try { return new Date(u as string).toISOString(); } catch { return undefined; }
 }
 
+// A saved period (no internet): open from its start until the end of the day by the phone's clock - the server
+// still decides when it syncs (same day only, flagged "Marked offline").
+function offlinePhase(p: TodayPeriod): Pick<TodayPeriod, "isOpen" | "phase"> {
+  if (p.unavailableMessage || p.session?.status === "SUBMITTED") return { isOpen: false, phase: p.phase ?? "ENDED" };
+  const [h, m] = p.startTime.split(":").map(Number);
+  const started = istMinutesNow() >= h * 60 + m;
+  return { isOpen: started, phase: started ? "OPEN" : "UPCOMING" };
+}
+
+// A period opened from the saved day: its attendance doesn't exist on the server yet - the queue creates it on sync.
+function offlineSessionFor(p: TodayPeriod, date: string): StudentAttendanceSession {
+  const entries = (p.roster ?? []).map((r) => ({ studentId: r.studentId, rollNumber: r.rollNumber, name: r.name, status: r.status }));
+  return {
+    id: p.sessionId, assignmentId: p.assignmentId, date, periodNumber: p.periodNumber, sectionName: p.sectionName, subjectName: p.subjectName,
+    status: "DRAFT", entries, totalStudents: entries.length, presentCount: 0, classNotes: "",
+  } as unknown as StudentAttendanceSession;
+}
+
 export default function MarkAttendancePage() {
   const [periods, setPeriods] = useState<TodayPeriod[]>([]);
   const periodsRef = useRef<TodayPeriod[]>([]);
@@ -261,7 +283,20 @@ export default function MarkAttendancePage() {
   const [classNotes, setClassNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [queuedIds, setQueuedIds] = useState<Set<string>>(() => new Set(getQueue().map((q) => q.sessionId)));
+  // Saved on this device and waiting to sync (read only); items the server refused (`lastError`) are listed apart
+  // and stay editable, so the faculty can complete them online.
+  const pendingIdsOf = (q: QueuedSubmission[]) => new Set(q.filter((x) => !x.lastError).map((x) => x.sessionId));
+  const [queuedIds, setQueuedIds] = useState<Set<string>>(() => pendingIdsOf(getQueue()));
+  const [refused, setRefused] = useState<QueuedSubmission[]>(() => getQueue().filter((x) => x.lastError));
+  const refreshQueue = useCallback(() => {
+    const q = getQueue();
+    setQueuedIds(pendingIdsOf(q));
+    setRefused(q.filter((x) => x.lastError));
+  }, []);
+  // Showing the day saved on this device (no internet): when it was saved.
+  const [savedDayAt, setSavedDayAt] = useState<string | null>(null);
+  // Periods opened from the saved day this visit (not on the server yet).
+  const offlineNewIds = useRef<Set<string>>(new Set());
   const [isSyncingQueue, setIsSyncingQueue] = useState(false);
 
   const syncPendingSubmissions = useCallback(async () => {
@@ -269,7 +304,7 @@ export default function MarkAttendancePage() {
     setIsSyncingQueue(true);
     try {
       const outcomes = await trySyncQueue();
-      setQueuedIds(new Set(getQueue().map((q) => q.sessionId)));
+      refreshQueue();
       const synced = outcomes.filter((o) => o.result === "synced").length;
       if (synced > 0) {
         toast({ variant: "success", title: `${synced} saved attendance record${synced === 1 ? "" : "s"} submitted` });
@@ -278,14 +313,14 @@ export default function MarkAttendancePage() {
       for (const o of outcomes) {
         if (o.result === "conflict") {
           toast({ variant: "destructive", title: "A locally saved submission couldn't sync", description: `${o.error} - contact your Department Office.` });
-        } else if (o.result === "rejected") {
-          toast({ variant: "destructive", title: "A locally saved submission was rejected", description: o.error });
+        } else if (o.result === "rejected" && !o.repeat) {
+          toast({ variant: "destructive", title: "Saved attendance not submitted", description: `${o.error} It is kept on this device - open the period to complete it.` });
         }
       }
     } finally {
       setIsSyncingQueue(false);
     }
-  }, []);
+  }, [refreshQueue]);
 
   useEffect(() => {
     const handler = () => void syncPendingSubmissions();
@@ -295,7 +330,8 @@ export default function MarkAttendancePage() {
 
   async function fetchTodayPeriods(): Promise<TodayPeriod[]> {
     try {
-      const query = viewDateRef.current ? `?date=${encodeURIComponent(viewDateRef.current)}` : "";
+      // Today (not a past allocated date): also each period's student list, kept on the phone for no-internet marking.
+      const query = viewDateRef.current ? `?date=${encodeURIComponent(viewDateRef.current)}` : "?withRosters=1";
       const res = await fetch(`/api/college/student-attendance/today-periods${query}`);
       if (!res.ok) throw new Error("Unable to load periods");
       const json = (await res.json()) as TodayPeriodsResponse & { noClassReason?: string };
@@ -304,8 +340,21 @@ export default function MarkAttendancePage() {
       setPeriods(fetched);
       setDateStr(json.date ?? todayStr());
       setAllocations(json.allocations ?? []);
+      setSavedDayAt(null);
+      const uid = useAuthStore.getState().user?.uid;
+      if (!viewDateRef.current && uid && json.date) saveDay(uid, json.date, fetched);
       return fetched;
     } catch {
+      // No internet: today's saved day, if this device has one - open by the phone's clock.
+      const uid = useAuthStore.getState().user?.uid;
+      const saved = !viewDateRef.current && uid ? loadDay<TodayPeriod>(uid, istToday()) : null;
+      if (saved) {
+        const local = saved.periods.map((p) => ({ ...p, ...offlinePhase(p) }));
+        setPeriods(local);
+        setDateStr(saved.date);
+        setSavedDayAt(saved.savedAt);
+        return local;
+      }
       setPeriods([]);
       return [];
     } finally {
@@ -398,11 +447,24 @@ export default function MarkAttendancePage() {
             if (p.session.classNotes) notes = p.session.classNotes;
             return;
           }
-          const res = await fetch("/api/college/student-attendance", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ assignmentId: p.assignmentId, date: dateStr, periodNumber: p.periodNumber }),
-          });
+          let res: Response | null = null;
+          try {
+            res = await fetch("/api/college/student-attendance", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ assignmentId: p.assignmentId, date: dateStr, periodNumber: p.periodNumber }),
+            });
+          } catch {
+            res = null;
+          }
+          // No internet: open it from the student list saved on this device.
+          if (!res) {
+            if (p.roster?.length) {
+              fetchedSessions[p.periodNumber] = offlineSessionFor(p, dateStr);
+              offlineNewIds.current.add(p.sessionId);
+            }
+            return;
+          }
           const json = (await res.json()) as { session?: StudentAttendanceSession; error?: string };
           if (res.ok && json.session) {
             fetchedSessions[p.periodNumber] = json.session;
@@ -570,6 +632,9 @@ export default function MarkAttendancePage() {
 
     const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
     const failedPeriods: string[] = [];
+    // The phone's time at Submit - sent with anything saved for later, so the server accepts it the same day.
+    const markedAt = new Date().toISOString();
+    let queuedNew = false;
 
     for (const p of expandedGroup.periods) {
       const sess = groupSessions[p.periodNumber];
@@ -581,9 +646,13 @@ export default function MarkAttendancePage() {
       }));
 
       const expectedUpdatedAt = updatedAtIso(sess);
+      const isNew = offlineNewIds.current.has(sess.id);
 
-      if (isOffline) {
+      if (isOffline || isNew) {
+        if (isNew) queuedNew = true;
         enqueueSubmission({
+          markedAt,
+          isNew,
           sessionId: sess.id,
           assignmentId: sess.assignmentId,
           date: sess.date,
@@ -594,7 +663,7 @@ export default function MarkAttendancePage() {
           classNotes,
           expectedUpdatedAt,
         });
-        setQueuedIds((prev) => new Set(prev).add(sess.id));
+        refreshQueue();
       } else {
         try {
           const res = await fetch(`/api/college/student-attendance/${sess.id}`, {
@@ -605,10 +674,14 @@ export default function MarkAttendancePage() {
           if (!res.ok) {
             const json = (await res.json().catch(() => ({}))) as { error?: string };
             failedPeriods.push(`Period ${p.periodNumber}: ${json.error ?? "Unable to submit"}`);
+          } else {
+            // Submitted online: any copy of this period saved on the device earlier is done with.
+            for (const q of getQueue()) if (q.sessionId === sess.id) discardQueued(q.queueId);
           }
         } catch (err) {
           if (err instanceof TypeError) {
             enqueueSubmission({
+              markedAt,
               sessionId: sess.id,
               assignmentId: sess.assignmentId,
               date: sess.date,
@@ -619,7 +692,7 @@ export default function MarkAttendancePage() {
               classNotes,
               expectedUpdatedAt,
             });
-            setQueuedIds((prev) => new Set(prev).add(sess.id));
+            refreshQueue();
           } else {
             failedPeriods.push(`Period ${p.periodNumber}: Network error`);
           }
@@ -629,8 +702,16 @@ export default function MarkAttendancePage() {
 
     setIsSubmitting(false);
 
-    if (isOffline) {
+    refreshQueue();
+    if (isOffline || (queuedNew && failedPeriods.length === 0 && !navigator.onLine)) {
       toast({ variant: "success", title: "Saved on this device", description: "No connection. It will be submitted automatically when you are back online." });
+    } else if (queuedNew) {
+      // Opened from the saved day and the phone says it's online: try to send it now; if the connection is not
+      // really there yet, it stays saved on this device.
+      await syncPendingSubmissions();
+      if (getQueue().some((q) => !q.lastError)) {
+        toast({ variant: "success", title: "Saved on this device", description: "It will be submitted automatically when the connection is back." });
+      }
     } else if (failedPeriods.length === 0) {
       toast({ variant: "success", title: `Attendance submitted for ${expandedGroup.periodNumbers.length} period${expandedGroup.periodNumbers.length > 1 ? "s" : ""}` });
     } else {
@@ -694,6 +775,30 @@ export default function MarkAttendancePage() {
           <Button size="sm" variant="outline" onClick={() => void syncPendingSubmissions()} loading={isSyncingQueue}>
             <CloudUpload className="h-3.5 w-3.5" /> Sync Now
           </Button>
+        </div>
+      )}
+
+      {savedDayAt && (
+        <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <CloudOff className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            No internet connection. Showing today&apos;s classes saved on this device at {new Date(savedDayAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}.
+            You can mark attendance; it is saved here and submitted automatically when you are back online (today only).
+          </span>
+        </div>
+      )}
+
+      {refused.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <p className="font-medium">Saved attendance that could not be submitted</p>
+          <ul className="space-y-1.5 text-xs">
+            {refused.map((q) => (
+              <li key={q.queueId} className="flex flex-wrap items-center justify-between gap-2">
+                <span>{q.subjectName} · Section {q.sectionName} · Period {q.periodNumber ?? "-"}: {q.lastError} Open the period to complete it.</span>
+                <Button size="sm" variant="outline" onClick={() => { discardQueued(q.queueId); refreshQueue(); }}>Discard</Button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
