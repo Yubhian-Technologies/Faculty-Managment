@@ -45,7 +45,9 @@ export async function livePaperLayout(db: Db, collegeId: string, bank: import("@
   const { withCeaPart } = await import("@/lib/cea/paper");
   const cea = await ceaPartForMid(db, collegeId, subject, bank.midNumber);
   const expanded = withCeaPart(expandPattern(pattern, setup.units, setup.shared), cea.part);
-  const layout = (p: MidPaperPattern) => JSON.stringify(p.parts.map((x) => x.unitLayout ?? x.questions));
+  // The CIE part's unit and minutes count too: the HOD moving the CIE paper to another unit (Unit 2 -> Unit 1) changes
+  // what the setter must write, though the part's marks and shape stay the same.
+  const layout = (p: MidPaperPattern) => JSON.stringify(p.parts.map((x) => [x.unitLayout ?? x.questions, x.cea ? [x.cea.unit, x.cea.minutes] : null]));
   const changed = patternShape(expanded) !== patternShape(bank.pattern) || layout(expanded) !== layout(bank.pattern);
   return { pattern: expanded, units: setup.units, changed, issues: cea.issue ? [...setup.issues, { message: cea.issue }] : setup.issues };
 }
