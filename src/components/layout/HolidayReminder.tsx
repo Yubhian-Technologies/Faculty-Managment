@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuthStore } from "@/store/authStore";
 import { CalendarDays } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,11 @@ export function HolidayReminder() {
   const [notices, setNotices] = useState<UpcomingNotice[]>([]);
   const [open, setOpen] = useState(false);
 
+  // Only a login inside a college has college holidays (Super Admin, location and group roles have none).
+  const collegeId = useAuthStore((s) => s.user?.collegeId);
+
   useEffect(() => {
+    if (!collegeId) return;
     let cancelled = false;
     fetch("/api/college/holidays/upcoming")
       .then((r) => (r.ok ? (r.json() as Promise<{ date: string; notices: UpcomingNotice[] }>) : null))
@@ -59,7 +64,7 @@ export function HolidayReminder() {
         // A missing reminder isn't worth an error toast.
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [collegeId]);
 
   if (notices.length === 0) return null;
 

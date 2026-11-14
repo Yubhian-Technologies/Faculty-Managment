@@ -144,7 +144,8 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
         role="dialog"
         aria-modal="true"
         aria-label="Navigation menu"
-        aria-hidden={!sidebarOpen}
+        // inert (not aria-hidden): a closed drawer also gives up focus, so the browser never hides a focused link.
+        inert={!sidebarOpen}
         className={cn(
           "fixed top-0 left-0 z-50 flex h-dvh w-[85vw] max-w-72 flex-col bg-background border-r shadow-xl transition-transform duration-300 md:hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuthStore } from "@/store/authStore";
 import { toDate, formatDate } from "@/lib/utils";
 import { todayISODate, isoDateKey } from "@/lib/leave/dayCounter";
 import type { SummerHoliday } from "@/types";
@@ -14,7 +15,11 @@ import type { SummerHoliday } from "@/types";
 export function SummerHolidayBanner() {
   const [active, setActive] = useState<SummerHoliday | null>(null);
 
+  // Only a login inside a college has college holidays (Super Admin, location and group roles have none).
+  const collegeId = useAuthStore((s) => s.user?.collegeId);
+
   useEffect(() => {
+    if (!collegeId) return;
     let cancelled = false;
     fetch("/api/college/summer-holidays")
       .then((r) => r.json() as Promise<{ summerHolidays?: SummerHoliday[] }>)
@@ -35,7 +40,7 @@ export function SummerHolidayBanner() {
         // Non-fatal - a missing banner isn't worth surfacing an error toast for.
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [collegeId]);
 
   if (!active) return null;
 
