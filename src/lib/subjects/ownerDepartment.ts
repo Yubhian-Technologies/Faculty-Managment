@@ -10,7 +10,7 @@ import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 
 export const OWNER_DEPARTMENTS_MAX = 2;
 
-export type OwnerDepartmentFields = Pick<Subject, "ownerDepartments" | "ownerDepartmentId" | "ownerDepartmentName">;
+export type OwnerDepartmentFields = Pick<Subject, "ownerDepartments" | "ownerDepartmentId" | "ownerDepartmentName" | "ownBranchPapers">;
 
 /** The saved Subject Departments: the list, else the single department saved before lists existed. */
 export function ownerDepartmentRefs(subject: OwnerDepartmentFields | null | undefined): { id: string; name: string }[] {
@@ -28,10 +28,27 @@ export function ownerDepartmentNames(subject: OwnerDepartmentFields | null | und
   return [...new Set(names)];
 }
 
-/** The departments whose HODs review a bank / paper of this subject in this branch (any one decides). */
+/**
+ * The branches that prepare and approve their own Mid papers for this subject although it has a Subject Department
+ * (`ownBranchPapers`), by their current names. [] while no Subject Department is set (the branch decides anyway), and
+ * a branch that is itself a Subject Department is left out (it already decides).
+ */
+export function ownBranchPaperNames(subject: OwnerDepartmentFields | null | undefined, namesById?: ReadonlyMap<string, string>): string[] {
+  const owners = ownerDepartmentNames(subject, namesById);
+  if (!owners.length) return [];
+  const names = (subject?.ownBranchPapers ?? []).filter((d) => d?.id).map((d) => namesById?.get(d.id) || d.name.trim()).filter(Boolean);
+  return [...new Set(names)].filter((n) => !owners.includes(n));
+}
+
+/**
+ * The departments whose HODs review a bank / paper of this subject in this branch (any one decides): the Subject
+ * Department(s), except in a branch that handles its own papers (`ownBranchPapers`) - there, the branch. No Subject
+ * Department: the branch.
+ */
 export function reviewDepartmentsOf(branch: string, subject: OwnerDepartmentFields | null | undefined, namesById?: ReadonlyMap<string, string>): string[] {
   const owners = ownerDepartmentNames(subject, namesById);
-  return owners.length ? owners : branch ? [branch] : [];
+  if (!owners.length) return branch ? [branch] : [];
+  return branch && ownBranchPaperNames(subject, namesById).includes(branch) ? [branch] : owners;
 }
 
 /** Firestore department names by id (for `ownerDepartmentNames` / `reviewDepartmentsOf`); all of them without `ids`. */
@@ -54,4 +71,10 @@ export async function ownerDepartmentNamesLive(db: FirebaseFirestore.Firestore, 
   const refs = ownerDepartmentRefs(subject);
   if (!refs.length) return [];
   return ownerDepartmentNames(subject, await departmentNamesById(db, collegeId, refs.map((d) => d.id)));
+}
+
+/** The Subject Departments' and own-paper branches' current names, from one read of just those departments. */
+export async function subjectReviewNamesLive(db: FirebaseFirestore.Firestore, collegeId: string, subject: OwnerDepartmentFields | null | undefined): Promise<Map<string, string>> {
+  const ids = [...ownerDepartmentRefs(subject).map((d) => d.id), ...(subject?.ownBranchPapers ?? []).map((d) => d?.id ?? "")].filter(Boolean);
+  return ids.length ? departmentNamesById(db, collegeId, ids) : new Map();
 }

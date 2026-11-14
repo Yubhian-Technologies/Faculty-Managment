@@ -22,7 +22,9 @@ interface Scope {
   assignment: { facultyIds: string[]; facultyNames: string[]; assignedByName: string; at: string; started: string[]; setShare?: Record<string, number[]> } | null;
   candidates: Candidate[];
 }
-interface SubjectRow { subjectId: string; subjectName: string; subjectCode: string; ownerDepartments: string[]; branches: Scope[]; groups?: Scope[]; whole: Scope | null; paperCount?: number | null }
+interface SubjectRow { subjectId: string; subjectName: string; subjectCode: string; ownerDepartments: string[]; branches: Scope[]; groups?: Scope[]; whole: Scope | null; paperCount?: number | null;
+  /** Only for the Subject Department's HOD: the branches that may prepare and approve their own papers. */
+  ownPapers?: { options: { departmentId: string; name: string; on: boolean }[] } | null }
 
 const GROUP_JOIN = " + ";
 
@@ -35,7 +37,7 @@ const changeText = (c: StartedChange) =>
 const groupOf = (branches: string[]) => [...new Set(branches)].sort().join(GROUP_JOIN);
 
 export function AssignSetters({ deadlineId, onChanged }: { deadlineId: string; /** After a save (the page refreshes its progress). */ onChanged?: () => void }) {
-  const [data, setData] = useState<{ mode: "SELF" | "HOD"; deadline: { locked: boolean }; subjects: SubjectRow[] } | null>(null);
+  const [data, setData] = useState<{ mode: "SELF" | "HOD"; deadline: { locked: boolean; deadline?: string }; subjects: SubjectRow[] } | null>(null);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
@@ -65,6 +67,11 @@ export function AssignSetters({ deadlineId, onChanged }: { deadlineId: string; /
           Only the faculty you assign prepare these; others teaching the subject can view and give suggestions. {unassigned ? `${unassigned} subject${unassigned === 1 ? "" : "s"} still need setters.` : "Every subject has setters."}
         </p>
       </div>
+      {data.deadline.locked && subjects.length > 0 && (
+        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          The question paper deadline{data.deadline.deadline ? ` (${formatDeadline(data.deadline.deadline)})` : ""} has passed, so setters can no longer be assigned or changed. To assign setters, ask the Exam Cell to extend the deadline in Mid Timings &amp; Dates.
+        </p>
+      )}
       {subjects.length === 0 && <p className="text-sm text-muted-foreground">Your department does not look after any subject of this semester.</p>}
       {subjects.map((s) => <SubjectAssign key={s.subjectId} deadlineId={deadlineId} s={s} locked={data.deadline.locked} onSaved={() => { setReloadKey((k) => k + 1); onChanged?.(); }} />)}
     </CardContent></Card>
@@ -101,6 +108,7 @@ function SubjectAssign({ deadlineId, s, locked, onSaved }: { deadlineId: string;
         <div>
           <p className="font-medium">{s.subjectName} <span className="text-xs text-muted-foreground">({s.subjectCode})</span></p>
           <p className="text-xs text-muted-foreground">{s.branches.map((b) => b.branch).join(", ")}{s.ownerDepartments.length ? ` · Subject Department: ${s.ownerDepartments.join(", ")}` : ""}</p>
+          {s.ownPapers && s.ownPapers.options.length > 0 && <OwnPapers subjectId={s.subjectId} options={s.ownPapers.options} onSaved={onSaved} />}
         </div>
         {canWhole && (
           <div className="flex rounded-lg border p-0.5 text-xs" role="radiogroup" aria-label="Paper for">
@@ -119,6 +127,13 @@ function SubjectAssign({ deadlineId, s, locked, onSaved }: { deadlineId: string;
           {draftGroup && <ScopeAssign key={`new-${draftGroup.branch}`} paperCount={s.paperCount ?? 0} deadlineId={deadlineId} subjectId={s.subjectId} scope={draftGroup} kind="GROUP" locked={locked} startEditing
             onCancel={() => setDraftGroup(null)} onSaved={() => { setDraftGroup(null); onSaved(); }} />}
           {s.branches.filter((b) => b.canAssign && !grouped.has(b.branch) && !(draftGroup?.branch.split(GROUP_JOIN).includes(b.branch))).map((b) => <ScopeAssign key={b.branch} paperCount={s.paperCount ?? 0} deadlineId={deadlineId} subjectId={s.subjectId} scope={b} kind="BRANCH" locked={locked} onSaved={onSaved} />)}
+          {/* Branches another HOD handles (a branch with its own Mid papers, or the Subject Department's branches): shown, not assignable here. */}
+          {s.branches.filter((b) => !b.canAssign).map((b) => (
+            <div key={`other-${b.branch}`} className="rounded-lg bg-muted/30 px-4 py-3">
+              <p className="text-sm font-medium">{b.branch} <span className="text-xs font-normal text-muted-foreground">{b.sections.length} section{b.sections.length === 1 ? "" : "s"}</span></p>
+              <p className="text-xs text-muted-foreground">Setters are assigned and the paper is approved by the {b.reviewDepartments.join(" / ")} HOD.</p>
+            </div>
+          ))}
           {/* One paper for several branches: tick the branches (those without setters yet), then pick the setters. */}
           {!locked && !draftGroup && free.length >= 2 && (picking ? (
             <div className="space-y-2 rounded-lg border border-dashed p-3">
@@ -285,6 +300,65 @@ function ScopeAssign({ deadlineId, subjectId, scope, kind, locked, onSaved, star
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// "YYYY-MM-DD" -> "14 Nov 2026"; anything else is shown as stored.
+function formatDeadline(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${Number(m[3])} ${months[Number(m[2]) - 1]} ${m[1]}`;
+}
+
+/**
+ * The Subject Department's HOD: which branches prepare and approve their own Mid papers for this subject. In a ticked
+ * branch that branch's own HOD assigns the setters (from the branch) and approves; the syllabus, the CIE plan and the
+ * other branches stay with the Subject Department.
+ */
+function OwnPapers({ subjectId, options, onSaved }: { subjectId: string; options: { departmentId: string; name: string; on: boolean }[]; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState<Set<string>>(new Set(options.filter((o) => o.on).map((o) => o.departmentId)));
+  const [busy, setBusy] = useState(false);
+  const current = options.filter((o) => o.on).map((o) => o.name);
+  async function save() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/college/subjects/own-branch-papers", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subjectId, departmentIds: [...pick] }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) { toast({ variant: "destructive", title: j.error ?? "Unable to save the branches." }); return; }
+      toast({ variant: "success", title: "Branches saved." });
+      setOpen(false);
+      onSaved();
+    } finally { setBusy(false); }
+  }
+  if (!open) {
+    return (
+      <p className="mt-1 text-xs">
+        {current.length ? <span className="text-muted-foreground">Own papers: {current.join(", ")}. </span> : null}
+        <button type="button" className="text-primary hover:underline" onClick={() => { setPick(new Set(options.filter((o) => o.on).map((o) => o.departmentId))); setOpen(true); }}>Branches With Own Papers</button>
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-2 rounded-lg border border-dashed p-3">
+      <p className="text-xs text-muted-foreground">In a ticked branch, that branch&apos;s HOD assigns the setters from the branch and approves its paper. The syllabus, the CIE plan and the other branches stay with your department.</p>
+      <div className="flex flex-wrap gap-3">
+        {options.map((o) => (
+          <label key={o.departmentId} className="flex items-center gap-1.5 text-sm">
+            <Checkbox checked={pick.has(o.departmentId)} onCheckedChange={(v) => setPick((p) => { const n = new Set(p); if (v === true) n.add(o.departmentId); else n.delete(o.departmentId); return n; })} />{o.name}
+          </label>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">A branch can&apos;t be switched while it has setters assigned for an open deadline or a paper waiting for approval.</p>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => void save()} loading={busy}>Save</Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+      </div>
     </div>
   );
 }

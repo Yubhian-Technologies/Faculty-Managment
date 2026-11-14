@@ -1,12 +1,13 @@
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { reviewingDepartment } from "./reviewer";
-import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
+import { ownerDepartmentNames, reviewDepartmentsOf, subjectReviewNamesLive } from "@/lib/subjects/ownerDepartment";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { cachedValue } from "@/lib/firestore/sharedReads";
 import type { Course, MidBankDeadline, MidBankRules, MidQuestion, MidQuestionBank, Section, Subject, SubjectOutcomes, SubjectSemesterAssignment, SubjectSyllabus, TeachingAssignment } from "@/types";
 import { syllabusAsOutcomes, syllabusSubjectOf } from "@/lib/subjects/syllabus";
 import { isDeadlineLocked } from "./deadline";
 import { isMidBankSubject, type TeachingRow } from "./sections";
+import { isAllBranches } from "./assignments";
 
 // Server side of the Mid Question Bank: collection refs, who teaches what for a
 // deadline, who may read / write a bank, and which Exam Cell rules apply.
@@ -152,9 +153,14 @@ export async function bankAccess(db: Db, session: Session, bankId: string): Prom
   const isIncluded = (bank.viewerFacultyIds ?? []).includes(facultyId);
   // The subject's department reviews it (a Maths bank for CSE goes to the Maths HOD); a subject with
   // none set keeps going to the branch's HOD. Only that HOD reads / decides it.
-  const owners = await ownerDepartmentNamesLive(db, session.collegeId, subject);
+  const names = await subjectReviewNamesLive(db, session.collegeId, subject);
+  const owners = ownerDepartmentNames(subject, names);
   // No Subject Department: the branch's HOD - for a paper of several branches (a group), any of their HODs.
-  const reviewDepartments = owners.length ? owners : bank.branches?.length ? bank.branches : [bank.branch];
+  // With one, its HOD - except in a branch that handles its own papers (ownBranchPapers), where that branch's HOD does.
+  const bankBranches = bank.branches?.length ? bank.branches : [bank.branch];
+  const reviewDepartments = !owners.length ? bankBranches
+    : isAllBranches(bank.branch) ? owners
+    : [...new Set(bankBranches.flatMap((b) => reviewDepartmentsOf(b, subject, names)))];
   let hodDepartment = "";
   if (session.role === "HOD") {
     const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);

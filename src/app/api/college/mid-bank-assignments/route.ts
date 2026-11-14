@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { reviewingDepartment } from "@/lib/midBank/reviewer";
 import { FieldValue } from "firebase-admin/firestore";
 import { checkSetShare, paperProgress, setNumbers } from "@/lib/midPapers/pattern";
 import { patternForSubject } from "@/lib/midPapers/server";
@@ -62,8 +63,19 @@ async function load(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBa
       const canAssign = !!scope && hodMayAssign(scope, depts, ownerDepartmentNames(subject, names).length > 0);
       items.push({ branch, depts, canAssign });
     }
-    // HOD: only subjects they review somewhere.
-    if (scope && !items.some((i) => i?.canAssign)) continue;
+    // The Subject Department's HOD (own department, never a 1st-year coordinator) chooses the branches that prepare
+    // and approve their own papers (Subject.ownBranchPapers) - offered among the branches the subject is taught in.
+    const owners = ownerDepartmentNames(subject, names);
+    const canSetOwnPapers = !!scope && owners.length > 0 && !!reviewingDepartment(scope, owners, true);
+    const idByName = new Map([...names].map(([id, n]) => [n, id] as const));
+    const ownIds = new Set((subject.ownBranchPapers ?? []).map((d) => d.id));
+    const ownPaperOptions = canSetOwnPapers
+      ? [...new Set([...branches.filter((b) => !owners.includes(b) && idByName.has(b)).map((b) => idByName.get(b)!), ...ownIds])]
+          .map((id) => ({ departmentId: id, name: names.get(id) || (subject.ownBranchPapers ?? []).find((d) => d.id === id)?.name || id, on: ownIds.has(id) }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      : [];
+    // HOD: only subjects they review somewhere (or whose own-paper branches they choose).
+    if (scope && !items.some((i) => i?.canAssign) && !canSetOwnPapers) continue;
     const view = (branch: string, depts: string[], canAssign: boolean) => {
       const a = assignments.find((x) => x.subjectId === subjectId && x.branch === branch) ?? null;
       const secs = sectionsForScope(rows, subjectId, branch);
@@ -92,6 +104,7 @@ async function load(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBa
     out.push({
       subjectId, subjectName: subject.name, subjectCode: subject.code, ownerDepartments: ownerDepartmentNames(subject, names),
       paperCount: paperCount.get(subjectId) ?? null,
+      ownPapers: canSetOwnPapers ? { options: ownPaperOptions } : null,
       branches: perBranch, groups,
       whole: w ? view(ALL_BRANCHES, w.depts, w.canAssign) : null,
     });

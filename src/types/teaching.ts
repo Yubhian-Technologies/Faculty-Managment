@@ -129,6 +129,13 @@ export interface Subject {
   // A single Subject Department saved before the list existed (read as a list of one; cleared on the next save).
   ownerDepartmentId?: string;
   ownerDepartmentName?: string;
+  // Branches that prepare and approve their OWN Mid question papers / banks for this subject although it has a
+  // Subject Department (e.g. AIML for C and Data Structures, looked after by CSE): in that branch the branch's own
+  // HOD assigns the setters, the setters come from that branch, and that HOD approves. The syllabus, CIE plan and
+  // every other branch stay with the Subject Department. Ignored while no Subject Department is set. Set by
+  // Academics / Principal / VP (SubjectMasterService.setOwnBranchPapers); `ownBranchPaperIds` mirrors the ids.
+  ownBranchPapers?: { id: string; name: string }[];
+  ownBranchPaperIds?: string[];
   // The subject's syllabus document (Academics / Principal / VP or the subject department's HOD).
   syllabusUrl?: string;
   syllabusFileName?: string;

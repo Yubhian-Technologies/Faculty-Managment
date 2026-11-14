@@ -4,6 +4,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { getInChunks } from "@/lib/firestore/inQuery";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { notify } from "@/lib/notify";
 import { SubjectCatalogValidator, type SubjectRowInput } from "../validation/SubjectValidator";
 import { customCategoriesFrom, resolveImportCategory } from "../importCategory";
 import { claimSubjectKeys, keyDocId, type SubjectKeyClaim, type SubjectKeyConflict } from "../subjectKeys";
@@ -11,6 +12,7 @@ import { normalizeSubjectCode, normalizeSubjectName } from "../subjectIdentity";
 import { planTeachingHoursSync, type HoursTarget } from "../hoursCascade";
 import { MASTER_IMPORT_MAX_ROWS } from "../limits";
 import { OWNER_DEPARTMENTS_MAX, ownerDepartmentRefs } from "../ownerDepartment";
+import { OWN_BRANCH_PAPERS_MAX, ownBranchPaperBlockers } from "../ownBranchPapers";
 import { RENAME_STEPS, renameJobsCol, type RenameJob } from "../rename";
 import type { Subject, SubjectSemesterAssignment } from "@/types";
 
@@ -610,6 +612,81 @@ export class SubjectMasterService {
       });
     }
     return { updated: changed.filter((x) => !same(x.before, x.next)).length };
+  }
+
+  /**
+   * Sets which branches prepare and approve their OWN Mid papers for one subject (`ownBranchPapers`), although it
+   * has a Subject Department: in those branches the branch's HOD assigns setters from the branch and approves.
+   * Needs a Subject Department; a Subject Department itself can't be listed. Refused (nothing written) while a
+   * branch being switched has setters assigned in an open deadline or a paper not yet approved.
+   */
+  async setOwnBranchPapers(p: { collegeId: string; subjectId: string; departmentIds: string[]; actor?: SubjectActor }): Promise<{ changed: boolean }> {
+    const college = this.college(p.collegeId);
+    const deptIds = [...new Set(p.departmentIds.map((x) => String(x ?? "").trim()).filter(Boolean))];
+    if (deptIds.length > OWN_BRANCH_PAPERS_MAX) throw new SubjectRequestError(`At most ${OWN_BRANCH_PAPERS_MAX} branches.`);
+    const ref = college.collection("subjects").doc(String(p.subjectId ?? ""));
+    const snap = p.subjectId ? await ref.get() : null;
+    if (!snap?.exists) throw new SubjectRequestError("Subject not found. It may have been deleted.", 404);
+    const cur = snap.data() as Subject;
+    const owners = ownerDepartmentRefs(cur);
+    if (!owners.length && deptIds.length) throw new SubjectRequestError("Set the Subject Department first. Without one, every branch already prepares and approves its own papers.");
+    if (deptIds.some((id) => owners.some((o) => o.id === id))) throw new SubjectRequestError("A Subject Department already approves its own branch's papers. Pick another branch.");
+
+    const deptSnaps = deptIds.length ? await this.db.getAll(...deptIds.map((id) => college.collection("departments").doc(id))) : [];
+    const next: { id: string; name: string }[] = [];
+    for (const d of deptSnaps) {
+      if (!d.exists) throw new SubjectRequestError("Department not found. It may have been deleted.", 404);
+      const name = String((d.data() as { name?: string }).name ?? "").trim();
+      if (!name) throw new SubjectRequestError("That department has no name.");
+      next.push({ id: d.id, name });
+    }
+    const before = (cur.ownBranchPapers ?? []).filter((d) => d?.id);
+    const switched = [
+      ...next.filter((d) => !before.some((b) => b.id === d.id)).map((d) => d.name),
+      ...before.filter((b) => !next.some((d) => d.id === b.id)).map((b) => b.name),
+    ];
+    const renamed = next.some((d) => before.some((b) => b.id === d.id && b.name !== d.name));
+    if (!switched.length && !renamed) return { changed: false };
+
+    if (switched.length) {
+      const [aSnap, bSnap] = await Promise.all([
+        college.collection("midBankAssignments").where("subjectId", "==", snap.id).get(),
+        college.collection("midQuestionBanks").where("subjectId", "==", snap.id).get(),
+      ]);
+      const assignments = aSnap.docs.map((d) => d.data() as { branch: string; branches?: string[]; facultyIds?: string[]; deadlineId: string });
+      const banks = bSnap.docs.map((d) => d.data() as { branch: string; branches?: string[]; deadlineId: string; withdrawn?: unknown; approval?: string });
+      const deadlineIds = [...new Set([...assignments, ...banks].map((x) => x.deadlineId).filter(Boolean))];
+      const dSnaps = deadlineIds.length ? await this.db.getAll(...deadlineIds.map((id) => college.collection("midBankDeadlines").doc(id))) : [];
+      const deadlines = new Map(dSnaps.filter((d) => d.exists).map((d) => [d.id, d.data() as { deadline: string; midNumber?: number }]));
+      const blockers = ownBranchPaperBlockers(switched, assignments, banks, deadlines);
+      if (blockers.length) throw new SubjectRequestError(`Unable to change ${cur.code}. ${blockers.join(" ")}`, 409);
+    }
+
+    await ref.update({
+      ...(next.length
+        ? { ownBranchPapers: next, ownBranchPaperIds: next.map((d) => d.id) }
+        : { ownBranchPapers: FieldValue.delete(), ownBranchPaperIds: FieldValue.delete() }),
+      updatedAt: new Date(),
+    });
+    if (switched.length) {
+      await writeAuditLogSafe(this.db, p.collegeId, {
+        action: "SUBJECT_OWN_BRANCH_PAPERS_CHANGED",
+        performedBy: p.actor?.uid ?? "unknown",
+        performedByName: p.actor?.name,
+        targetId: snap.id,
+        details: { code: cur.code, name: cur.name, regulation: cur.regulation, subjectDepartments: owners.map((o) => o.name), from: before.map((d) => d.name), to: next.map((d) => d.name) },
+      });
+      // Tell the HODs on both sides: the Subject Department(s) and every branch switched over or back.
+      const touched = [...owners.map((o) => o.id), ...next.map((d) => d.id), ...before.map((d) => d.id)];
+      const hodSnaps = await this.db.getAll(...[...new Set(touched)].map((id) => college.collection("departments").doc(id)));
+      const hodUids = [...new Set(hodSnaps.map((d) => String((d.data() as { hodUid?: string } | undefined)?.hodUid ?? "")).filter(Boolean))];
+      const now = next.map((d) => d.name);
+      const message = now.length
+        ? `${now.join(", ")} now prepare${now.length === 1 ? "s" : ""} and approve${now.length === 1 ? "s" : ""} their own Mid papers for ${cur.name} (${cur.code}); ${owners.map((o) => o.name).join(" / ")} looks after the other branches.`
+        : `${owners.map((o) => o.name).join(" / ")} again prepares and approves the Mid papers of every branch for ${cur.name} (${cur.code}).`;
+      await Promise.all(hodUids.map((uid) => notify(this.db, p.collegeId, uid, "SUBJECT_OWN_BRANCH_PAPERS_CHANGED", "Mid Paper Approval Changed", message)));
+    }
+    return { changed: true };
   }
 
   /** Saves (or removes, `file: null`) a subject's syllabus document. Nothing else on the subject changes. */

@@ -1,7 +1,7 @@
 import type { HodDepartmentScope } from "@/lib/departments/scope";
 import { reviewingDepartment } from "./reviewer";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
-import { ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
+import { ownBranchPaperNames, ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
 import { ALL_BRANCHES, branchesOf, isAllBranches, scopeBranches, sectionsForScope } from "./assignments";
 import { midBankRefs } from "./server";
 import { cachedValue } from "@/lib/firestore/sharedReads";
@@ -21,9 +21,16 @@ export async function loadAssignments(db: Db, collegeId: string, deadlineId: str
 }
 
 /** The departments whose HOD assigns (and reviews) a scope: the Subject Department(s), else the branch(es). */
-export function reviewDepartmentsForScope(rows: TeachingRow[], subject: Pick<Subject, "ownerDepartments" | "ownerDepartmentId" | "ownerDepartmentName">, branch: string, names: ReadonlyMap<string, string>): string[] {
+export function reviewDepartmentsForScope(rows: TeachingRow[], subject: Pick<Subject, "ownerDepartments" | "ownerDepartmentId" | "ownerDepartmentName" | "ownBranchPapers">, branch: string, names: ReadonlyMap<string, string>): string[] {
   const owners = ownerDepartmentNames(subject, names);
-  if (owners.length) return owners;
+  if (owners.length) {
+    // A branch that handles its own papers (ownBranchPapers) can't share one paper for all branches with the rest:
+    // no whole-subject paper then (a group of the Subject Department's branches still can).
+    if (isAllBranches(branch)) return ownBranchPaperNames(subject, names).length ? [] : owners;
+    // One branch or a group: each branch's reviewer - a group mixing an own-paper branch with the others has two
+    // HODs, and the assign route lets only an HOD who may assign EVERY branch in it create it, so nobody can.
+    return [...new Set((scopeBranches(branch) ?? []).flatMap((b) => reviewDepartmentsOf(b, subject, names)))];
+  }
   // No Subject Department: a whole-subject paper has no single HOD - only per branch then; a group of branches is
   // reviewed by its branches' HODs.
   if (isAllBranches(branch)) return [];
