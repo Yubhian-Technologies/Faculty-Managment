@@ -15,7 +15,7 @@ import { SUBJECT_TYPE_LABELS } from "@/types";
 import type { Subject, SubjectCategory, SubjectType } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
 import { downloadCSV, toCSV } from "@/lib/utils/csv";
-import { ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
+import { ownBranchPaperNames, ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
 
 const PAGE_SIZE = 20;
 const SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
@@ -78,6 +78,8 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
       .catch(() => setDepartments([]));
   }, []);
   const deptName = (s: Subject) => ownerDepartmentNames(s, new Map(departments.map((d) => [d.id, d.name]))).join(", ");
+  const ownPaperNames = (s: Subject) => ownBranchPaperNames(s, new Map(departments.map((d) => [d.id, d.name])));
+
 
   async function setOwnerDepartment() {
     if (selected.size === 0 || !bulkDept) return;
@@ -334,7 +336,12 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                       <td className="py-1.5 pr-3 tabular-nums whitespace-nowrap">{s.lectureHours}-{s.tutorialHours}-{s.practicalHours}</td>
                       <td className="py-1.5 pr-3 tabular-nums">{s.credits}</td>
                       <td className="py-1.5 pr-3">{s.regulation ?? "-"}</td>
-                      <td className="py-1.5 pr-3">{deptName(s) || <span className="text-xs text-muted-foreground">Each branch</span>}</td>
+                      <td className="py-1.5 pr-3">
+                        {deptName(s) || <span className="text-xs text-muted-foreground">Each branch</span>}
+                        {deptName(s) && ownPaperNames(s).length > 0 && (
+                          <p className="text-xs text-muted-foreground" title="Chosen by the Subject Department's HOD: these branches prepare and approve their own Mid papers.">Own Mid papers: {ownPaperNames(s).join(", ")}</p>
+                        )}
+                      </td>
                       <td className="py-1.5 pr-3 whitespace-nowrap">
                         {s.syllabusUrl && (
                           <>

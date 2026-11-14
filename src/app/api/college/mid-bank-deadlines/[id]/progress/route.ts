@@ -58,7 +58,9 @@ export async function GET(_request: Request, { params }: Params) {
     const bySubjectDept = (subjectId: string) => ownerDepartmentNames(subjects.get(subjectId), deptNames).length > 0;
     const reviews = (branch: string, subjectId: string) => !scope || !!reviewingDepartment(scope, reviewOf(branch, subjectId), bySubjectDept(subjectId));
     // The branch's own HOD keeps the progress of every subject there; a 1st-year coordinator only their own subjects.
-    const visible = (branch: string, subjectId: string) => !scope || seesBranchProgress(scope, branch, bySubjectDept(subjectId)) || reviews(branch, subjectId);
+    // The Subject Department's HOD also follows a branch that handles its own papers (ownBranchPapers) - read only.
+    const subjectDeptHod = (subjectId: string) => !!scope && bySubjectDept(subjectId) && !!reviewingDepartment(scope, ownerDepartmentNames(subjects.get(subjectId), deptNames), true);
+    const visible = (branch: string, subjectId: string) => !scope || seesBranchProgress(scope, branch, bySubjectDept(subjectId)) || reviews(branch, subjectId) || subjectDeptHod(subjectId);
     // A whole-subject paper (HOD-assigned) belongs to every branch it serves.
     const banks = allBanks.filter((b) => visible(b.branch, b.subjectId) || (b.branches ?? []).some((br) => visible(br, b.subjectId)));
     const hodMode = settings.midAssignment === "HOD";
