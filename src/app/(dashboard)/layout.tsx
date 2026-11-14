@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname, notFound } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav, hasBottomNav } from "@/components/layout/BottomNav";
@@ -41,11 +41,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // A login signed out everywhere (e.g. its college email was changed) is signed out here too, within about a minute.
   useSessionRevocationWatch(!!user);
 
+  // Signing in needs internet: with no connection, say so here instead of sending the person to a Login page
+  // that can't load (e.g. Mark Attendance reopened from the home screen in a classroom with no signal).
+  const [offline, setOffline] = useState(false);
   useEffect(() => {
-    if (!isLoading && !user) {
+    const update = () => setOffline(navigator.onLine === false);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
+  }, []);
+
+  useEffect(() => {
+    if (!isLoading && !user && !offline) {
       router.replace("/login");
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, router, offline]);
 
   // A College Admin lives under /college-admin. A link inside a shared Principal / R&D page (or an old
   // bookmark) that points at /principal/... or /r-and-d/... is moved to the same page there, so the menu
@@ -66,7 +77,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (!user) return null;
+  if (!user) {
+    if (!offline) return null;
+    return (
+      <div className="flex min-h-screen items-center justify-center p-6 text-center">
+        <div className="max-w-sm space-y-2">
+          <p className="text-lg font-semibold">No internet connection</p>
+          <p className="text-sm text-muted-foreground">You are signed out on this phone, and signing in needs internet. Connect once and sign in; after that Mark Attendance opens without a connection.</p>
+        </div>
+      </div>
+    );
+  }
 
   // Nav Visibility is keyed on the pages' own URLs, which a College Admin reaches under /college-admin.
   const pagePath = collegeAdmin ? fromCollegeAdminPath(pathname) : pathname;
