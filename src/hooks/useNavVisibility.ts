@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { usePathname } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 import { useMyAssignments } from "@/hooks/useMyAssignments";
 import { useOfficeAllowedHrefs } from "@/hooks/useOfficeAllowedHrefs";
@@ -56,8 +57,18 @@ export function useNavVisibility() {
         .then((r) => r.json() as Promise<{ hiddenModules?: PerRole; hiddenItems?: PerRole }>)
         .then((d) => ({ hiddenModules: d.hiddenModules ?? {}, hiddenItems: d.hiddenItems ?? {} })),
     enabled: !!user?.collegeId,
+    // A Super Admin's change reaches people who already have the app open: re-checked when they move to
+    // another page or come back to the tab, once the copy is 30 s old (it used to wait for a full reload).
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
   const loading = Boolean(user?.collegeId) && isLoading;
+  const pathname = usePathname();
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!user?.collegeId) return;
+    void queryClient.refetchQueries({ queryKey: ["nav-visibility", user.collegeId], stale: true });
+  }, [pathname, user?.collegeId, queryClient]);
 
   const wantsTimetable = !!primary && !!user?.collegeId && [primary, ...(seatRoles ?? [])].some((r) => MID_TIMETABLE_ROLES.includes(r));
   const { data: hasTimetable } = useQuery({
