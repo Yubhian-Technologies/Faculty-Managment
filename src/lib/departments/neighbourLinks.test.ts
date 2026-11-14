@@ -54,14 +54,11 @@ describe("Case 2 (VWU) - ghost's true children resolve the neighbour via the gho
   });
 });
 
-describe("Case 4 (VWU) - parent fed directly; its true child is NOT (real authorization gap confirmed against the code)", () => {
-  // CSE's own HOD already has unconditional full access to CSE[Cyber Security] via
-  // scope.ts's childDepartmentNames rollup (no year check) - BASIC SCIENCE - ENGLISH's
-  // managedDepartments only names "COMPUTER SCIENCE AND ENGINEERING", never the child
-  // directly, and CSE is not a ghost (parentRunsOwnSections:true) so the ghost-parent
-  // fallback doesn't apply to its child either. findBranchManager therefore correctly
-  // finds no manager for CSE[Cyber Security] - this matches canHodEditDepartmentYear's
-  // real behavior exactly (see managedBranches.ts), so neighbourLinks must agree.
+describe("Case 4 (VWU) - parent fed directly; its true child follows the parent's shared-year manager", () => {
+  // BASIC SCIENCE - ENGLISH's managedDepartments names only "COMPUTER SCIENCE AND ENGINEERING". Its true child
+  // CSE [CYBER SECURITY] follows its parent branch's 1st-year manager (decided 2026-11-14 with EVT, a sub of ECE
+  // under BASIC SCIENCE - CHEMISTRY): findBranchManager falls back to the parent's manager for any parent, not only
+  // a "no own sections" one. CSE's own HOD still reaches the child through the childDepartmentNames rollup.
   const cse = d({ id: "cse", name: "COMPUTER SCIENCE AND ENGINEERING", hasSubDepartments: true, parentRunsOwnSections: true });
   const cyber = d({ id: "cyber", name: "CSE [CYBER SECURITY]", parentDepartmentId: "cse" });
   const bsEnglish = d({ id: "bse", name: "BASIC SCIENCE - ENGLISH", assignedYears: [1], managedDepartments: ["COMPUTER SCIENCE AND ENGINEERING"] });
@@ -70,8 +67,12 @@ describe("Case 4 (VWU) - parent fed directly; its true child is NOT (real author
   it("CSE resolves BASIC SCIENCE - ENGLISH as its neighbour for year 1", () => {
     expect(resolveNeighbourLinks(cse, all)).toEqual([{ neighbourDepartmentId: "bse", neighbourDepartmentName: "BASIC SCIENCE - ENGLISH", years: [1] }]);
   });
-  it("CSE [CYBER SECURITY] (the true child) has NO neighbourLinks - its year 1 is CSE's own HOD's via child rollup, not the neighbour's", () => {
-    expect(resolveNeighbourLinks(cyber, all)).toEqual([]);
+  it("CSE [CYBER SECURITY] (the true child) follows CSE: BASIC SCIENCE - ENGLISH for year 1", () => {
+    expect(resolveNeighbourLinks(cyber, all)).toEqual([{ neighbourDepartmentId: "bse", neighbourDepartmentName: "BASIC SCIENCE - ENGLISH", years: [1] }]);
+  });
+  it("a child grouped by name under another department keeps that one", () => {
+    const bsMaths = d({ id: "bsm", name: "BASIC SCIENCE - MATHS", assignedYears: [1], managedDepartments: ["CSE [CYBER SECURITY]"] });
+    expect(resolveNeighbourLinks(cyber, [...all, bsMaths])).toEqual([{ neighbourDepartmentId: "bsm", neighbourDepartmentName: "BASIC SCIENCE - MATHS", years: [1] }]);
   });
 });
 
