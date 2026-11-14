@@ -37,6 +37,8 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      // The service worker (public/sw.js) must always be checked for a newer copy.
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }] },
       {
         source: "/:path*",
         headers: [

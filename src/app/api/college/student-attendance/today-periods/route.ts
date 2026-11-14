@@ -9,7 +9,10 @@ import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { getFacultyPeriodsForDate, UNAVAILABLE_MESSAGES } from "@/lib/timetable/currentPeriod";
 import { dateInRanges, getAllocatedPeriodsForDate, loadFacultyAllocations } from "@/lib/studentAttendance/labAllocation";
 import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
-import type { StudentAttendanceSession, TeachingAssignment } from "@/types";
+import { applyOnDutyToEntries, loadOnDutyDay } from "@/lib/studentAttendance/onDuty";
+import { fetchSectionStudentsCached } from "@/lib/students/sectionRosterCache";
+import { sortStudentsForList } from "@/lib/students/listOrder";
+import type { Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 // "Today" for attendance purposes is the college's calendar day (IST, Asia/Kolkata),
 // not the UTC day the deployment host happens to run in. `todayStrIST()` is the
@@ -153,6 +156,37 @@ export async function GET(request: Request) {
         };
       })
     );
+
+    // `?withRosters=1` (Mark Attendance, when it loads with internet): each of today's periods also
+    // carries its student list, so the phone keeps a copy and the faculty can mark the class with no internet later.
+    // Built the way opening a period builds it (the section's roster, the lab batch, today's on-duty students).
+    if (isToday && new URL(request.url).searchParams.get("withRosters") === "1") {
+      // Every period, opened or not: the same weekday next week falls back to this copy when it can't be loaded.
+      const needing = periods;
+      const sectionIds = [...new Set(needing.map((p) => assignMap.get(p.assignmentId)?.sectionId).filter((x): x is string => !!x))];
+      const [sectionSnaps, onDutyDay] = await Promise.all([
+        sectionIds.length ? db.getAll(...sectionIds.map((id) => collegeRef.collection("sections").doc(id))) : Promise.resolve([]),
+        loadOnDutyDay(db, session.collegeId, date),
+      ]);
+      const sections = new Map(sectionSnaps.filter((x) => x.exists).map((x) => [x.id, x.data() as Section]));
+      const rosters = await Promise.all(needing.map(async (p) => {
+        const a = assignMap.get(p.assignmentId);
+        if (!a) return null;
+        const sec = a.sectionId ? sections.get(a.sectionId) : null;
+        const where = sec
+          ? { department: sec.department, sectionName: sec.name, year: sec.year, courseId: sec.courseId, labBatch: p.labBatch ?? undefined }
+          : a.section?.trim() ? { department: a.department, sectionName: a.section.trim(), year: undefined, courseId: undefined, labBatch: p.labBatch ?? undefined } : null;
+        if (!where) return null;
+        const students = sortStudentsForList(await fetchSectionStudentsCached(collegeRef, where));
+        const entries: StudentAttendanceEntry[] = applyOnDutyToEntries(
+          students.map((st) => ({ studentId: st.id, rollNumber: st.rollNumber, name: st.name, status: null })), onDutyDay, p.periodNumber,
+        );
+        return { key: `${p.assignmentId}_${p.periodNumber}`, entries: entries.map((e) => ({ studentId: e.studentId, rollNumber: e.rollNumber, name: e.name, status: e.status === "ON_DUTY" ? "ON_DUTY" as const : null })) };
+      }));
+      const rosterBy = new Map(rosters.filter((r): r is NonNullable<typeof r> => !!r).map((r) => [r.key, r.entries]));
+      const withRosters = periods.map((p) => ({ ...p, roster: rosterBy.get(`${p.assignmentId}_${p.periodNumber}`) ?? null }));
+      return NextResponse.json({ date, periods: withRosters, allocations: allocationSummaries(allocations) });
+    }
 
     return NextResponse.json({ date, periods, allocations: allocationSummaries(allocations) });
   } catch (err) {

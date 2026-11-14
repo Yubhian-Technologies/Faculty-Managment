@@ -25,6 +25,17 @@ export function useAuth() {
         return;
       }
 
+      // No internet (e.g. Mark Attendance opened in a classroom with no signal): keep the person already signed in
+      // on this phone instead of signing them out because the server can't be reached. Only the SAME login that is
+      // stored here; everything else waits for the connection.
+      const keepOffline = (): boolean => {
+        const stored = useAuthStore.getState().user;
+        if (!stored || stored.uid !== firebaseUser.uid) return false;
+        setLoading(false);
+        return true;
+      };
+      if (typeof navigator !== "undefined" && navigator.onLine === false && keepOffline()) return;
+
       try {
         const token = await firebaseUser.getIdToken();
         setFirebaseToken(token);
@@ -227,8 +238,11 @@ export function useAuth() {
           await signOut(auth);
           logout();
         }
-      } catch {
-        logout();
+      } catch (err) {
+        // A network failure (offline, or the connection dropped mid-way) is not a reason to sign out.
+        const code = (err as { code?: string } | null)?.code;
+        const network = (typeof navigator !== "undefined" && navigator.onLine === false) || code === "auth/network-request-failed" || err instanceof TypeError;
+        if (!(network && keepOffline())) logout();
       } finally {
         setLoading(false);
       }

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
+import { offlineStamp, parseOfflineMark } from "@/lib/studentAttendance/offlineMark";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
@@ -27,6 +28,7 @@ export async function PATCH(
       classNotes?: string;
       submit?: boolean;
       expectedUpdatedAt?: string | null;
+      offline?: unknown;
     };
 
     const db = getAdminDb();
@@ -90,7 +92,17 @@ export async function PATCH(
     // An allocated lab session (an HOD/Incharge opened it for these dates, see
     // lib/studentAttendance/labAllocation.ts) is not bound to the period clock.
     let viaAllocation = false;
-    if (!windowCheck.ok) {
+    // Marked on the phone with no internet and synced later (Mark Attendance offline queue): a submit is accepted
+    // from the period's start until the end of that day, and the session is flagged `markedOffline`.
+    const offline = body.submit ? parseOfflineMark(body.offline) : null;
+    let viaOffline = false;
+    if (!windowCheck.ok && offline) {
+      const late = await checkFacultyPeriodWindow(
+        db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date, new Date(), existing.periodNumber, { untilEndOfDay: true }
+      );
+      viaOffline = late.ok;
+    }
+    if (!windowCheck.ok && !viaOffline) {
       const allocated = await checkAllocatedAccess(db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date, existing.periodNumber);
       if (!allocated.ok) {
         return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
@@ -164,6 +176,8 @@ export async function PATCH(
         }
         update.status = "SUBMITTED";
         update.submittedAt = now;
+        // Marked offline (the phone's queue): keep the phone's time beside when it arrived - shown to the HOD.
+        if (offline && !fresh.markedOffline) update.markedOffline = offlineStamp(offline, now);
       }
 
       tx.update(ref, update);

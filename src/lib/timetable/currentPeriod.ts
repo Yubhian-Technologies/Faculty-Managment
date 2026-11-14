@@ -313,6 +313,10 @@ export async function checkFacultyPeriodWindow(
   // taken over. Omit when there's no session yet (creating a fresh one just
   // wants whichever period is active right now).
   expectedPeriodNumber?: number,
+  // Offline-marked attendance (marked on the phone with no internet, synced later): postable from the period's
+  // start until the END of that day instead of the college's closing time - only for requests that say they were
+  // marked offline; the session is flagged `markedOffline` so the HOD sees it.
+  opts: { untilEndOfDay?: boolean } = {},
 ): Promise<PeriodWindowCheck> {
   const { date: collegeDate, day, minutes: nowMinutes } = collegeNow(now);
   if (dateISO !== collegeDate) {
@@ -372,7 +376,8 @@ export async function checkFacultyPeriodWindow(
   // the period running now, else the latest one already started.
   const candidates = expectedPeriodNumber != null ? resolved.filter((r) => r.slot.periodNumber === expectedPeriodNumber) : resolved;
   if (candidates.length === 0) return { ok: false, reason: "NOT_SCHEDULED" };
-  const open = candidates.filter((r) => nowMinutes >= toMinutes(r.startTime) && nowMinutes < toMinutes(r.closeTime));
+  const closeOf = (r: { closeTime: string }) => (opts.untilEndOfDay ? 24 * 60 : toMinutes(r.closeTime));
+  const open = candidates.filter((r) => nowMinutes >= toMinutes(r.startTime) && nowMinutes < closeOf(r));
   const active = open.find((r) => nowMinutes < toMinutes(r.endTime)) ?? open[open.length - 1];
   if (active) {
     return { ok: true, slot: active.slot, startTime: active.startTime, endTime: active.endTime };

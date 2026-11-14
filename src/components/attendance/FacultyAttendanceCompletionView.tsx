@@ -43,6 +43,8 @@ interface PeriodRow {
   subjectName: string;
   status: PeriodStatus;
   submittedAtDisplay: string | null;
+  /** Marked on the phone with no internet and sent later - the phone's time at Submit (ISO). */
+  markedOfflineAt?: string | null;
 }
 
 // Back-to-back periods of one class (same assignment, next period number) are one card.
@@ -376,7 +378,15 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
                           {STATUS_LABELS[p.status]}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{p.submittedAtDisplay ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {p.submittedAtDisplay ?? "—"}
+                        {p.markedOfflineAt && (
+                          <span className="ml-2 inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800"
+                            title="Marked on the faculty's phone with no internet and sent when the connection came back. The time is the phone's own clock.">
+                            Marked offline {new Date(p.markedOfflineAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

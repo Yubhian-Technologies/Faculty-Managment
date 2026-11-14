@@ -28,6 +28,15 @@ export interface QueuedSubmission {
   classNotes: string;
   expectedUpdatedAt?: string;
   queuedAt: string; // ISO - for "saved locally at HH:MM" display
+  // Marked on the phone with no internet: the phone's time at Submit. Sent as { offline: { markedAt } } so the
+  // server accepts it until the end of that day and flags it "Marked offline" for the HOD.
+  markedAt?: string;
+  // The period was opened from the saved day (no internet): it doesn't exist on the server yet, so the sync
+  // creates it first (POST), then submits.
+  isNew?: boolean;
+  // The server refused it for a reason a retry can't fix by itself (e.g. a new student to mark). Kept - never
+  // silently dropped - and shown on the page until it goes through or the faculty discards it.
+  lastError?: string;
 }
 
 function readQueue(): QueuedSubmission[] {
@@ -72,7 +81,7 @@ function removeFromQueue(queueId: string): void {
 export type SyncOutcome =
   | { sessionId: string; result: "synced" }
   | { sessionId: string; result: "conflict"; error: string }
-  | { sessionId: string; result: "rejected"; error: string }
+  | { sessionId: string; result: "rejected"; error: string; repeat?: boolean }
   | { sessionId: string; result: "still-offline" }
   // Transient server answer (5xx, 408, 429, 401): the marks stay queued for the next attempt.
   | { sessionId: string; result: "retry"; status: number };
@@ -86,36 +95,64 @@ const isTransientStatus = (status: number) => status >= 500 || status === 408 ||
 // queue against a connection that's still down, and every remaining item
 // stays queued for the next retry. A real server response (even an error
 // one) means we DO have connectivity, so that item is resolved one way or
-// the other and the sweep continues: 409 (someone else updated this session
-// while offline) or any other rejection can never succeed by blind retry,
-// so both are removed from the queue rather than retried forever.
+// the other and the sweep continues: 409 (someone else updated / submitted
+// this session meanwhile) is removed; any other refusal is KEPT with its reason
+// (`lastError`) - the faculty's only copy is never silently dropped - and shown
+// on the page until it goes through or they discard it.
 export async function trySyncQueue(): Promise<SyncOutcome[]> {
   const outcomes: SyncOutcome[] = [];
   for (const item of readQueue()) {
     try {
-      const res = await fetch(`/api/college/student-attendance/${item.sessionId}`, {
+      const offline = item.markedAt ? { markedAt: item.markedAt } : undefined;
+      let sessionId = item.sessionId;
+      if (item.isNew) {
+        // Opened from the saved day: create the period's attendance on the server first (same day only).
+        const created = await fetch("/api/college/student-attendance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assignmentId: item.assignmentId, date: item.date, periodNumber: item.periodNumber, offline }),
+        });
+        const cj = (await created.json().catch(() => ({}))) as { error?: string; session?: { id?: string } };
+        if (!created.ok || !cj.session?.id) {
+          if (isTransientStatus(created.status)) {
+            outcomes.push({ sessionId, result: "retry", status: created.status });
+            break;
+          }
+          const error = cj.error ?? "Unable to open this period on the server";
+          const fresh = setItemError(item.queueId, error);
+          outcomes.push({ sessionId, result: "rejected", error, ...(fresh ? {} : { repeat: true }) });
+          continue;
+        }
+        sessionId = cj.session.id;
+        markCreated(item.queueId, sessionId);
+      }
+      const res = await fetch(`/api/college/student-attendance/${sessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           entries: item.entries,
           classNotes: item.classNotes,
           submit: true,
-          expectedUpdatedAt: item.expectedUpdatedAt,
+          expectedUpdatedAt: item.isNew ? undefined : item.expectedUpdatedAt,
+          offline,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (res.ok) {
         removeFromQueue(item.queueId);
-        outcomes.push({ sessionId: item.sessionId, result: "synced" });
+        outcomes.push({ sessionId, result: "synced" });
       } else if (isTransientStatus(res.status)) {
-        outcomes.push({ sessionId: item.sessionId, result: "retry", status: res.status });
+        outcomes.push({ sessionId, result: "retry", status: res.status });
         break;
       } else if (res.status === 409) {
         removeFromQueue(item.queueId);
-        outcomes.push({ sessionId: item.sessionId, result: "conflict", error: json.error ?? "Updated elsewhere" });
+        outcomes.push({ sessionId, result: "conflict", error: json.error ?? "Updated elsewhere" });
       } else {
-        removeFromQueue(item.queueId);
-        outcomes.push({ sessionId: item.sessionId, result: "rejected", error: json.error ?? "Submission was rejected" });
+        // Kept on the device with the reason (e.g. a student added since the list was saved): opening the period
+        // online shows these marks, and the faculty completes and submits it there.
+        const error = json.error ?? "Submission was rejected";
+        const fresh = setItemError(item.queueId, error);
+        outcomes.push({ sessionId, result: "rejected", error, ...(fresh ? {} : { repeat: true }) });
       }
     } catch {
       outcomes.push({ sessionId: item.sessionId, result: "still-offline" });
@@ -123,4 +160,30 @@ export async function trySyncQueue(): Promise<SyncOutcome[]> {
     }
   }
   return outcomes;
+}
+
+/** Records why the server refused an item; false when it is the same reason as last time (no repeat message). */
+function setItemError(queueId: string, error: string): boolean {
+  const q = readQueue();
+  const item = q.find((x) => x.queueId === queueId);
+  if (!item) return false;
+  const fresh = item.lastError !== error;
+  item.lastError = error;
+  writeQueue(q);
+  return fresh;
+}
+
+/** A period created on the server from the saved day: later syncs only submit it. */
+function markCreated(queueId: string, sessionId: string): void {
+  const q = readQueue();
+  const item = q.find((x) => x.queueId === queueId);
+  if (!item) return;
+  item.isNew = false;
+  item.sessionId = sessionId;
+  writeQueue(q);
+}
+
+/** The faculty chose to drop a saved submission the server keeps refusing. */
+export function discardQueued(queueId: string): void {
+  removeFromQueue(queueId);
 }

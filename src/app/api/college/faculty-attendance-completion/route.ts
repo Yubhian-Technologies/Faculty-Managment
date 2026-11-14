@@ -225,6 +225,8 @@ export async function GET(request: Request) {
           subjectName: p.slot.subjectName,
           status,
           submittedAtDisplay: formatISTTime(attendanceSession?.submittedAt),
+          // Marked on the faculty's phone with no internet and sent later: the phone's time at Submit.
+          markedOfflineAt: attendanceSession?.markedOffline?.markedAt ?? null,
         };
       });
 
