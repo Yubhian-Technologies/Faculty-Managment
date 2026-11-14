@@ -354,26 +354,38 @@ async function scopeForDepartmentNames(db: FirebaseFirestore.Firestore, collegeI
     // they created (sections GET scopes its managed-branch query by these
     // names). Kept ADDITIVE - the parent itself stays in scope so any document
     // already filed under it before the flag was set is still reachable.
-    const noOwnSectionsParentIds: string[] = [];
+    // Every grouped branch with sub-departments brings them along for the shared year: a "no own sections" parent
+    // (AI -> AIML / AIDS) as before, and now any parent too (VWU: ECE -> EVT under BASIC SCIENCE - CHEMISTRY), since a
+    // sub-department follows its parent branch's shared-year manager (findBranchManager). A sub-department grouped
+    // by name under ANOTHER department belongs to that one and is left out. Year-level rights still go through
+    // canHodEditDepartmentYear / resolveBranchYearOwner, so its own HOD keeps the later years.
+    const parentIds: string[] = [];
     for (let i = 0; i < managedNames.length; i++) {
       const doc = managedSnaps[i].docs[0];
       if (!doc) continue;
       managedDepartmentNames.push(managedNames[i]);
       managedDepartmentIds.push(doc.id);
-      const d = doc.data() as { hasSubDepartments?: boolean; parentRunsOwnSections?: boolean };
-      if (d.hasSubDepartments && d.parentRunsOwnSections === false) noOwnSectionsParentIds.push(doc.id);
+      const d = doc.data() as { hasSubDepartments?: boolean };
+      if (d.hasSubDepartments) parentIds.push(doc.id);
     }
-    if (noOwnSectionsParentIds.length > 0) {
-      const childSnaps = await Promise.all(
-        noOwnSectionsParentIds.map((id) => deptsColl.where("parentDepartmentId", "==", id).get())
-      );
-      for (const snap of childSnaps) {
-        for (const c of snap.docs) {
-          const name = ((c.data() as { name?: string }).name ?? "").trim();
-          if (!name || managedDepartmentNames.includes(name)) continue;
-          managedDepartmentNames.push(name);
-          managedDepartmentIds.push(c.id);
+    if (parentIds.length > 0) {
+      const childSnaps = await Promise.all(parentIds.map((id) => deptsColl.where("parentDepartmentId", "==", id).get()));
+      const children = childSnaps.flatMap((snap) => snap.docs)
+        .map((c) => ({ id: c.id, name: ((c.data() as { name?: string }).name ?? "").trim() }))
+        .filter((c) => c.name && !managedDepartmentNames.includes(c.name));
+      const candidateNames = [...new Set(children.map((c) => c.name))].slice(0, 30);
+      const groupedElsewhere = new Set<string>();
+      if (candidateNames.length > 0) {
+        const groupers = await deptsColl.where("managedDepartments", "array-contains-any", candidateNames).get();
+        for (const g of groupers.docs) {
+          if (ownDepartmentIds.includes(g.id)) continue;
+          for (const n of (g.data() as { managedDepartments?: string[] }).managedDepartments ?? []) groupedElsewhere.add(n.trim());
         }
+      }
+      for (const c of children) {
+        if (groupedElsewhere.has(c.name) || managedDepartmentNames.includes(c.name)) continue;
+        managedDepartmentNames.push(c.name);
+        managedDepartmentIds.push(c.id);
       }
     }
   }

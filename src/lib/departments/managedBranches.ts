@@ -125,7 +125,12 @@ function findManagerViaNoOwnSectionsParent<T extends DepartmentYearRow>(
   departments: T[],
   branchName: string
 ): T | undefined {
-  const parentName = noOwnSectionsParentNameOf(departments, branchName);
+  // Any true sub-department follows its parent branch's shared-year manager when nothing groups it by name - not
+  // only the child of a "no own sections" parent. E.g. VWU's EVT (sub of ECE): ECE's 1st year is run by BASIC
+  // SCIENCE - CHEMISTRY, so EVT's 1st year is too (its own HOD keeps the later years).
+  const branch = departments.find((d) => d.name === branchName);
+  const parent = branch?.parentDepartmentId ? departments.find((d) => d.id === branch.parentDepartmentId) : undefined;
+  const parentName = parent?.name;
   if (!parentName) return undefined;
   return departments.find((d) => (d.managedDepartments ?? []).includes(parentName));
 }

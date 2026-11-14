@@ -53,6 +53,18 @@ function expandManaged(departments: Department[], managedNames: string[] | undef
   const names = new Set(
     (managedNames ?? []).flatMap((n) => expandDepartmentNameForRollup(departments as DepartmentWithId[], n))
   );
+  // Any managed branch's true sub-departments too (VWU: ECE brings EVT under BASIC SCIENCE - CHEMISTRY) - unless a
+  // sub-department is grouped by name under some department itself. Mirrors getHodDepartmentScope (scope.ts) and
+  // findBranchManager (managedBranches.ts), where a sub-department follows its parent's shared-year manager.
+  const groupedByName = new Set(departments.flatMap((d) => d.managedDepartments ?? []));
+  const withIds = departments as DepartmentWithId[];
+  for (const n of managedNames ?? []) {
+    const parent = withIds.find((d) => d.name === n);
+    if (!parent?.id) continue;
+    for (const c of withIds) {
+      if (c.parentDepartmentId === parent.id && c.name && (!groupedByName.has(c.name) || (managedNames ?? []).includes(c.name))) names.add(c.name);
+    }
+  }
   return departments.filter((d) => names.has(d.name));
 }
 
