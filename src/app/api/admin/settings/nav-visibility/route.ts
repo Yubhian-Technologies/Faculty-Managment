@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveNavVisibility } from "@/lib/navVisibilityDefaults";
+import { getNavItemsForRole, groupNavItemsByModule } from "@/components/layout/navConfig";
 import type { NavVisibilitySettings, UserRole } from "@/types";
 
 export async function GET(request: Request) {
@@ -59,6 +60,12 @@ export async function PUT(request: Request) {
       );
     }
 
+    // Keep only module names the role has today. A name from before a module was renamed (e.g. "Students &
+    // Attendance" -> "Students") still hides the renamed module (migrateHiddenModules), so if it stayed in the
+    // list, unticking the module would not stick: it came back ticked on the next load.
+    const currentModules = new Set(groupNavItemsByModule(getNavItemsForRole(role)).map((g) => g.name));
+    const keptModules = hiddenModules.map(String).filter((m) => currentModules.has(m));
+
     const db = getAdminDb();
     const now = new Date();
     const updatedByName = session.email || "Super Admin";
@@ -66,7 +73,7 @@ export async function PUT(request: Request) {
     const docRef = db.collection("colleges").doc(collegeId).collection("settings").doc("navVisibility");
     await docRef.set(
       {
-        hiddenModules: { [role]: hiddenModules },
+        hiddenModules: { [role]: keptModules },
         hiddenItems: { [role]: hiddenItems },
         updatedAt: now,
         updatedByName,
@@ -78,7 +85,7 @@ export async function PUT(request: Request) {
       action: "NAV_VISIBILITY_UPDATED",
       performedBy: session.uid,
       performedByName: updatedByName,
-      details: { collegeId, role, hiddenModules, hiddenItems },
+      details: { collegeId, role, hiddenModules: keptModules, hiddenItems },
       timestamp: now,
     });
 
