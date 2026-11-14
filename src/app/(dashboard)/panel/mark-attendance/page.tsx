@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { discardQueued, enqueueSubmission, getQueue, trySyncQueue, type QueuedSubmission } from "@/lib/attendance/offlineSubmitQueue";
 import { istMinutesNow, istToday, loadDay, saveDay } from "@/lib/attendance/offlineDayCache";
+import { keepPageForOffline } from "@/lib/attendance/offlinePage";
 import { useAuthStore } from "@/store/authStore";
 import { checkedMeaningFor, defaultFillFor, type AttendanceMode } from "@/lib/studentAttendance/markMode";
 import type { StudentAttendanceMark, StudentAttendanceSession } from "@/types";
@@ -295,6 +296,8 @@ export default function MarkAttendancePage() {
   }, []);
   // Showing the day saved on this device (no internet): when it was saved.
   const [savedDayAt, setSavedDayAt] = useState<string | null>(null);
+  // Today was never saved: the earlier date (same weekday) whose classes are shown.
+  const [savedFromDate, setSavedFromDate] = useState<string | null>(null);
   // Periods opened from the saved day this visit (not on the server yet).
   const offlineNewIds = useRef<Set<string>>(new Set());
   const [isSyncingQueue, setIsSyncingQueue] = useState(false);
@@ -322,6 +325,9 @@ export default function MarkAttendancePage() {
     }
   }, [refreshQueue]);
 
+  // With internet: keep a copy of this page on the phone so it opens with no internet later (public/sw.js).
+  useEffect(() => { void keepPageForOffline("/panel/mark-attendance"); }, []);
+
   useEffect(() => {
     const handler = () => void syncPendingSubmissions();
     window.addEventListener("online", handler);
@@ -341,6 +347,7 @@ export default function MarkAttendancePage() {
       setDateStr(json.date ?? todayStr());
       setAllocations(json.allocations ?? []);
       setSavedDayAt(null);
+      setSavedFromDate(null);
       const uid = useAuthStore.getState().user?.uid;
       if (!viewDateRef.current && uid && json.date) saveDay(uid, json.date, fetched);
       return fetched;
@@ -353,6 +360,7 @@ export default function MarkAttendancePage() {
         setPeriods(local);
         setDateStr(saved.date);
         setSavedDayAt(saved.savedAt);
+        setSavedFromDate(saved.fromDate ?? null);
         return local;
       }
       setPeriods([]);
@@ -782,7 +790,9 @@ export default function MarkAttendancePage() {
         <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
           <CloudOff className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            No internet connection. Showing today&apos;s classes saved on this device at {new Date(savedDayAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}.
+            {savedFromDate
+              ? <>No internet connection. Today&apos;s timetable could not be checked, so your classes from {formatDateDDMMYYYY(savedFromDate)} (same weekday) are shown. </>
+              : <>No internet connection. Showing today&apos;s classes saved on this device at {new Date(savedDayAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}. </>}
             You can mark attendance; it is saved here and submitted automatically when you are back online (today only).
           </span>
         </div>

@@ -157,11 +157,12 @@ export async function GET(request: Request) {
       })
     );
 
-    // `?withRosters=1` (Mark Attendance, when it loads with internet): each of today's periods not yet opened also
+    // `?withRosters=1` (Mark Attendance, when it loads with internet): each of today's periods also
     // carries its student list, so the phone keeps a copy and the faculty can mark the class with no internet later.
     // Built the way opening a period builds it (the section's roster, the lab batch, today's on-duty students).
     if (isToday && new URL(request.url).searchParams.get("withRosters") === "1") {
-      const needing = periods.filter((p) => !p.session);
+      // Every period, opened or not: the same weekday next week falls back to this copy when it can't be loaded.
+      const needing = periods;
       const sectionIds = [...new Set(needing.map((p) => assignMap.get(p.assignmentId)?.sectionId).filter((x): x is string => !!x))];
       const [sectionSnaps, onDutyDay] = await Promise.all([
         sectionIds.length ? db.getAll(...sectionIds.map((id) => collegeRef.collection("sections").doc(id))) : Promise.resolve([]),
