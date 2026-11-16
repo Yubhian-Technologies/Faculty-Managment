@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
 import { dayLabel } from "@/lib/midTimetable/rules";
@@ -61,7 +62,7 @@ export function PaperChoices() {
     finally { setBusy(""); }
   }
 
-  async function choose(row: PaperChoiceRow, pick: { bankId: string; setNo: number } | "random") {
+  async function choose(row: PaperChoiceRow, pick: { bankId: string; setNo: number } | "random", quiet = false): Promise<boolean> {
     setBusy(`${row.subjectId}|${row.branch}`);
     try {
       const res = await fetch("/api/college/mid-paper-choices", {
@@ -70,28 +71,45 @@ export function PaperChoices() {
       });
       const json = (await res.json()) as { error?: string; choice?: PaperChoiceRow["choice"] };
       if (!res.ok) throw new Error(json.error ?? "Unable to save the choice");
-      setDay((d) => d && ({ ...d, rows: d.rows.map((r) => (r === row ? { ...r, choice: json.choice ?? null } : r)) }));
-      toast({ variant: "success", title: `Question paper ${json.choice?.setNo} of ${row.papers.find((p) => p.bankId === json.choice?.bankId)?.ownerName ?? ""} chosen` });
-    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); }
+      setDay((d) => d && ({ ...d, rows: d.rows.map((r) => (sameRow(r, row) ? { ...r, choice: json.choice ?? null } : r)) }));
+      if (!quiet) toast({ variant: "success", title: `Question paper ${json.choice?.setNo} of ${row.papers.find((p) => p.bankId === json.choice?.bankId)?.ownerName ?? ""} chosen.` });
+      return true;
+    } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to save" }); return false; }
     finally { setBusy(""); }
   }
 
-  const [printing, setPrinting] = useState<PaperChoiceRow | null>(null);
+  /** One paper for several branches of a subject (e.g. Paper 1 for EEE and ECE): saved for each branch. */
+  async function chooseFor(rows: PaperChoiceRow[], pick: { bankId: string; setNo: number }) {
+    let done = 0;
+    for (const r of rows) if (await choose(r, pick, true)) done++;
+    if (done) toast({ variant: "success", title: `Question paper ${pick.setNo} chosen for ${done} branch${done === 1 ? "" : "es"}.` });
+  }
 
-  /** Finalizes (or re-lays out) the chosen paper on the server, then builds the PDF from the frozen copy. */
-  async function print(row: PaperChoiceRow, layout: PaperPrintLayout, answerKey: boolean) {
-    if (!row.choice || !day) return;
-    setBusy(`dl|${row.subjectId}|${row.branch}|${answerKey}`);
+  // The branches being printed together (they share the chosen paper).
+  const [printing, setPrinting] = useState<PaperChoiceRow[] | null>(null);
+
+  /** Finalizes the chosen paper for every branch of the group on the server, then builds ONE PDF whose header names
+   *  just those branches (e.g. "EEE, ECE") from the frozen copy. */
+  async function print(rows: PaperChoiceRow[], layout: PaperPrintLayout, answerKey: boolean) {
+    if (!day || rows.length === 0 || rows.some((r) => !r.choice)) return;
+    setBusy(`dl|${groupKey(rows)}|${answerKey}`);
     try {
-      const res = await fetch("/api/college/mid-paper-choices", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "finalize", planId, date, subjectId: row.subjectId, branch: row.branch, layout }),
-      });
-      const json = (await res.json()) as { final?: MidPaperFinal; error?: string };
-      if (!res.ok || !json.final) throw new Error(json.error ?? "Unable to finalize the paper");
-      const f = json.final;
-      setDay((d) => d && ({ ...d, rows: d.rows.map((r) => (r === row ? { ...r, choice: r.choice && { ...r.choice, final: { at: f.at, byName: f.byName, layout: f.layout } } } : r)) }));
-      await downloadMidPaperFinalPdf(f, { answerKey, fileName: `MID${f.exam.midNumber}_${f.exam.date}_${row.branchCode}_${f.subject.code}${answerKey ? "_answer-key" : ""}${f.layout.separateParts ? "_parts" : ""}` });
+      const finals: MidPaperFinal[] = [];
+      for (const row of rows) {
+        const res = await fetch("/api/college/mid-paper-choices", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "finalize", planId, date, subjectId: row.subjectId, branch: row.branch, layout }),
+        });
+        const json = (await res.json()) as { final?: MidPaperFinal; error?: string };
+        if (!res.ok || !json.final) throw new Error(`${row.branch}: ${json.error ?? "Unable to finalize the paper"}`);
+        const f = json.final;
+        finals.push(f);
+        setDay((d) => d && ({ ...d, rows: d.rows.map((r) => (sameRow(r, row) ? { ...r, choice: r.choice && { ...r.choice, final: { at: f.at, byName: f.byName, layout: f.layout } } } : r)) }));
+      }
+      const f = finals[0];
+      const codes = rows.map((r) => r.branchCode);
+      const printed = rows.length === 1 ? f : { ...f, branchCode: codes.join(", "), sections: [] };
+      await downloadMidPaperFinalPdf(printed, { answerKey, fileName: `MID${f.exam.midNumber}_${f.exam.date}_${codes.join("-")}_${f.subject.code}${answerKey ? "_answer-key" : ""}${f.layout.separateParts ? "_parts" : ""}` });
       setPrinting(null);
     } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to make the PDF" }); }
     finally { setBusy(""); }
@@ -104,7 +122,7 @@ export function PaperChoices() {
       const res = await fetch(`/api/college/mid-paper-choices?${new URLSearchParams({ planId, date, subjectId: row.subjectId, branch: row.branch })}`, { method: "DELETE" });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Unable to un-finalize");
-      setDay((d) => d && ({ ...d, rows: d.rows.map((r) => (r === row ? { ...r, choice: r.choice && { ...r.choice, final: null } } : r)) }));
+      setDay((d) => d && ({ ...d, rows: d.rows.map((r) => (sameRow(r, row) ? { ...r, choice: r.choice && { ...r.choice, final: null } } : r)) }));
       toast({ variant: "success", title: "Un-finalized - you can choose another paper" });
     } catch (e) { toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to un-finalize" }); }
     finally { setBusy(""); }
@@ -129,56 +147,19 @@ export function PaperChoices() {
       </CardContent></Card>
 
       {busy === "load" && <div className="h-40 animate-pulse rounded-lg bg-muted" />}
-      {day && day.rows.map((row) => {
-        const key = `${row.subjectId}|${row.branch}`;
-        return (
-          <Card key={key} className="rounded-2xl"><CardContent className="space-y-3 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div><p className="font-semibold">{row.subjectName} <span className="text-sm text-muted-foreground">({row.subjectCode})</span></p><p className="text-xs text-muted-foreground">{row.branch}</p></div>
-              {row.choice && (
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => setPrinting(row)}><Printer className="mr-1.5 h-4 w-4" />{row.choice.final ? "Print again" : "Print & finalize"}</Button>
-                  {row.choice.final && <Button size="sm" variant="outline" onClick={() => void print(row, row.choice!.final!.layout, true)} loading={busy === `dl|${key}|true`}><KeyRound className="mr-1.5 h-4 w-4" />Answer key</Button>}
-                  {row.choice.final && <Button size="sm" variant="ghost" onClick={() => void unfinalize(row)} loading={busy === `un|${key}`}><Unlock className="mr-1.5 h-4 w-4" />Un-finalize</Button>}
-                </div>
-              )}
-            </div>
-            {row.papers.length === 0 ? (
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                No approved question paper yet.{row.pending.length ? ` ${row.pending.map((p) => `${p.ownerName}: ${p.stage}`).join("; ")}.` : " Nobody has started one."}
-              </p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                {row.papers.map((p) => {
-                  const on = row.choice?.bankId === p.bankId && row.choice.setNo === p.setNo;
-                  return (
-                    <button key={`${p.bankId}|${p.setNo}`} type="button" disabled={busy === key || !!row.choice?.final} onClick={() => void choose(row, { bankId: p.bankId, setNo: p.setNo })}
-                      className={`rounded-lg border px-3 py-1.5 text-left text-sm ${on ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:border-primary/50"}`}>
-                      <span className="font-medium">{p.ownerName} · Paper {p.setNo}</span>
-                      <span className="block text-[11px] opacity-80">Sections {p.sections.join(", ")}</span>
-                    </button>
-                  );
-                })}
-                <Button size="sm" variant="outline" disabled={busy === key || !!row.choice?.final} onClick={() => void choose(row, "random")}><Shuffle className="mr-1.5 h-4 w-4" />Pick at random</Button>
-              </div>
-            )}
-            {row.choice?.final && (
-              <p className="flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-1.5 text-xs text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-                <Lock className="h-3.5 w-3.5" />Finalized by {row.choice.final.byName || "the Exam Cell"} · {new Date(row.choice.final.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })} · {row.choice.final.layout.separateParts ? "each part on its own page" : "all parts on one paper"}. Marks are entered against this paper.
-              </p>
-            )}
-            {row.choice && <p className="text-xs text-muted-foreground">Chosen by {row.choice.chosenByName || "the Exam Cell"}{row.choice.at ? ` · ${new Date(row.choice.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}` : ""}</p>}
-            {row.pending.length > 0 && row.papers.length > 0 && <p className="text-xs text-muted-foreground">Not approved yet: {row.pending.map((p) => `${p.ownerName} (${p.stage})`).join(", ")}</p>}
-          </CardContent></Card>
-        );
-      })}
-      {printing && <PrintDialog row={printing} busy={busy.startsWith("dl|")} onClose={() => setPrinting(null)} onPrint={(layout) => void print(printing, layout, false)} />}
+      {day && subjectsOf(day.rows).map((rows) => (
+        <SubjectCard key={rows[0].subjectId} rows={rows} busy={busy}
+          onChoose={(r, pick) => void choose(r, pick)} onChooseFor={(rs, pick) => void chooseFor(rs, pick)}
+          onPrint={(rs) => setPrinting(rs)} onAnswerKey={(rs) => void print(rs, rs[0].choice!.final!.layout, true)} onUnfinalize={(r) => void unfinalize(r)} />
+      ))}
+      {printing && <PrintDialog rows={printing} busy={busy.startsWith("dl|")} onClose={() => setPrinting(null)} onPrint={(layout) => void print(printing, layout, false)} />}
     </div>
   );
 }
 
 /** Print options, chosen at print time: one paper, or each part on its own page(s) with its own time and max marks. */
-function PrintDialog({ row, busy, onClose, onPrint }: { row: PaperChoiceRow; busy: boolean; onClose: () => void; onPrint: (layout: PaperPrintLayout) => void }) {
+function PrintDialog({ rows, busy, onClose, onPrint }: { rows: PaperChoiceRow[]; busy: boolean; onClose: () => void; onPrint: (layout: PaperPrintLayout) => void }) {
+  const row = rows[0];
   const was = row.choice?.final?.layout;
   const [separate, setSeparate] = useState(!!was?.separateParts);
   const [parts, setParts] = useState(() => row.parts.map((p) => {
@@ -190,9 +171,9 @@ function PrintDialog({ row, busy, onClose, onPrint }: { row: PaperChoiceRow; bus
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Print {row.subjectName} ({row.branchCode})</DialogTitle>
+          <DialogTitle>Print {row.subjectName} ({rows.map((r) => r.branchCode).join(", ")})</DialogTitle>
           <DialogDescription>
-            {row.choice?.final ? "Reprints the finalized paper - the questions stay exactly as finalized." : "Printing finalizes this paper: it is saved as printed, marks are entered against it, and the choice is locked."}
+            {rows.every((r) => r.choice?.final) ? "Reprints the finalized paper - the questions stay exactly as finalized." : `Printing finalizes this paper for ${rows.length === 1 ? "this branch" : `these ${rows.length} branches`}: it is saved as printed, marks are entered against it, and the choice is locked. One paper is printed, naming only these branches.`}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm">
@@ -222,5 +203,171 @@ function PrintDialog({ row, busy, onClose, onPrint }: { row: PaperChoiceRow; bus
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Used only from a click handler (a random pick), never while drawing.
+const randomIndex = (n: number) => Math.floor(Math.random() * n);
+const sameRow = (a: PaperChoiceRow, b: PaperChoiceRow) => a.subjectId === b.subjectId && a.branch === b.branch;
+const paperKey = (p: { bankId: string; setNo: number }) => `${p.bankId}|${p.setNo}`;
+const groupKey = (rows: PaperChoiceRow[]) => `${rows[0]?.subjectId}|${rows.map((r) => r.branch).join("+")}`;
+
+/** The day's rows (one per subject + branch) grouped by subject, in subject order. */
+function subjectsOf(rows: PaperChoiceRow[]): PaperChoiceRow[][] {
+  const by = new Map<string, PaperChoiceRow[]>();
+  for (const r of [...rows].sort((a, b) => a.subjectName.localeCompare(b.subjectName) || a.branch.localeCompare(b.branch))) {
+    by.set(r.subjectId, [...(by.get(r.subjectId) ?? []), r]);
+  }
+  return [...by.values()];
+}
+
+/**
+ * One subject of the exam day. Papers prepared for it are listed with the branches each can serve (a paper made for
+ * one branch serves only that branch; a paper for several or all branches serves each of them). The Exam Cell gives a
+ * paper to a set of branches (e.g. Paper 1 for EEE and ECE, Paper 2 for CSE) or picks at random for them; then each
+ * group of branches sharing a paper is printed once, its header naming just those branches. Each branch keeps its own
+ * choice (marks are entered per branch).
+ */
+function SubjectCard({ rows, busy, onChoose, onChooseFor, onPrint, onAnswerKey, onUnfinalize }: {
+  rows: PaperChoiceRow[]; busy: string;
+  onChoose: (row: PaperChoiceRow, pick: { bankId: string; setNo: number } | "random") => void;
+  onChooseFor: (rows: PaperChoiceRow[], pick: { bankId: string; setNo: number }) => void;
+  onPrint: (rows: PaperChoiceRow[]) => void;
+  onAnswerKey: (rows: PaperChoiceRow[]) => void;
+  onUnfinalize: (row: PaperChoiceRow) => void;
+}) {
+  const head = rows[0];
+  // Every approved paper of the subject, with the branches it can serve.
+  const papers = useMemo(() => {
+    const m = new Map<string, { bankId: string; setNo: number; ownerName: string; branches: PaperChoiceRow[] }>();
+    for (const r of rows) for (const p of r.papers) {
+      const k = paperKey(p);
+      const cur = m.get(k) ?? { bankId: p.bankId, setNo: p.setNo, ownerName: p.ownerName, branches: [] };
+      cur.branches.push(r);
+      m.set(k, cur);
+    }
+    return [...m.values()].sort((a, b) => a.ownerName.localeCompare(b.ownerName) || a.setNo - b.setNo);
+  }, [rows]);
+  const [paper, setPaper] = useState("");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const selected = rows.filter((r) => picked.has(r.branch) && !r.choice?.final);
+  const chosenPaper = papers.find((p) => paperKey(p) === paper);
+  // A paper can only go to branches it was prepared for.
+  const unservable = chosenPaper ? selected.filter((r) => !chosenPaper.branches.some((b) => sameRow(b, r))) : [];
+  // Papers that every selected branch can take (for "Pick at random").
+  const common = papers.filter((p) => selected.length > 0 && selected.every((r) => p.branches.some((b) => sameRow(b, r))));
+  const working = busy.startsWith(`${head.subjectId}|`);
+  // One paper picked at random among those prepared for every ticked branch, given to all of them.
+  function pickRandom() {
+    const p = common[randomIndex(common.length)];
+    if (!p) return;
+    onChooseFor(selected, { bankId: p.bankId, setNo: p.setNo });
+    setPicked(new Set());
+  }
+
+  // Branches sharing the same chosen paper print together.
+  const groups = useMemo(() => {
+    const m = new Map<string, PaperChoiceRow[]>();
+    for (const r of rows) if (r.choice) m.set(paperKey(r.choice), [...(m.get(paperKey(r.choice)) ?? []), r]);
+    return [...m.entries()].map(([k, rs]) => ({ key: k, rows: rs, paper: papers.find((p) => paperKey(p) === k) }));
+  }, [rows, papers]);
+
+  return (
+    <Card className="rounded-2xl"><CardContent className="space-y-4 p-5">
+      <div>
+        <p className="font-semibold">{head.subjectName} <span className="text-sm text-muted-foreground">({head.subjectCode})</span></p>
+        <p className="text-xs text-muted-foreground">{rows.length} branch{rows.length === 1 ? "" : "es"}: {rows.map((r) => r.branchCode).join(", ")}</p>
+      </div>
+
+      {papers.length === 0 ? (
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          No approved question paper yet.{rows.some((r) => r.pending.length) ? ` ${[...new Set(rows.flatMap((r) => r.pending.map((p) => `${p.ownerName}: ${p.stage}`)))].join("; ")}.` : " Nobody has started one."}
+        </p>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Papers prepared</p>
+            <ul className="space-y-1 text-sm">
+              {papers.map((p) => (
+                <li key={paperKey(p)}><span className="font-medium">{p.ownerName} · Paper {p.setNo}</span>
+                  <span className="text-xs text-muted-foreground"> - for {p.branches.length === rows.length && rows.length > 1 ? "all branches" : p.branches.map((b) => b.branchCode).join(", ")}</span></li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="space-y-2 rounded-lg border border-dashed p-3">
+            <p className="text-sm font-medium">Give a paper to branches</p>
+            <div className="flex flex-wrap gap-3">
+              {rows.map((r) => (
+                <label key={r.branch} className={`flex items-center gap-1.5 text-sm ${r.choice?.final ? "opacity-50" : ""}`} title={r.choice?.final ? "Finalized - un-finalize it to change" : r.branch}>
+                  <Checkbox checked={picked.has(r.branch)} disabled={!!r.choice?.final} onCheckedChange={(v) => setPicked((s) => { const n = new Set(s); if (v === true) n.add(r.branch); else n.delete(r.branch); return n; })} />{r.branchCode}
+                </label>
+              ))}
+              {rows.length > 1 && (
+                <button type="button" className="text-xs text-primary hover:underline" onClick={() => setPicked(new Set(rows.filter((r) => !r.choice?.final).map((r) => r.branch)))}>All</button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select aria-label="Question paper" className={`${selectClass} w-auto min-w-64`} value={paper} onChange={(e) => setPaper(e.target.value)}>
+                <option value="">Choose a paper</option>
+                {papers.map((p) => <option key={paperKey(p)} value={paperKey(p)}>{p.ownerName} · Paper {p.setNo}</option>)}
+              </select>
+              <Button size="sm" disabled={working || !chosenPaper || selected.length === 0 || unservable.length > 0}
+                onClick={() => { onChooseFor(selected, { bankId: chosenPaper!.bankId, setNo: chosenPaper!.setNo }); setPicked(new Set()); }}>
+                Use for Selected Branches
+              </Button>
+              <Button size="sm" variant="outline" disabled={working || common.length === 0}
+                title={selected.length && !common.length ? "No single paper was prepared for all the ticked branches" : undefined}
+                onClick={pickRandom}>
+                <Shuffle className="mr-1.5 h-4 w-4" />Pick at Random
+              </Button>
+            </div>
+            {unservable.length > 0 && <p className="text-xs text-destructive">This paper was not prepared for {unservable.map((r) => r.branchCode).join(", ")}. Untick them or choose another paper.</p>}
+          </div>
+
+          <table className="w-full text-sm">
+            <thead><tr className="border-b text-left text-xs text-muted-foreground"><th className="py-1.5 pr-3">Branch</th><th className="py-1.5 pr-3">Paper</th><th className="py-1.5" /></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.branch} className="border-b last:border-0 align-top">
+                  <td className="py-2 pr-3"><span className="font-medium">{r.branchCode}</span><span className="block text-xs text-muted-foreground">{r.branch}</span></td>
+                  <td className="py-2 pr-3">
+                    {r.papers.length === 0 ? <span className="text-xs text-amber-700">No approved paper for this branch</span> : (
+                      <select aria-label={`Paper for ${r.branchCode}`} className={`${selectClass} w-auto min-w-56`} disabled={working || !!r.choice?.final}
+                        value={r.choice ? paperKey(r.choice) : ""} onChange={(e) => { const p = r.papers.find((x) => paperKey(x) === e.target.value); if (p) onChoose(r, { bankId: p.bankId, setNo: p.setNo }); }}>
+                        <option value="">Not chosen</option>
+                        {r.papers.map((p) => <option key={paperKey(p)} value={paperKey(p)}>{p.ownerName} · Paper {p.setNo}</option>)}
+                      </select>
+                    )}
+                    {r.choice?.final && <span className="mt-1 flex items-center gap-1 text-xs text-emerald-700"><Lock className="h-3 w-3" />Finalized {new Date(r.choice.final.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</span>}
+                  </td>
+                  <td className="py-2 text-right">
+                    {r.choice?.final && <Button size="sm" variant="ghost" onClick={() => onUnfinalize(r)} loading={busy === `un|${r.subjectId}|${r.branch}`}><Unlock className="mr-1.5 h-4 w-4" />Un-finalize</Button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {groups.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Print</p>
+              {groups.map((g) => {
+                const allFinal = g.rows.every((r) => r.choice?.final);
+                return (
+                  <div key={g.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2">
+                    <span className="text-sm"><b>{g.paper ? `${g.paper.ownerName} · Paper ${g.paper.setNo}` : "Chosen paper"}</b> for {g.rows.map((r) => r.branchCode).join(", ")}</span>
+                    <span className="flex flex-wrap gap-2">
+                      <Button size="sm" onClick={() => onPrint(g.rows)}><Printer className="mr-1.5 h-4 w-4" />{allFinal ? "Print Again" : "Print & Finalize"}</Button>
+                      {allFinal && <Button size="sm" variant="outline" onClick={() => onAnswerKey(g.rows)} loading={busy === `dl|${groupKey(g.rows)}|true`}><KeyRound className="mr-1.5 h-4 w-4" />Answer Key</Button>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </CardContent></Card>
   );
 }
