@@ -75,16 +75,20 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
   const classLine = `${ROMAN[d.exam.year] ?? d.exam.year} ${esc(shortCourse(d.exam.courseName))} ${ROMAN[semNo] ?? semNo}-SEM`;
   const sw = outcomeSwitches(d.outcomes);
   const extra = [sw.cos && "CO", sw.bloom && "BL", sw.poMapping && d.college.printPo === true && "PO"].filter(Boolean) as string[];
-  const cols = 3 + extra.length;
+  const cols = 3;
   const byId = new Map(d.questions.map((q) => [q.id, q]));
   const regCode = d.subject.regulation.match(/\d+/)?.[0] ?? d.subject.regulation;
   const text = (t: string, img?: string, cap?: string) => `${renderMathHtml(t, d.formula)}${img ? `<img class="qimg" src="${esc(img)}" alt="" />${cap ? `<div class="cap">${esc(cap)}</div>` : ""}` : ""}`;
-  const tags = (q?: MidPaperQuestion) => extra.map((x) => {
-    if (!q) return `<td class="num"></td>`;
-    if (x === "CO") return `<td class="num">${esc(q.cos.map((c) => c.replace(/^CO/, "")).join(", "))}</td>`;
-    if (x === "BL") return `<td class="num">${esc(String(q.bloom).replace(/^L/, ""))}</td>`;
-    return `<td class="po">${esc(derivePoPso(q.cos, d.mapping ?? {}).map((p) => p.replace(/^PO/, "")).join(", "))}</td>`;
-  }).join("");
+  // One cell per question at the right: "L3, CO1 [3M]" (Bloom's level, COs, the PO mapping when printed, marks) -
+  // no CO / BL / marks column headings.
+  const tagCell = (q: MidPaperQuestion | undefined, marks: string | number) => {
+    const bits: string[] = [];
+    if (q && sw.bloom && q.bloom) bits.push(esc(String(q.bloom)));
+    if (q && sw.cos && q.cos.length) bits.push(esc(q.cos.join(", ")));
+    if (q && extra.includes("PO")) { const po = derivePoPso(q.cos, d.mapping ?? {}); if (po.length) bits.push(esc(po.join(", "))); }
+    const m = marks === "" || marks == null ? "" : `[${marks}M]`;
+    return `<td class="tag">${[bits.join(", "), m].filter(Boolean).join(" ")}</td>`;
+  };
 
   let no = 0;
   const only = d.onlyPartId ? d.pattern.parts.find((p) => p.id === d.onlyPartId) : undefined;
@@ -93,7 +97,13 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
     // Another part when printing one part alone: only its numbers are counted, so this part's numbers stay the same
     // (a CEA paper is its own paper - numbered from 1).
     if (only && part.id !== only.id) { if (!only.cea) no += count; return ""; }
-    let rows = `<tr class="unit"><td colspan="2">${esc(part.label.toUpperCase())} - ${esc(part.title)}<br /><span style="font-weight:normal">${esc(choiceText(part, part.flexible ? count : undefined))}</span></td><td class="num colhead">${partMax(part)} M</td>${extra.map((x) => `<td class="${x === "PO" ? "po" : "num"} colhead">${x}</td>`).join("")}</tr>`;
+    // The part's heading only where it tells the student something: a paper of several parts (PART A / PART B), or a
+    // part with a choice ("Answer any 4"). No marks / CO / BL column headings - each question carries its own tags.
+    const several = !only && d.pattern.parts.filter((p) => (p.flexible ? d.questions.some((q) => q.set === d.set && q.partId === p.id) : p.questions > 0)).length > 1;
+    const choice = part.choice.kind !== "ALL";
+    let rows = several || choice
+      ? `<tr class="unit"><td colspan="${cols}">${several ? `${esc(part.label.toUpperCase())} - ${esc(part.title)} <span style="font-weight:normal">(${partMax(part)} Marks)</span>` : ""}${several && choice ? "<br />" : ""}${choice ? `<span style="font-weight:normal">${esc(choiceText(part, part.flexible ? count : undefined))}</span>` : ""}</td></tr>`
+      : "";
     for (let i = 1; i <= count; i++) {
       no++;
       const label = String(no);
@@ -107,32 +117,31 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
       if (u && u !== (i > 1 ? unitOfQuestion(part, d.units ?? [], i - 1) : undefined)) block = `<tr class="unit"><td colspan="${cols}">UNIT-${ROMAN[u] ?? u}</td></tr>` + block;
       if (d.answerKey) {
         const ans = !q ? "" : kind === "MCQ" ? `(${LETTERS[Number(q.answer)] ?? "?"}) ${esc(q.options?.[Number(q.answer)] ?? "")}` : kind === "FILL_BLANK" ? esc(q.answer ?? "") : "<i>Descriptive</i>";
-        rows += `<tr><td class="no">${label}</td><td class="q">${ans}</td><td class="num">${marks}</td>${tags(q)}</tr>`;
+        rows += `<tr><td class="no">${label}</td><td class="q">${ans}</td>${tagCell(q, marks)}</tr>`;
         continue;
       }
       if (q?.subParts?.length) {
         // Parts are numbered with the question: 1a, 1b ... - each on its own row with the question's CO / BL. Only the
         // parts print (as in the editor's preview); text left on the question itself from before it was split doesn't.
         q.subParts.forEach((sp, j) => {
-          block += `<tr><td class="no">${label}${LETTERS[j]}</td><td class="q">${text(sp.text, sp.imageUrl, sp.imageCaption)}</td><td class="num">${sp.marks}</td>${tags(q)}</tr>`;
+          block += `<tr><td class="no">${label}${LETTERS[j]}</td><td class="q">${text(sp.text, sp.imageUrl, sp.imageCaption)}</td>${tagCell(q, sp.marks)}</tr>`;
         });
       } else {
         const opts = kind === "MCQ" && q?.options
           ? `<div class="opts">${q.options.map((o, j) => `<span>(${LETTERS[j]}) ${renderMathHtml(o, d.formula)}</span>`).join("")}</div>` : "";
-        block += `<tr><td class="no">${label}</td><td class="q">${q ? text(q.text, q.imageUrl, q.imageCaption) : "<i>(not written)</i>"}${opts}</td><td class="num">${marks}</td>${tags(q)}</tr>`;
+        block += `<tr><td class="no">${label}</td><td class="q">${q ? text(q.text, q.imageUrl, q.imageCaption) : "<i>(not written)</i>"}${opts}</td>${tagCell(q, marks)}</tr>`;
       }
       rows += `<tbody class="section">${block}</tbody>`;
     }
     return rows;
   }).join("");
 
-  const used = [...new Set(d.questions.filter((q) => q.set === d.set && (!only || q.partId === only.id)).flatMap((q) => q.cos))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
-  const coList = sw.cos && !d.answerKey ? (d.cos ?? []).filter((c) => used.includes(c.id)).map((c) => `<p><b>${esc(c.id.replace(/^CO/, ""))}.</b> ${esc(c.statement)}</p>`).join("") : "";
   const maxMarks = only ? (d.partHeader?.maxMarks ?? partMax(only)) : patternMax(d.pattern);
   const duration = only ? (d.partHeader?.durationMinutes ?? (only.cea ? only.cea.minutes : midMinutes(d.pattern))) : d.pattern.durationMinutes;
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${PAPER_STYLE}
     .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; margin-top: 4px; }
+    td.tag { text-align: center; vertical-align: middle; white-space: nowrap; font-size: 11.5px; font-weight: 600; }
   </style></head><body><div class="page">
     <div class="pdf-page-header"></div>
     <div class="top"><span class="code">${esc(d.subject.code)}</span><span>${regCode ? `<span class="code">${esc(regCode)}</span>` : ""}</span><span class="regd"><span>Regd. No:</span>${"<i></i>".repeat(d.pattern.regdBoxes || 12)}</span></div>
@@ -152,8 +161,7 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
     <div class="meta"><span>Time: <b>${duration} Mins.</b></span><span>Max. Marks: <b>${maxMarks}</b></span></div>
     <hr />
     ${d.pattern.instruction && !d.answerKey ? `<p class="instr">${esc(d.pattern.instruction)}</p>` : ""}
-    ${coList ? `<p class="cos-title">Course Outcomes:</p><div class="cos"><p>Upon the completion of the course, the student will be able to:</p>${coList}</div>` : ""}
-    <table><colgroup><col style="width:7%" /><col style="width:${86 - extra.length * 5}%" /><col style="width:7%" />${extra.map(() => `<col style="width:5%" />`).join("")}</colgroup>${parts}</table>
+    <table><colgroup><col style="width:7%" /><col style="width:75%" /><col style="width:18%" /></colgroup>${parts}</table>
     <p class="end">*****</p>
   </div></body></html>`;
 }
