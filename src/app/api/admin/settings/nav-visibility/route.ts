@@ -65,6 +65,10 @@ export async function PUT(request: Request) {
     // list, unticking the module would not stick: it came back ticked on the next load.
     const currentModules = new Set(groupNavItemsByModule(getNavItemsForRole(role)).map((g) => g.name));
     const keptModules = hiddenModules.map(String).filter((m) => currentModules.has(m));
+    // Same for items: only pages the role has in its menu today (an old entry for a page that became a tab, like
+    // /hod/supporting-staff, could never be unticked and kept blocking that page).
+    const currentItems = new Set(getNavItemsForRole(role).map((i) => i.href));
+    const keptItems = hiddenItems.map(String).filter((h) => currentItems.has(h));
 
     const db = getAdminDb();
     const now = new Date();
@@ -74,7 +78,7 @@ export async function PUT(request: Request) {
     await docRef.set(
       {
         hiddenModules: { [role]: keptModules },
-        hiddenItems: { [role]: hiddenItems },
+        hiddenItems: { [role]: keptItems },
         updatedAt: now,
         updatedByName,
       },
@@ -85,7 +89,7 @@ export async function PUT(request: Request) {
       action: "NAV_VISIBILITY_UPDATED",
       performedBy: session.uid,
       performedByName: updatedByName,
-      details: { collegeId, role, hiddenModules: keptModules, hiddenItems },
+      details: { collegeId, role, hiddenModules: keptModules, hiddenItems: keptItems },
       timestamp: now,
     });
 

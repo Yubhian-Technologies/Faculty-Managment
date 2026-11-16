@@ -26,6 +26,13 @@ import { DashboardSkeleton } from "@/components/shared/SkeletonLoader";
 // SUB_PAGE_PARENT in navConfig.ts, used there for the active highlight).
 const SUB_PAGE_VISIBILITY_PARENT: Record<string, string> = {
   "/hod/assignment-requests": "/hod/teaching-assignments",
+  // A tab of the Faculty page (it once had its own menu entry - VWU still had it saved as hidden, which blocked the tab).
+  "/hod/supporting-staff": "/hod/faculty",
+};
+// The parent whose visibility a page follows: the page itself or any page under it (e.g. /hod/supporting-staff/new).
+const visibilityParentOf = (path: string): string | undefined => {
+  const key = Object.keys(SUB_PAGE_VISIBILITY_PARENT).find((k) => path === k || path.startsWith(`${k}/`));
+  return key ? SUB_PAGE_VISIBILITY_PARENT[key] : undefined;
 };
 
 // Every login's dashboard home, and the faculty / HOD "My Timetable" (/panel/teaching, /hod/teaching), also get the
@@ -91,7 +98,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Nav Visibility is keyed on the pages' own URLs, which a College Admin reaches under /college-admin.
   const pagePath = collegeAdmin ? fromCollegeAdminPath(pathname) : pathname;
-  if (isPathHidden(SUB_PAGE_VISIBILITY_PARENT[pagePath] ?? pagePath, collegeAdmin ? "COLLEGE_ADMIN" : user.role, hiddenModules, hiddenItems)) {
+  if (isPathHidden(visibilityParentOf(pagePath) ?? pagePath, collegeAdmin ? "COLLEGE_ADMIN" : user.role, hiddenModules, hiddenItems)) {
     notFound();
   }
 
