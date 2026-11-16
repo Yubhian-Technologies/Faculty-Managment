@@ -42,6 +42,8 @@ interface RosterEntry {
   // HOD-granted exception for this specific day (see "Permission" below) -
   // arriving at/before this time never counts as Late, even past 09:05.
   permittedCheckInTime?: string | null;
+  // The college's Late cut-off on that day (Attendance Timings); absent = 09:05.
+  lateAfter?: string | null;
   // The reason an HOD/Principal/VP wrote when manually marking/correcting
   // this record, or the auto-generated explanation for a derived Absent day
   // - visible here so Management (and anyone else reviewing this roster)
@@ -85,7 +87,7 @@ function StatusCell({ row }: { row: RosterEntry }) {
       <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(row.status)}`}>
         {statusLabel(row.status)}
       </span>
-      {row.status === "PRESENT" && isLateCheckIn(row.checkIn, row.permittedCheckInTime) && (
+      {row.status === "PRESENT" && isLateCheckIn(row.checkIn, row.permittedCheckInTime, row.lateAfter) && (
         <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
           Late
         </span>
@@ -397,7 +399,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       // The on-screen "Late" badge (see StatusCell) is a derived fact, not a
       // stored field - fold it into the exported status text or it silently
       // disappears from CSV even though it's shown right next to Status.
-      csvValue: (row) => statusLabel(row.status) + (row.status === "PRESENT" && isLateCheckIn(row.checkIn, row.permittedCheckInTime) ? " (Late)" : ""),
+      csvValue: (row) => statusLabel(row.status) + (row.status === "PRESENT" && isLateCheckIn(row.checkIn, row.permittedCheckInTime, row.lateAfter) ? " (Late)" : ""),
     },
     { key: "checkIn", header: "Check In", render: (row) => <CheckInCell row={row} /> },
     { key: "checkOut", header: "Check Out", render: (row) => <CheckOutCell row={row} /> },
@@ -490,7 +492,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
     const rows = [...(searchedHod ? [searchedHod] : []), ...searchedFaculty].map((r) => ({
       name: r.name,
       department: r.department,
-      status: statusLabel(r.status) + (r.status === "PRESENT" && isLateCheckIn(r.checkIn, r.permittedCheckInTime) ? " (Late)" : ""),
+      status: statusLabel(r.status) + (r.status === "PRESENT" && isLateCheckIn(r.checkIn, r.permittedCheckInTime, r.lateAfter) ? " (Late)" : ""),
       checkIn: r.checkIn ?? "",
       checkOut: r.checkOut ?? "",
       reason: [r.remarks, r.lateReason ? `Late: ${r.lateReason}` : null].filter(Boolean).join(" | "),

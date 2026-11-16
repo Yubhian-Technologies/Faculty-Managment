@@ -11,6 +11,7 @@ import { isWorkingDayForRole } from "@/lib/attendance/workingDays";
 import { getHolidayNameForDate } from "@/lib/leave/holidaysCount";
 import { isOnApprovedLeaveToday } from "@/lib/leave/leaveStatusToday";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { collegeLateAfter } from "@/lib/attendance/attendanceTimingsServer";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { resolveCheckInPermission } from "@/lib/attendance/checkInPermission";
 import { nowInIndia } from "@/lib/leave/dayCounter";
@@ -82,8 +83,12 @@ export async function POST(request: Request) {
     const recordId = `${session.uid}_${docSuffix}`;
     const recordRef = collegeRef.collection("attendanceRecords").doc(recordId);
     const now = new Date();
-    const permittedCheckInTime = await resolveCheckInPermission(db, session.collegeId, session.uid, docSuffix);
-    const late = isLateCheckIn(checkIn, permittedCheckInTime);
+    const [permittedCheckInTime, lateAfter] = await Promise.all([
+      resolveCheckInPermission(db, session.collegeId, session.uid, docSuffix),
+      // The college's own cut-off (Attendance Timings); stored on the record so the day always reads the same.
+      collegeLateAfter(db, session.collegeId),
+    ]);
+    const late = isLateCheckIn(checkIn, permittedCheckInTime, lateAfter);
     const lateReason = body.lateReason?.trim();
     if (late && !lateReason) {
       // `code` lets the check-in screen ask for the reason with the face scan it already has.
@@ -107,6 +112,7 @@ export async function POST(request: Request) {
           dateKey: docSuffix,
           status: "PRESENT",
           checkIn,
+          lateAfter,
           source: "BIOMETRIC",
           checkInLocation: { latitude, longitude },
           // Computed here from the posted descriptor - never the client's own figure.

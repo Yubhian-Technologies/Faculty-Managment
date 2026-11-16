@@ -53,7 +53,7 @@ export async function GET(request: Request) {
       .map(({ rec, date }) => ({
         day: date.getDate(),
         status: rec.status,
-        late: rec.status === "PRESENT" && isLateCheckIn(rec.checkIn, rec.permittedCheckInTime),
+        late: rec.status === "PRESENT" && isLateCheckIn(rec.checkIn, rec.permittedCheckInTime, rec.lateAfter),
       }));
 
     return NextResponse.json({ days });

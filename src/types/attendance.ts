@@ -55,6 +55,9 @@ export interface AttendanceRecord {
   // granted AFTER the fact (or later revoked) never silently changes how an
   // already-recorded day reads.
   permittedCheckInTime?: string; // "HH:MM" 24h
+  // The college's Late cut-off in force when this check-in was recorded ("HH:MM": a check-in AFTER it is Late), from
+  // its Attendance Timings (start time + grace). Absent on records from before colleges set their own = 09:05.
+  lateAfter?: string;
   remarks?: string;
   // Given by the faculty member themselves at self check-in time, when their
   // check-in is Late (see lib/attendance/lateStatus.ts's isLateCheckIn) -

@@ -50,6 +50,7 @@ interface RosterEntry {
   // doc-comment) - "Late" everywhere in the app derives from checkIn AND
   // this together (see lib/attendance/lateStatus.ts's isLateCheckIn).
   permittedCheckInTime: string | null;
+  lateAfter?: string | null;
   registered: boolean;
   // The reason an HOD/Principal/VP wrote when manually marking/correcting
   // this record (see /api/college/attendance/manual), or the auto-generated
@@ -121,6 +122,7 @@ export async function GET(request: Request) {
         checkInVerified: boolean;
         checkOutVerified: boolean;
         permittedCheckInTime: string | null;
+        lateAfter?: string | null;
         lateReason: string | null;
         entry: RosterEntry;
       }[] = [];
@@ -135,6 +137,7 @@ export async function GET(request: Request) {
           checkIn: rec.checkIn ?? null, checkOut: rec.checkOut ?? null, remarks: rec.remarks ?? null,
           checkInVerified: !!rec.checkInVerified, checkOutVerified: !!rec.checkOutVerified,
           permittedCheckInTime: rec.permittedCheckInTime ?? null,
+          lateAfter: (rec as { lateAfter?: string }).lateAfter ?? null,
           lateReason: rec.lateReason ?? null,
           entry: rosterByUid.get(rec.facultyId)!,
         });
@@ -149,6 +152,7 @@ export async function GET(request: Request) {
         p.entry.checkInVerified = p.checkInVerified;
         p.entry.checkOutVerified = p.checkOutVerified;
         p.entry.permittedCheckInTime = p.permittedCheckInTime;
+        p.entry.lateAfter = p.lateAfter;
         p.entry.remarks = p.remarks;
         p.entry.lateReason = p.lateReason;
       }
@@ -278,6 +282,7 @@ export async function GET(request: Request) {
       checkInVerified: boolean;
       checkOutVerified: boolean;
       permittedCheckInTime: string | null;
+      lateAfter?: string | null;
       lateReason: string | null;
       entry: RosterEntry;
     }[] = [];
@@ -297,6 +302,7 @@ export async function GET(request: Request) {
         checkInVerified: !!rec.checkInVerified,
         checkOutVerified: !!rec.checkOutVerified,
         permittedCheckInTime: rec.permittedCheckInTime ?? null,
+        lateAfter: (rec as { lateAfter?: string }).lateAfter ?? null,
         lateReason: rec.lateReason ?? null,
         entry: rosterByUid.get(rec.facultyId)!,
       });
@@ -311,6 +317,7 @@ export async function GET(request: Request) {
       p.entry.checkInVerified = p.checkInVerified;
       p.entry.checkOutVerified = p.checkOutVerified;
       p.entry.permittedCheckInTime = p.permittedCheckInTime;
+      p.entry.lateAfter = p.lateAfter;
       p.entry.remarks = p.remarks;
       p.entry.lateReason = p.lateReason;
     }

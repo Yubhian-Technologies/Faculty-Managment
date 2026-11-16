@@ -20,6 +20,7 @@ import { LeaveApprovalRoutingCard } from "@/components/leave/LeaveApprovalRoutin
 import { LeaveVacationStaffCard } from "@/components/leave/LeaveVacationStaffCard";
 import { LeaveTypeRulesCard } from "@/components/leave/LeaveTypeRulesCard";
 import { AttendanceNotPostedSettingsCard } from "@/components/attendance/AttendanceNotPostedSettingsCard";
+import { AttendanceTimingsCard } from "@/components/attendance/AttendanceTimingsCard";
 import { TimetableSignatureSettingsCard } from "@/components/timetable/TimetableSignatureSettingsCard";
 import { DisplayNameSettingsCard } from "@/components/faculty/DisplayNameSettingsCard";
 import { CollegeLogoSettingsCard } from "@/components/college/CollegeLogoSettingsCard";
@@ -414,6 +415,7 @@ export default function PrincipalSettingsPage() {
 
       <AcademicYearSettingsCard />
       <FinancialYearSettingsCard />
+      <AttendanceTimingsCard />
       <AttendanceNotPostedSettingsCard />
       <TimetableSignatureSettingsCard />
       <TimetableSignatureSettingsCard

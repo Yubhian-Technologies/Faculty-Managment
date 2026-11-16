@@ -173,7 +173,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
       // fact, not a stored field - fold it into the exported status text or
       // it silently disappears from CSV.
       status: record
-        ? ATTENDANCE_STATUS_LABELS[record.status] + (record.status === "PRESENT" && isLateCheckIn(record.checkIn, record.permittedCheckInTime) ? " (Late)" : "")
+        ? ATTENDANCE_STATUS_LABELS[record.status] + (record.status === "PRESENT" && isLateCheckIn(record.checkIn, record.permittedCheckInTime, record.lateAfter) ? " (Late)" : "")
         : key === todayKey && registered
           ? "Not Checked In Yet"
           : "No record",
@@ -265,7 +265,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
                           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(record.status)}`}>
                             {ATTENDANCE_STATUS_LABELS[record.status]}
                           </span>
-                          {record.status === "PRESENT" && isLateCheckIn(record.checkIn, record.permittedCheckInTime) && (
+                          {record.status === "PRESENT" && isLateCheckIn(record.checkIn, record.permittedCheckInTime, record.lateAfter) && (
                             <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
                               Late
                             </span>

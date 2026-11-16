@@ -7,6 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope } from "@/lib/departments/scope";
 import { isCollegeStaffUnitHead, unitLabelForHeadRole, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { collegeLateAfter } from "@/lib/attendance/attendanceTimingsServer";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { ChunkedBatch } from "@/lib/firestore/chunkedBatch";
 import { istDateFromParts, istMidnightUTC } from "@/lib/attendance/istTime";
@@ -203,6 +204,8 @@ export async function POST(request: Request) {
     // silently never counts toward the penalty the way the exact same
     // arrival would have if checked in live that day.
     const lateRows: ValidRow[] = [];
+    // The college's Late cut-off (Attendance Timings), stored on each imported check-in.
+    const lateAfter = await collegeLateAfter(db, collegeId);
 
     validRows.forEach((vr, i) => {
       if (existingSnaps[i].exists) {
@@ -212,14 +215,14 @@ export async function POST(request: Request) {
       batch.set(collegeRef.collection("attendanceRecords").doc(`${vr.uid}_${vr.docSuffix}`), {
         collegeId, facultyId: vr.uid, facultyName: vr.name, department: vr.department,
         date: vr.date, dateKey: vr.docSuffix, status: vr.status,
-        ...(vr.checkIn ? { checkIn: vr.checkIn } : {}),
+        ...(vr.checkIn ? { checkIn: vr.checkIn, lateAfter } : {}),
         ...(vr.checkOut ? { checkOut: vr.checkOut } : {}),
         source: "IMPORTED", markedBy: session.uid,
         remarks: vr.remarks ?? "Imported historical record",
         createdAt: now, updatedAt: now,
       });
       created++;
-      if (isLateCheckIn(vr.checkIn)) lateRows.push(vr);
+      if (isLateCheckIn(vr.checkIn, null, lateAfter)) lateRows.push(vr);
     });
 
     if (created > 0) {
