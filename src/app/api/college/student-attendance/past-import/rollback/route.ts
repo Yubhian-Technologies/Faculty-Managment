@@ -18,7 +18,8 @@ const millis = (t: unknown) => (t as { toMillis?: () => number } | undefined)?.t
 // is left alone and reported, so a correction is never thrown away.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE");
+    // The College Office undoes any import; an HOD only their own (the periods they imported).
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD");
     const body = (await readJsonBody(request)) as { runId?: string };
     const runId = body.runId?.trim();
     if (!runId) return NextResponse.json({ error: "runId is required" }, { status: 400 });
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
     const edited: string[] = [];
     const todo = snap.docs.filter((d) => {
       const s = d.data() as StudentAttendanceSession;
+      if (session.role === "HOD" && (s as { correctedByUid?: string }).correctedByUid !== session.uid) return false;
       if (millis(s.updatedAt) === millis(s.createdAt)) return true;
       edited.push(d.id);
       return false;

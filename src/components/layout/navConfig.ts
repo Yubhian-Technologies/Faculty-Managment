@@ -348,6 +348,7 @@ export const NAV_ITEMS: NavItem[] = [
   // (unlinked, not deleted) for any existing notification links/bookmarks.
   { label: "Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "Attendance & Leave", module: "attendance", legacyModule: "Approvals" },
   { label: "Attendance Reports", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"], module: "attendance", legacyModule: "Approvals" },
+  { label: "Import Student Attendance", href: "/hod/student-attendance-import", iconName: "Upload", roles: ["HOD"], module: "attendance", legacyModule: "Approvals" },
   { label: "Leave Balances", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"], legacyModule: "Approvals" },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchases", legacyModule: "Budget & Purchase" },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"], legacyModule: "Budget & Purchase" },
