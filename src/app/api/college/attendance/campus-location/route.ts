@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { collegeLateAfter } from "@/lib/attendance/attendanceTimingsServer";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
@@ -16,7 +17,8 @@ export async function GET() {
     const db = getAdminDb();
     const snap = await db.collection("colleges").doc(session.collegeId).get();
     const college = snap.data() as College | undefined;
-    return NextResponse.json({ campusLocation: college?.campusLocation ?? null });
+    // The college's Late cut-off (Attendance Timings), so the check-in screen warns at the right time.
+    return NextResponse.json({ campusLocation: college?.campusLocation ?? null, lateAfter: await collegeLateAfter(db, session.collegeId) });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });

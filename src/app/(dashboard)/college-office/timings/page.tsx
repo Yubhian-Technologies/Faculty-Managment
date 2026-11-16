@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Clock, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { AttendanceTimingsCard } from "@/components/attendance/AttendanceTimingsCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -87,6 +88,8 @@ export default function CollegeOfficeTimingsPage() {
         title="Semester Timings"
         description="Set the start and end of the college day, the periods and the breaks for each course and year."
       />
+
+      <AttendanceTimingsCard />
 
       <Card>
         <CardContent className="p-4">

@@ -10,6 +10,7 @@ export interface RosterRow {
   status: string;
   checkIn: string | null;
   permittedCheckInTime: string | null;
+  lateAfter?: string | null;
 }
 
 export interface FacultyToday {
@@ -38,7 +39,7 @@ export function summarizeFacultyToday(roster: RosterRow[]): FacultyToday {
   for (const r of rows) {
     const d = byDept.get(r.department || "Not set") ?? { total: 0, present: 0, expected: 0 };
     d.total++;
-    if (r.status === "PRESENT") { t.present++; if (isLateCheckIn(r.checkIn, r.permittedCheckInTime)) t.late++; }
+    if (r.status === "PRESENT") { t.present++; if (isLateCheckIn(r.checkIn, r.permittedCheckInTime, r.lateAfter)) t.late++; }
     else if (r.status === "HALF_DAY") t.halfDay++;
     else if (r.status === "ON_DUTY") t.onDuty++;
     else if (r.status === "ON_LEAVE") t.onLeave++;

@@ -8,6 +8,7 @@ import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/s
 import { isManualEditWindowOpen, MANUAL_EDIT_WINDOW_CLOSED_MESSAGE } from "@/lib/attendance/attendanceWindow";
 import { unitLabelForHeadRole, isCollegeStaffUnitHead, isHodOrUnitHead, COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { collegeLateAfter } from "@/lib/attendance/attendanceTimingsServer";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { isOnApprovedLeaveToday } from "@/lib/leave/leaveStatusToday";
 import { resolveCheckInPermission } from "@/lib/attendance/checkInPermission";
@@ -176,8 +177,11 @@ export async function POST(request: Request) {
       remarks: reason,
       updatedAt: now,
     };
+    // The day's Late cut-off: the one already on the record, else the college's Attendance Timings now.
+    const lateAfter = checkIn ? ((existing as { lateAfter?: string } | undefined)?.lateAfter ?? await collegeLateAfter(db, session.collegeId)) : undefined;
     if (checkIn) {
       update.checkIn = checkIn;
+      update.lateAfter = lateAfter;
       if (permittedCheckInTime) update.permittedCheckInTime = permittedCheckInTime;
     }
     if (checkOut) update.checkOut = checkOut;
@@ -204,7 +208,7 @@ export async function POST(request: Request) {
       // via an earlier manual mark, and recordLateCheckIn has no way to
       // undo a wrongly-applied penalty, so re-evaluating on every edit would
       // risk double-counting the same day.
-      if (checkIn && isLateCheckIn(checkIn, permittedCheckInTime)) {
+      if (checkIn && isLateCheckIn(checkIn, permittedCheckInTime, lateAfter)) {
         try {
           await recordLateCheckIn(db, session.collegeId, facultyId, target.name ?? "", target.department ?? "", docDate);
         } catch (err) {

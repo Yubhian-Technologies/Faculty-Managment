@@ -33,6 +33,7 @@ interface RosterEntry {
   // HOD-granted exception for this specific day - see
   // /api/college/attendance/report and lib/attendance/lateStatus.ts.
   permittedCheckInTime: string | null;
+  lateAfter?: string | null;
   registered: boolean;
   // The reason an HOD/Principal/VP wrote when manually marking/correcting
   // this record, or the auto-generated explanation when a day gets
@@ -101,6 +102,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
         checkInVerified: boolean;
         checkOutVerified: boolean;
         permittedCheckInTime: string | null;
+        lateAfter?: string | null;
         entry: RosterEntry;
       }[] = [];
 
@@ -119,6 +121,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
           checkInVerified: !!rec.checkInVerified,
           checkOutVerified: !!rec.checkOutVerified,
           permittedCheckInTime: rec.permittedCheckInTime ?? null,
+          lateAfter: (rec as { lateAfter?: string }).lateAfter ?? null,
           entry: rosterByUid.get(rec.facultyId)!,
         });
       }
@@ -132,6 +135,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ coll
         p.entry.checkInVerified = p.checkInVerified;
         p.entry.checkOutVerified = p.checkOutVerified;
         p.entry.permittedCheckInTime = p.permittedCheckInTime;
+        p.entry.lateAfter = p.lateAfter;
         p.entry.remarks = p.remarks;
       }
 

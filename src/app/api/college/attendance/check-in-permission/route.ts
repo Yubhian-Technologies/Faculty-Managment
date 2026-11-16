@@ -7,6 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment } from "@/lib/departments/scope";
 import { CHECKIN_PERMISSIONS_COL, checkInPermissionDocId } from "@/lib/attendance/checkInPermission";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
+import { collegeLateAfter } from "@/lib/attendance/attendanceTimingsServer";
 import { reverseLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { nowInIndia } from "@/lib/leave/dayCounter";
 import { isHodOrUnitHead } from "@/lib/attendance/collegeStaffUnits";
@@ -49,9 +50,10 @@ export async function POST(request: Request) {
     if (!reason) {
       return NextResponse.json({ error: "Enter a reason." }, { status: 400 });
     }
-    if (!isLateCheckIn(permittedCheckInTime)) {
+    const collegeCutoff = await collegeLateAfter(getAdminDb(), session.collegeId);
+    if (!isLateCheckIn(permittedCheckInTime, null, collegeCutoff)) {
       return NextResponse.json(
-        { error: "That time is already before the standard 09:05 cutoff - no permission is needed for it" },
+        { error: `That time is not after the college's late cut-off (${collegeCutoff}), so no permission is needed for it.` },
         { status: 400 },
       );
     }
@@ -123,9 +125,9 @@ export async function POST(request: Request) {
     // handle in the other direction.
     const recordRef = collegeRef.collection("attendanceRecords").doc(`${facultyId}_${date}`);
     const recordSnap = await recordRef.get();
-    const record = recordSnap.data() as { checkIn?: string; permittedCheckInTime?: string } | undefined;
+    const record = recordSnap.data() as { checkIn?: string; permittedCheckInTime?: string; lateAfter?: string } | undefined;
     if (record?.checkIn) {
-      const wasLate = isLateCheckIn(record.checkIn, record.permittedCheckInTime);
+      const wasLate = isLateCheckIn(record.checkIn, record.permittedCheckInTime, record.lateAfter);
       if (record.permittedCheckInTime !== permittedCheckInTime) {
         await recordRef.update({ permittedCheckInTime, updatedAt: now });
       }

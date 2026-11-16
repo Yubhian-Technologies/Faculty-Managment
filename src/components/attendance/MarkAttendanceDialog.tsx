@@ -54,6 +54,8 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
   const [errorMsg, setErrorMsg] = useState("");
   const [resultTime, setResultTime] = useState("");
   const coordsRef = useRef<{ latitude: number; longitude: number; accuracy: number } | null>(null);
+  // The college's Late cut-off (Attendance Timings), from campus-location; null until known = 09:05.
+  const lateAfterRef = useRef<string | null>(null);
   // The face descriptor captured for this attempt and when - sent to the server,
   // which does the real comparison against the registered one (attendanceProof.ts).
   const capturedProofRef = useRef<{ descriptor: number[]; capturedAt: number } | null>(null);
@@ -108,7 +110,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
     capturedProofRef.current = null;
 
     if (mode === "check-in") {
-      setIsLate(isLateCheckIn(nowInIndia().timeHHMM));
+      setIsLate(isLateCheckIn(nowInIndia().timeHHMM, null, lateAfterRef.current));
     }
 
     if (!isRegister) {
@@ -117,8 +119,15 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
         return;
       }
       fetch("/api/college/attendance/campus-location")
-        .then((r) => r.json() as Promise<{ campusLocation: CampusLocation | null }>)
-        .then((d) => setCampusLocation(d.campusLocation))
+        .then((r) => r.json() as Promise<{ campusLocation: CampusLocation | null; lateAfter?: string }>)
+        .then((d) => {
+          setCampusLocation(d.campusLocation);
+          // The college's own Late cut-off (Attendance Timings) - the server decides anyway; this is the heads-up.
+          if (d.lateAfter) {
+            lateAfterRef.current = d.lateAfter;
+            if (mode === "check-in") setIsLate(isLateCheckIn(nowInIndia().timeHHMM, null, d.lateAfter));
+          }
+        })
         .catch(() => { /* non-critical - the map is a heads-up, not the actual check */ });
 
       navigator.geolocation.getCurrentPosition(
@@ -151,7 +160,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       if (open) {
         cancelledRef.current = false;
         // Late already: ask why first, then open the camera (Continue to Face Scan).
-        if (mode === "check-in" && isLateCheckIn(nowInIndia().timeHHMM)) {
+        if (mode === "check-in" && isLateCheckIn(nowInIndia().timeHHMM, null, lateAfterRef.current)) {
           setIsLate(true);
           setStage("reason-first");
           return;
@@ -338,7 +347,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       // Lateness is judged NOW (after the scan), not when the dialog opened - someone
       // who crossed 09:05 during the scan is asked here instead of being refused by the
       // server and sent back to scan again.
-      const lateNow = mode === "check-in" && isLateCheckIn(nowInIndia().timeHHMM);
+      const lateNow = mode === "check-in" && isLateCheckIn(nowInIndia().timeHHMM, null, lateAfterRef.current);
       const hasReason = mode === "check-in" && !!lateReason.trim();
       // Reason given up front: check in straight away with it. Became late during the
       // scan with no reason yet: ask now, with this scan.
