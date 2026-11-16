@@ -13,7 +13,7 @@ import { ROLE_DASHBOARD_PATHS, ROLE_LABELS, type UserRole } from "@/types/core";
 interface LeaveBalance { code: string; label: string; unlimited: boolean; remaining?: number }
 
 // One line on what each seat gives you, shown on the "Your roles" cards.
-const SEAT_BLURB: Partial<Record<UserRole, string>> = {
+export const SEAT_BLURB: Partial<Record<UserRole, string>> = {
   PRINCIPAL: "College-wide approvals, hiring, budget, staff and reports",
   VICE_PRINCIPAL: "College-wide approvals, hiring, budget, staff and reports",
   COLLEGE_ADMIN: "Runs the whole college: people, departments, role assignments and reports",

@@ -2,128 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  CalendarDays,
-  ClipboardCheck,
-  BookOpen,
-  GraduationCap,
-  CalendarCheck,
-  CalendarRange,
-  BookOpenCheck,
-  ClipboardList,
-  MessageSquare,
-  UserCircle,
-  CalendarClock,
-  QrCode,
-  ChevronRight,
-  CheckCircle2,
-} from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { QrCode, CheckCircle2 } from "lucide-react";
+import { FacultyHome } from "@/components/dashboard/FacultyHome";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
-import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { isPathHidden } from "@/components/layout/navConfig";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate } from "@/lib/utils";
 import { CardSkeleton } from "@/components/shared/SkeletonLoader";
-import { MyDashboardOverview } from "@/components/dashboard/MyDashboardOverview";
-import { MidPaperBanner } from "@/components/dashboard/MidPaperBanner";
 import type { HiringBatch } from "@/types";
-
-const FACULTY_MODULES = [
-  {
-    label: "My Time Table",
-    description: "Subjects & timetable",
-    href: "/panel/teaching",
-    icon: BookOpen,
-    color: "bg-violet-50 text-violet-600",
-  },
-  {
-    label: "Student Attendance",
-    description: "Mark period attendance",
-    href: "/panel/mark-attendance",
-    icon: CalendarCheck,
-    color: "bg-emerald-50 text-emerald-600",
-  },
-  {
-    label: "Attendance Report",
-    description: "Monthly student records",
-    href: "/panel/monthly-records",
-    icon: CalendarRange,
-    color: "bg-blue-50 text-blue-600",
-  },
-  {
-    label: "Topics Covered",
-    description: "Class work you recorded",
-    href: "/panel/topics-covered",
-    icon: BookOpenCheck,
-    color: "bg-rose-50 text-rose-600",
-  },
-  {
-    label: "Students",
-    description: "Section rosters & students",
-    href: "/panel/students",
-    icon: GraduationCap,
-    color: "bg-cyan-50 text-cyan-600",
-  },
-  {
-    label: "Internal Exam",
-    description: "Assessment marks & batches",
-    href: "/panel/internal-exam",
-    icon: ClipboardList,
-    color: "bg-orange-50 text-orange-600",
-  },
-  {
-    label: "Mid Question Bank",
-    description: "Question papers & bank",
-    href: "/panel/mid-bank",
-    icon: BookOpen,
-    color: "bg-amber-50 text-amber-600",
-  },
-  {
-    label: "My Attendance",
-    description: "Daily punch & check-in",
-    href: "/panel/attendance",
-    icon: ClipboardCheck,
-    color: "bg-teal-50 text-teal-600",
-  },
-  {
-    label: "My Leave",
-    description: "Apply & view leave balance",
-    href: "/panel/leave",
-    icon: CalendarClock,
-    color: "bg-pink-50 text-pink-600",
-  },
-  {
-    label: "My Feedback",
-    description: "Student feedback scores",
-    href: "/panel/feedback",
-    icon: MessageSquare,
-    color: "bg-indigo-50 text-indigo-600",
-  },
-  {
-    label: "My Profile",
-    description: "Personal, research & docs",
-    href: "/panel/profile",
-    icon: UserCircle,
-    color: "bg-slate-50 text-slate-600",
-  },
-];
-
-const INTERVIEW_MODULE = {
-  label: "My Interviews",
-  description: "Panel assignments & feedback",
-  href: "/panel/interviews",
-  icon: CalendarDays,
-  color: "bg-indigo-50 text-indigo-600",
-};
 
 export default function FacultyDashboard() {
   const user = useAuthStore((s) => s.user);
-  const { nameFor } = useFacultyDisplayNames();
   const { hiddenModules, hiddenItems } = useNavVisibility();
   const isHidden = (href: string) => !!user?.role && isPathHidden(href, user.role, hiddenModules, hiddenItems);
   const [batches, setBatches] = useState<HiringBatch[]>([]);
@@ -137,107 +30,16 @@ export default function FacultyDashboard() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const upcomingInterviews = batches.filter(
-    (b) => b.status === "APPROVED" || b.status === "IN_PROGRESS"
-  );
-
-  // Only show interview module card when assigned to batches
-  const modules = (batches.length > 0
-    ? [INTERVIEW_MODULE, ...FACULTY_MODULES]
-    : FACULTY_MODULES
-  ).filter((mod) => !isHidden(mod.href));
-
   const isInterviewsHidden = isHidden("/panel/interviews");
-  const isAttendanceHidden = isHidden("/panel/attendance");
-  const isTeachingHidden = isHidden("/panel/teaching");
-  const showInterviewStat = !isInterviewsHidden && (isLoading || upcomingInterviews.length > 0);
-  const showQuickStats = showInterviewStat || !isAttendanceHidden || !isTeachingHidden;
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={`Hello, ${user ? nameFor("dashboardName", { uid: user.uid }, user.name) : "Faculty"}`}
-        description={user?.department ? `${user.department} Department` : "Faculty Portal"}
-      />
-
-      <MidPaperBanner />
-
-      <MyDashboardOverview />
-
-      {/* Quick Stats */}
-      {showQuickStats && (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-          {showInterviewStat && (
-            <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-blue-50 text-blue-600">
-                  <CalendarDays className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Upcoming Interviews</p>
-                  <p className="text-xl font-bold">{isLoading ? "-" : upcomingInterviews.length}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {!isAttendanceHidden && (
-            <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-emerald-50 text-emerald-600">
-                  <ClipboardCheck className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Attendance</p>
-                  <p className="text-xl font-bold text-emerald-600">-</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {!isTeachingHidden && (
-            <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-violet-50 text-violet-600">
-                  <BookOpen className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Teaching Load</p>
-                  <p className="text-xl font-bold">-</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* Module Grid */}
-      {modules.length > 0 && (
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-          My Modules
-        </h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {modules.map((mod) => (
-            <Link key={mod.href} href={mod.href}>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
-                <CardContent className="p-4 flex flex-col gap-3">
-                  <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${mod.color}`}>
-                    <mod.icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">{mod.label}</p>
-                    <p className="text-xs text-muted-foreground">{mod.description}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto mt-auto" />
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      </div>
-      )}
+      {/* Today first: check-in, today's classes, what is waiting, real numbers, coming up, quick actions, roles. */}
+      <FacultyHome />
 
       {/* Interview Panel Assignments - only shown when assigned */}
-      {(isLoading || batches.length > 0) && (
+      {/* Hidden when Navigation Visibility hides interviews; only while assigned. */}
+      {!isInterviewsHidden && !isLoading && batches.length > 0 && (
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">Interview Panel Assignments</CardTitle>
