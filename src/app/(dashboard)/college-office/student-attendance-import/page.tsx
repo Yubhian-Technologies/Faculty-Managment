@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, RotateCcw, Undo2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +15,7 @@ import { parseCSV, parseExcelWorkbook, readFileAsText } from "@/lib/utils/csv";
 import { parsePastAttendanceGrid, type PastAttendanceGrid } from "@/lib/studentAttendance/pastImportGrid";
 import { buildPastAttendanceTemplate } from "@/lib/studentAttendance/pastImportTemplate";
 
-interface SectionOption { id: string; name: string; department: string; year: number }
+interface SectionOption { id: string; name: string; department: string; year: number; accessLevel?: "primary" | "secondary" }
 interface DayReport {
   date: string; status: "READY" | "SKIPPED"; reason?: string; periods: number; created: number; alreadyPosted: number;
   skippedPeriods: string[]; detail: string[]; timetableNote?: string;
@@ -42,6 +43,8 @@ function sheetStatus(s: SheetState): { label: string; variant: "approved" | "rej
 // attendance register does): each sheet is matched to a section, previewed, then imported. Each student's whole-day
 // P/A becomes a submitted session for every timetable period of that day (see student-attendance/past-import).
 export default function StudentAttendanceImportPage() {
+  // Shared by the College Office (/college-office/...) and the HOD (/hod/..., their own sections only).
+  const base = usePathname()?.startsWith("/hod") ? "/hod" : "/college-office";
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [sheets, setSheets] = useState<SheetState[]>([]);
   const [fileName, setFileName] = useState("");
@@ -52,7 +55,8 @@ export default function StudentAttendanceImportPage() {
   useEffect(() => {
     fetch("/api/college/sections")
       .then((r) => r.json() as Promise<{ sections?: SectionOption[] }>)
-      .then((d) => setSections(d.sections ?? []))
+      // An HOD gets only the sections they manage (a section they just see is left out; the server checks too).
+      .then((d) => setSections((d.sections ?? []).filter((x) => x.accessLevel !== "secondary")))
       .catch(() => toast({ title: "Unable to load sections", variant: "destructive" }));
   }, []);
 
@@ -212,7 +216,7 @@ export default function StudentAttendanceImportPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-6">
       <nav aria-label="Breadcrumb">
-        <Link href="/college-office/students" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <Link href={`${base}/students`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to Students
         </Link>
       </nav>
@@ -375,7 +379,7 @@ export default function StudentAttendanceImportPage() {
           <p className="mt-1 text-sm">
             {plural(totalCreate, "period session")} created. Check a day in the attendance reports; if anything looks wrong, use Undo this import.
           </p>
-          <Link href="/college-office/attendance-reports" className="mt-2 inline-block text-sm font-medium underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Link href={`${base}/attendance-reports`} className="mt-2 inline-block text-sm font-medium underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             Open attendance reports
           </Link>
         </section>

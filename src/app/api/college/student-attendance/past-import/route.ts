@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { mayImportSectionAttendance } from "@/lib/studentAttendance/importAccess";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
@@ -57,7 +58,8 @@ interface DayReport {
 // is never touched. `apply: false` returns the same report without writing anything.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE");
+    // The College Office for any section; an HOD for the sections they manage (checked below).
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD");
     const body = (await readJsonBody(request)) as Body;
     const apply = body.apply === true;
     const dates = body.dates ?? [];
@@ -80,6 +82,9 @@ export async function POST(request: Request) {
     const sectionSnap = await collegeRef.collection("sections").doc(body.sectionId).get();
     if (!sectionSnap.exists) return NextResponse.json({ error: "Section not found. It may have been deleted." }, { status: 404 });
     const section = sectionSnap.data() as Section;
+    if (!(await mayImportSectionAttendance(db, session, section))) {
+      return NextResponse.json({ error: "This section is not one you manage, so you can't import its attendance." }, { status: 403 });
+    }
 
     const now = new Date();
     const today = istDateKey(now);
