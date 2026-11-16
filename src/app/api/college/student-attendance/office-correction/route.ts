@@ -16,6 +16,7 @@ import {
 import { istDateFromParts, istMidnightUTC } from "@/lib/attendance/istTime";
 import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
+import { joinedBy } from "@/lib/studentAttendance/joiningDate";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, Section, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
@@ -167,7 +168,9 @@ export async function POST(request: Request) {
       matchedPeriod.slot.labBatch, await loadLabBatchModes(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]),
       sectionId, assignment.subjectId, assignment.facultyId, matchedPeriod.slot.batchPinned,
     );
-    const students = sortStudentsForList(await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId, labBatch }));
+    // Correcting an earlier day: a student who joined after it (Date of Joining) is not on that day's list.
+    const students = sortStudentsForList(await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId, labBatch }))
+      .filter((st) => joinedBy(st, date));
 
     const markerSnap = await collegeRef.collection("users").doc(session.uid).get();
     const markerName = (markerSnap.data() as { name?: string } | undefined)?.name ?? "";

@@ -1,28 +1,25 @@
-// A student's attendance is counted only from the day they joined classes, so a
-// late joiner is not marked absent for days before they arrived (typically their
-// first semester). The date is the roster's "Date of Joining", falling back to
-// "Date of Admission"; a student with neither is not cut off at all, which is the
-// behaviour every student had before the field existed.
+// A student's attendance counts only from their Date of Joining (DOJ): a late joiner is not counted for classes held
+// before they arrived - neither "classes conducted" nor "attended". Used by every report, the student's own view,
+// mentoring, the timetable denominator, and when attendance is collected (a period's list, office correction, bulk
+// import leave out a student on dates before their DOJ).
+//
+// DOJ only - the roster's "Date of Joining" (YYYY-MM-DD), entered by the College Office / HOD. "Date of Admission" is
+// NOT used: it was often entered late or wrong and cut off real attendance, which is why this rule was once switched
+// off. A student without a DOJ is counted on every day, as before.
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-export function effectiveJoiningDate(
-  student: { dateOfJoining?: unknown; dateOfAdmission?: unknown } | null | undefined
-): string | undefined {
-  for (const v of [student?.dateOfJoining, student?.dateOfAdmission]) {
-    if (typeof v === "string" && ISO_DATE.test(v.trim())) return v.trim();
-  }
-  return undefined;
+export function effectiveJoiningDate(student: { dateOfJoining?: unknown } | null | undefined): string | undefined {
+  const v = student?.dateOfJoining;
+  return typeof v === "string" && ISO_DATE.test(v.trim()) ? v.trim() : undefined;
 }
 
-/**
- * Whether a session held on `sessionDate` ("YYYY-MM-DD") counts for a student who joined on `joinedOn`.
- *
- * Always true: a student's attendance counts on every day the register has it, including days before their recorded
- * joining or admission date (those dates are often entered late, so they are not trusted to cut attendance off). The
- * function and its callers are kept so the rule can be switched back in one place.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for the callers' signature, see above
-export function countsFromJoining(_sessionDate: string | undefined, _joinedOn: string | undefined): boolean {
-  return true;
+/** Whether a class held on `sessionDate` ("YYYY-MM-DD") counts for a student who joined on `joinedOn` (on/after DOJ). */
+export function countsFromJoining(sessionDate: string | undefined, joinedOn: string | undefined): boolean {
+  if (!joinedOn || !sessionDate) return true;
+  return sessionDate >= joinedOn;
 }
+
+/** Whether a student is on a class's list for `date`: not when their DOJ is later than that date. */
+export const joinedBy = (student: { dateOfJoining?: unknown } | null | undefined, date: string): boolean =>
+  countsFromJoining(date, effectiveJoiningDate(student));

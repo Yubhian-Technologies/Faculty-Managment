@@ -12,6 +12,7 @@ import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow
 import { applyOnDutyToEntries, loadOnDutyDay } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudentsCached } from "@/lib/students/sectionRosterCache";
 import { sortStudentsForList } from "@/lib/students/listOrder";
+import { joinedBy } from "@/lib/studentAttendance/joiningDate";
 import type { Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 // "Today" for attendance purposes is the college's calendar day (IST, Asia/Kolkata),
@@ -177,7 +178,7 @@ export async function GET(request: Request) {
           ? { department: sec.department, sectionName: sec.name, year: sec.year, courseId: sec.courseId, labBatch: p.labBatch ?? undefined }
           : a.section?.trim() ? { department: a.department, sectionName: a.section.trim(), year: undefined, courseId: undefined, labBatch: p.labBatch ?? undefined } : null;
         if (!where) return null;
-        const students = sortStudentsForList(await fetchSectionStudentsCached(collegeRef, where));
+        const students = sortStudentsForList(await fetchSectionStudentsCached(collegeRef, where)).filter((st) => joinedBy(st, date));
         const entries: StudentAttendanceEntry[] = applyOnDutyToEntries(
           students.map((st) => ({ studentId: st.id, rollNumber: st.rollNumber, name: st.name, status: null })), onDutyDay, p.periodNumber,
         );
