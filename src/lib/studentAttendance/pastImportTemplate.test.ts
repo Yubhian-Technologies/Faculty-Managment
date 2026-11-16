@@ -29,6 +29,7 @@ describe("past attendance template", () => {
   });
   it("the Sample sheet imports as a register: 6 dates, 2 students, nothing ignored but the footer", async () => {
     const g = parsePastAttendanceGrid(rowsOf((await reload()).getWorksheet("Sample")!), 2026);
+    expect(rowsOf((await reload()).getWorksheet("Sample")!)[3]).not.toContain("Name of the Student");
     expect(g.errors).toEqual([]);
     expect(g.warnings).toEqual([]); // CC / AC in the sample agree with its P marks
     expect(g.dates).toEqual(["2026-08-29", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-05"]);
@@ -36,9 +37,12 @@ describe("past attendance template", () => {
   });
   it("the Template sheet's headers are text dates the parser reads, in columns wide enough to show them (no ####)", async () => {
     const ws = (await reload()).getWorksheet("Template")!;
-    expect(ws.getColumn(3).width).toBeGreaterThanOrEqual(12);
-    const g = parsePastAttendanceGrid([...rowsOf(ws), ["26BV1A05001", "", "P", "A", "", "", ""]], 2026);
+    expect(ws.getColumn(2).width).toBeGreaterThanOrEqual(12);
+    // No Name column: Regd. No, then the dates.
+    expect(rowsOf(ws)[0]).toEqual(["Regd. No", "11-8-2026", "12-8-2026", "13-8-2026", "14-8-2026", "15-8-2026"]);
+    const g = parsePastAttendanceGrid([...rowsOf(ws), ["26BV1A05001", "P", "A", "", "", ""]], 2026);
     expect(g.errors).toEqual([]);
     expect(g.dates).toEqual(["2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-15"]);
+    expect(g.students[0]).toMatchObject({ roll: "26BV1A05001" });
   });
 });
