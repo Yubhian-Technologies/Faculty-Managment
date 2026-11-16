@@ -89,7 +89,7 @@ export const ROSTER_FIELDS: RosterField[] = [
   { key: "hallTicketNo", label: "Hall Ticket No", kind: "text", sample: "Optional; text", aliases: ["Hallticket Number", "Hall Ticket Number", "Hallticket No"] },
   { key: "mobileNo", label: "Student Mobile No", kind: "text", sample: "Required; 10-digit mobile starting 6-9 - must be different for every student in every college (it is how Regd. Nos are matched to students later)", required: true, showInList: true, aliases: ["Mobile No", "Mobile Number", "Student Mobile"], placeholder: "9876543210" },
   { key: "dateOfAdmission", label: "Date of Admission (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD" },
-  { key: "dateOfJoining", label: "Date of Joining (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD - the day the student joined classes; attendance is counted from this date (falls back to Date of Admission when blank)", aliases: ["Joining Date", "DOJ"] },
+  { key: "dateOfJoining", label: "Date of Joining (YYYY-MM-DD)", kind: "date", sample: "Optional; YYYY-MM-DD - the day the student joined classes; attendance (classes conducted and attended) is counted from this date. Blank = counted from the start", aliases: ["Joining Date", "DOJ"] },
   { key: "admissionType", label: "Admission Type", kind: "text", sample: "Optional; e.g. Spot Admission, Management, Convenor", placeholder: "Spot Admission" },
   { key: "seatType", label: "Seat Type", kind: "text", sample: "Optional; text" },
   { key: "entranceType", label: "Entrance Type", kind: "text", sample: "Optional; e.g. EAMCET, ECET, JEE", placeholder: "EAMCET" },

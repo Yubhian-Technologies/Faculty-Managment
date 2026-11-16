@@ -20,7 +20,7 @@ interface DayReport {
   date: string; status: "READY" | "SKIPPED"; reason?: string; periods: number; created: number; alreadyPosted: number;
   skippedPeriods: string[]; detail: string[]; timetableNote?: string;
 }
-interface Result { days: DayReport[]; unmatchedRolls: string[]; rosterNotInFile: string[] }
+interface Result { days: DayReport[]; unmatchedRolls: string[]; rosterNotInFile: string[]; beforeJoining: { roll: string; joinedOn: string; days: number }[] }
 interface SheetState { name: string; grid: PastAttendanceGrid; sectionId: string; result?: Result; applied?: boolean; runId?: string }
 
 const DATES_PER_REQUEST = 7;
@@ -124,7 +124,7 @@ export default function StudentAttendanceImportPage() {
   async function runSheet(i: number, apply: boolean): Promise<void> {
     const sh = sheets[i];
     const runId = apply ? `pastimport-${Date.now()}-${i}` : undefined;
-    const merged: Result = { days: [], unmatchedRolls: [], rosterNotInFile: [] };
+    const merged: Result = { days: [], unmatchedRolls: [], rosterNotInFile: [], beforeJoining: [] };
     for (let from = 0; from < sh.grid.dates.length; from += DATES_PER_REQUEST) {
       const idxs = sh.grid.dates.map((_, k) => k).slice(from, from + DATES_PER_REQUEST);
       const res = await fetch("/api/college/student-attendance/past-import", {
@@ -141,6 +141,11 @@ export default function StudentAttendanceImportPage() {
       merged.days.push(...json.days);
       merged.unmatchedRolls = json.unmatchedRolls;
       merged.rosterNotInFile = json.rosterNotInFile;
+      // Marks dated before a student's Date of Joining, added up over every part of the file.
+      for (const b of json.beforeJoining ?? []) {
+        const cur = merged.beforeJoining.find((x) => x.roll === b.roll);
+        if (cur) cur.days += b.days; else merged.beforeJoining.push({ ...b });
+      }
     }
     patch(i, { result: merged, applied: apply, ...(runId ? { runId } : {}) });
   }
@@ -276,6 +281,7 @@ export default function StudentAttendanceImportPage() {
             <li>A Regd. No column (kept as text) and one column per date. Write dates in full, like 11-8-2026.</li>
             <li>Cells: <strong>P</strong> or <strong>A</strong>. Leave blank when there is no record.</li>
             <li>Sundays, holidays and days with no timetable are skipped. A period that already has attendance is never changed.</li>
+            <li>Attendance counts from each student&apos;s Date of Joining: marks dated before it are left out (enter the Date of Joining on the student&apos;s details first).</li>
           </ul>
           {fileName && (
             <p className="flex items-center gap-2 text-sm">
@@ -450,6 +456,12 @@ function SheetResult({ sheet }: { sheet: SheetState }) {
       )}
       {r.unmatchedRolls.length > 0 && <Note tone="error">Regd. Nos not in this section (ignored): {r.unmatchedRolls.join(", ")}</Note>}
       {r.rosterNotInFile.length > 0 && <Note>In the section but not in the sheet (no record): {r.rosterNotInFile.join(", ")}</Note>}
+      {r.beforeJoining.length > 0 && (
+        <Note>
+          Left out - dated before the student&apos;s Date of Joining (attendance counts from that date):{" "}
+          {r.beforeJoining.map((b) => `${b.roll} (joined ${b.joinedOn}, ${b.days} day${b.days === 1 ? "" : "s"})`).join(", ")}
+        </Note>
+      )}
 
       <details>
         <summary className="cursor-pointer text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Day by day ({r.days.length})</summary>

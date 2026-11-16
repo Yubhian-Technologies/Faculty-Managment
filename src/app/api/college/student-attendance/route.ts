@@ -16,6 +16,7 @@ import { getNoClassReason } from "@/lib/studentAttendance/classDay";
 import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { fetchSectionStudentsCached } from "@/lib/students/sectionRosterCache";
 import { sortStudentsForList } from "@/lib/students/listOrder";
+import { joinedBy } from "@/lib/studentAttendance/joiningDate";
 import { resolveAcademicYearForDate } from "@/lib/studentAttendance/academicYearWindow";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import type { FacultyMember, Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
@@ -200,7 +201,8 @@ export async function POST(request: Request) {
       resolveAcademicYearForDate(db, session.collegeId, date, now),
       loadOnDutyDay(db, session.collegeId, date),
     ]);
-    const students = sortStudentsForList(rosterDocs);
+    // A student whose Date of Joining is later than this class's date is not on its list (attendance counts from DOJ).
+    const students = sortStudentsForList(rosterDocs).filter((st) => joinedBy(st, date));
     if (students.length === 0) {
       return NextResponse.json({ error: "No students are on this class's roster (check the section and, for a lab, the lab batch). Contact your HOD." }, { status: 400 });
     }

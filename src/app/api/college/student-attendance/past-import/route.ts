@@ -20,6 +20,7 @@ import { noClassReason } from "@/lib/studentAttendance/classDay";
 import { loadAcademicYearConfig, windowForAcademicYear } from "@/lib/studentAttendance/academicYearWindow";
 import { applyOnDutyToEntries, loadOnDutyDay, presentCountOf } from "@/lib/studentAttendance/onDuty";
 import { applyTallyDeltaInTx } from "@/lib/studentAttendance/dayTally";
+import { effectiveJoiningDate, joinedBy } from "@/lib/studentAttendance/joiningDate";
 import type { ImportMark } from "@/lib/studentAttendance/pastImportGrid";
 import type { DayOfWeek, FacultyMember, Section, StudentAttendanceEntry, TeachingAssignment } from "@/types";
 
@@ -133,6 +134,8 @@ export async function POST(request: Request) {
       return facultyCache.get(id)!;
     };
     const reports: DayReport[] = [];
+    // Regd. No -> its Date of Joining and how many dates in the file were before it (those marks are left out).
+    const beforeJoining = new Map<string, { joinedOn: string; days: number }>();
     for (const date of sorted) {
       const idx = dates.indexOf(date);
       const report: DayReport = { date, status: "READY", periods: 0, created: 0, alreadyPosted: 0, skippedPeriods: [], detail: [] };
@@ -153,9 +156,16 @@ export async function POST(request: Request) {
         const from = newer.map((s) => s.effectiveDate ?? (s.createdAt ? istDateKey(s.createdAt.toDate()) : "")).sort()[0];
         report.timetableNote = `The timetable for ${newer.length} of ${daySlots.length} period(s) took effect on ${from}, after this date - check the subjects below`;
       }
-      // Every mark in the file is saved - the register is the record - including marks dated before the student's
-      // joining/admission date, which no longer cuts attendance off anywhere (joiningDate.ts).
-      const marked = [...markOf].filter(([, marks]) => marks[idx] != null);
+      // A mark dated before the student's Date of Joining is left out: attendance counts from the DOJ (joiningDate.ts),
+      // so the student is not on that day's classes at all - neither conducted nor attended. Reported back per student.
+      const marked = [...markOf].filter(([studentId, marks]) => {
+        if (marks[idx] == null) return false;
+        const st = studentById.get(studentId);
+        if (joinedBy(st, date)) return true;
+        const roll = st?.rollNumber ?? studentId;
+        beforeJoining.set(roll, { joinedOn: effectiveJoiningDate(st) ?? "", days: (beforeJoining.get(roll)?.days ?? 0) + 1 });
+        return false;
+      });
       if (marked.length === 0) { skip("No P/A in the file for this date"); continue; }
 
       const onDuty = await loadOnDutyDay(db, collegeId, date);
@@ -256,6 +266,7 @@ export async function POST(request: Request) {
       days: reports,
       unmatchedRolls,
       rosterNotInFile: notInFile,
+      beforeJoining: [...beforeJoining].map(([roll, v]) => ({ roll, joinedOn: v.joinedOn, days: v.days })),
       totals: { created: reports.reduce((n, r) => n + r.created, 0), alreadyPosted: reports.reduce((n, r) => n + r.alreadyPosted, 0) },
     });
   } catch (err) {
