@@ -70,10 +70,12 @@ describe("the CIE paper inside a Mid paper set", () => {
     })[0];
     expect(stemmed).not.toContain('<td class="no"></td>');
     expect(stemmed).not.toContain("STEM");
-    expect(stemmed).toMatch(/<td class="no">3a<\/td><td class="q">PARTA<\/td><td class="num">6<\/td><td class="num">1<\/td><td class="num">3<\/td>/);
-    expect(stemmed).toMatch(/<td class="no">3b<\/td><td class="q">PARTB<\/td><td class="num">4<\/td><td class="num">1<\/td><td class="num">3<\/td>/);
-    expect(withPo(false).every((h) => !h.includes("colhead\">PO</td>"))).toBe(true);
-    expect(withPo(true).every((h) => h.includes("colhead\">PO</td>"))).toBe(true);
+    // Each row carries its own "L3, CO1 [6M]" - no marks / CO / BL column headings, no Course Outcomes paragraph.
+    expect(stemmed).toMatch(/<td class="no">3a<\/td><td class="q">PARTA<\/td><td class="tag">L3, CO1 \[6M\]<\/td>/);
+    expect(stemmed).toMatch(/<td class="no">3b<\/td><td class="q">PARTB<\/td><td class="tag">L3, CO1 \[4M\]<\/td>/);
+    expect(stemmed).not.toMatch(/class="[^"]*colhead/);
+    expect(stemmed).not.toContain("Course Outcomes:");
+    for (const h of [...withPo(false), ...withPo(true)]) expect(h).not.toMatch(/colhead">(CO|BL|PO)</);
     expect(pages[1]).toMatch(/<td class="no">1<\/td><td class="q">CEAQ1/);
     expect(pages[1]).toMatch(/<td class="no">2<\/td><td class="q">CEAQ2/);
   });
