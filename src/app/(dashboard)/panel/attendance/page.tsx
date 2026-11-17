@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDialog";
+import { PhoneCheckInCard } from "@/components/attendance/PhoneCheckInCard";
 import { toast } from "@/hooks/useToast";
 import { useReadOnlyAccess } from "@/hooks/useReadOnlyAccess";
 import { formatDate, toDate } from "@/lib/utils";
@@ -144,7 +145,7 @@ export default function FacultyAttendancePage() {
               <p className="text-sm text-muted-foreground">You are on approved leave today; attendance cannot be marked.</p>
             ) : faceRegistered === false ? (
               <>
-                <p className="text-sm text-muted-foreground">Register your face to use face recognition check-in.</p>
+                <p className="text-sm text-muted-foreground">Register once to check in yourself - a face scan or your phone&apos;s fingerprint / face unlock, as your college has set.</p>
                 <Button onClick={() => setDialogMode("register")}>
                   <ScanFace className="h-4 w-4 mr-1.5" /> Register
                 </Button>
@@ -306,6 +307,8 @@ export default function FacultyAttendancePage() {
           </CardContent>
         </Card>
       )}
+
+      {!readOnly && <PhoneCheckInCard onChanged={() => void loadFaceRegistration()} />}
 
       {dialogMode && (
         <MarkAttendanceDialog

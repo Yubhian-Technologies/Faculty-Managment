@@ -1,5 +1,7 @@
 import { FACE_MATCH_THRESHOLD, bestDistance, isValidDescriptor } from "@/lib/attendance/faceThreshold";
 import { loadRegisteredSamples } from "@/lib/attendance/faceRegistry";
+import { allowsFace, allowsPasskey, PasskeyError, selfCheckInMethod, verifyAttendancePasskey } from "@/lib/attendance/passkeys";
+import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 
 // What the server can and cannot establish about a self check-in / check-out.
 //
@@ -33,28 +35,75 @@ export interface AttendanceProofBody {
   faceDescriptor?: unknown;
   capturedAt?: unknown;
   accuracy?: unknown;
+  /** A passkey signature (WebAuthn assertion) made for this check-in / check-out - see lib/attendance/passkeys.ts. */
+  passkey?: unknown;
 }
 
-export interface AttendanceProofEvidence {
-  method: "SERVER_DESCRIPTOR_MATCH";
-  distance: number;
-  threshold: number;
-  accuracyMeters: number;
-  capturedAt: number;
-  verifiedAt: number;
-}
+export type AttendanceProofEvidence =
+  | {
+      method: "SERVER_DESCRIPTOR_MATCH";
+      distance: number;
+      threshold: number;
+      accuracyMeters: number;
+      capturedAt: number;
+      verifiedAt: number;
+    }
+  | {
+      // The registered phone's own fingerprint / face unlock, verified as a WebAuthn signature on the server.
+      method: "PASSKEY";
+      credentialId: string;
+      deviceLabel: string;
+      accuracyMeters: number;
+      verifiedAt: number;
+    };
 
 export type AttendanceProofResult =
-  | { ok: true; distance: number; evidence: AttendanceProofEvidence }
+  | { ok: true; distance?: number; evidence: AttendanceProofEvidence }
   | { ok: false; status: number; error: string };
 
+/**
+ * `request` is needed for a passkey (the site the key belongs to). Which proofs are accepted follows the
+ * college's Self Check-In Method (settings/selfCheckIn: FACE - the default -, PASSKEY or EITHER).
+ */
 export async function verifyAttendanceProof(
   db: FirebaseFirestore.Firestore,
   collegeId: string,
   uid: string,
   body: AttendanceProofBody,
-  now: number = Date.now()
+  now: number = Date.now(),
+  request?: Request,
 ): Promise<AttendanceProofResult> {
+  const accuracy = typeof body.accuracy === "number" && Number.isFinite(body.accuracy) && body.accuracy >= 0 ? body.accuracy : null;
+  const locationProblem = (): AttendanceProofResult | null => {
+    if (accuracy === null) return { ok: false, status: 400, error: "Your location accuracy could not be read - try again" };
+    if (accuracy > MAX_LOCATION_ACCURACY_M) {
+      return {
+        ok: false,
+        status: 400,
+        error: `Your location is too imprecise (±${Math.round(accuracy)} m) - move to an open area, turn on precise location and try again`,
+      };
+    }
+    return null;
+  };
+  const method = await selfCheckInMethod(db, collegeId);
+
+  if (body.passkey !== undefined) {
+    if (!allowsPasskey(method)) return { ok: false, status: 400, error: "Phone fingerprint / face unlock check-in is not turned on for your college - use the face scan." };
+    if (!request) return { ok: false, status: 400, error: "Unable to verify the phone - try again." };
+    const loc = locationProblem();
+    if (loc) return loc;
+    try {
+      const used = await verifyAttendancePasskey(db, collegeId, uid, body.passkey as AuthenticationResponseJSON, request);
+      return { ok: true, evidence: { method: "PASSKEY", credentialId: used.credentialId, deviceLabel: used.label, accuracyMeters: accuracy!, verifiedAt: now } };
+    } catch (err) {
+      if (err instanceof PasskeyError) return { ok: false, status: err.status, error: err.message };
+      throw err;
+    }
+  }
+
+  if (!allowsFace(method)) {
+    return { ok: false, status: 400, error: "Your college uses phone fingerprint / face unlock for check-in - register this phone on My Attendance." };
+  }
   if (!isValidDescriptor(body.faceDescriptor)) {
     return { ok: false, status: 400, error: "Face verification data is missing - refresh the page and try again" };
   }
@@ -65,17 +114,8 @@ export async function verifyAttendanceProof(
   if (now - capturedAt > MAX_PROOF_AGE_MS || capturedAt - now > MAX_PROOF_FUTURE_MS) {
     return { ok: false, status: 400, error: "That face capture has expired - capture again" };
   }
-  const accuracy = typeof body.accuracy === "number" && Number.isFinite(body.accuracy) && body.accuracy >= 0 ? body.accuracy : null;
-  if (accuracy === null) {
-    return { ok: false, status: 400, error: "Your location accuracy could not be read - try again" };
-  }
-  if (accuracy > MAX_LOCATION_ACCURACY_M) {
-    return {
-      ok: false,
-      status: 400,
-      error: `Your location is too imprecise (±${Math.round(accuracy)} m) - move to an open area, turn on precise location and try again`,
-    };
-  }
+  const loc = locationProblem();
+  if (loc) return loc;
 
   const registered = await loadRegisteredSamples(db, collegeId, uid);
   if (!registered.length) {
@@ -89,6 +129,6 @@ export async function verifyAttendanceProof(
   return {
     ok: true,
     distance,
-    evidence: { method: "SERVER_DESCRIPTOR_MATCH", distance, threshold: FACE_MATCH_THRESHOLD, accuracyMeters: accuracy, capturedAt, verifiedAt: now },
+    evidence: { method: "SERVER_DESCRIPTOR_MATCH", distance, threshold: FACE_MATCH_THRESHOLD, accuracyMeters: accuracy!, capturedAt, verifiedAt: now },
   };
 }
