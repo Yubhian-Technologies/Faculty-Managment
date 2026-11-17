@@ -81,6 +81,9 @@
     "vitest": "^4.1.11"
   },
   "overrides": {
-    "jwks-rsa": "3.2.2"
+    "jwks-rsa": "3.2.2",
+    "@tensorflow/tfjs-core": {
+      "node-fetch": "2.7.0"
+    }
   }
 }
