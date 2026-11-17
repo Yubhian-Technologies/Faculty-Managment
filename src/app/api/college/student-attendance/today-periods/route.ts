@@ -97,7 +97,7 @@ export async function GET(request: Request) {
     const slots = [
       ...ownSlots.filter((o) =>
         !allocatedKeys.has(`${o.slot.assignmentId}_${o.slot.periodNumber}`)
-        && facultyActiveOn(labWindows, o.slot.sectionId, o.slot.subjectId, o.slot.facultyId, date)),
+        && (!!o.adjustedFrom || facultyActiveOn(labWindows, o.slot.sectionId, o.slot.subjectId, o.slot.facultyId, date))),
       ...allocatedSlots,
     ].sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
 
@@ -122,7 +122,8 @@ export async function GET(request: Request) {
     // A lab the section's faculty incharge set to "no batch" shows (and rosters) as the whole section.
     const labModes = await loadLabBatchModes(db, session.collegeId, slots.map((s) => ({ sectionId: s.slot.sectionId, subjectId: s.slot.subjectId })));
     const periods = await Promise.all(
-      slots.map(async ({ slot, startTime, endTime, closeTime, unavailableReason }) => {
+      slots.map(async ({ slot, startTime, endTime, closeTime, unavailableReason, ...rest }) => {
+        const adjustedFrom = "adjustedFrom" in rest ? rest.adjustedFrom : undefined;
         // An allocated lab period is open all day on its allocated dates.
         const allocated = allocatedKeys.has(`${slot.assignmentId}_${slot.periodNumber}`);
         const isOpen = allocated || (!unavailableReason && nowMinutes >= toMinutes(startTime) && nowMinutes < toMinutes(closeTime));
@@ -154,6 +155,10 @@ export async function GET(request: Request) {
           phase,
           labBatch: effectiveLabBatch(slot.labBatch, labModes, slot.sectionId, slot.subjectId, slot.facultyId, slot.batchPinned) ?? null,
           allocated,
+          // Taken over from a colleague ("Adjust / Swap a Class") - shown on the period card.
+          adjustedFrom: adjustedFrom ? { facultyName: adjustedFrom.fromFacultyName, subjectName: adjustedFrom.fromSubjectName, onLeave: adjustedFrom.adjustmentId === "LEAVE" } : null,
+          // Leave substitute in a section they don't teach: attendance only (class work not needed).
+          attendanceOnly: "attendanceOnly" in rest ? !!rest.attendanceOnly : false,
         };
       })
     );

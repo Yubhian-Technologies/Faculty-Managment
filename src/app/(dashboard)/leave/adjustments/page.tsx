@@ -11,6 +11,8 @@ import { toast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
 import type { Timestamp } from "firebase/firestore";
 import type { AdjustmentKind } from "@/types/leave";
+import { useAuthStore } from "@/store/authStore";
+import { ClassAdjustmentsPanel } from "@/components/classAdjustments/ClassAdjustmentsPanel";
 
 interface PeriodItem {
   date: string;
@@ -41,6 +43,9 @@ interface AdjustmentItem {
 // them (check the ones they can't cover) and accept the rest in one submit -
 // no need to reject the whole bundle over a single clash.
 export default function LeaveAdjustmentsPage() {
+  // Faculty (and HODs) also adjust / swap a class with a colleague here - no leave involved.
+  const role = useAuthStore((s) => s.user?.role);
+  const teaches = role === "PANEL_MEMBER" || role === "HOD";
   const [items, setItems] = useState<AdjustmentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [declinedKeys, setDeclinedKeys] = useState<Record<string, Set<string>>>({});
@@ -113,11 +118,15 @@ export default function LeaveAdjustmentsPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <PageHeader
         title="Work Adjustments"
-        description="Requests from colleagues to cover a class or act as their point of contact while they are on leave."
+        description={teaches
+          ? "Adjust or swap a class with a colleague, and answer requests to cover a class or act as a point of contact during leave."
+          : "Requests from colleagues to cover a class or act as their point of contact while they are on leave."}
       />
+      {teaches && <ClassAdjustmentsPanel />}
+      {teaches && <h2 className="text-sm font-semibold pt-2">Leave Cover Requests</h2>}
       {isLoading ? (
         <div className="h-32 rounded-lg border bg-muted/30 animate-pulse" />
       ) : items.length === 0 ? (

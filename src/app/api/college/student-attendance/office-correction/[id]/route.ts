@@ -145,7 +145,11 @@ export async function PATCH(
         }
         const classNotes = ((update.classNotes as string | undefined) ?? fresh.classNotes ?? "").trim();
         if (!classNotes) {
-          return { error: { message: "Record of the Class Work is required before submitting attendance", status: 400 } };
+          // A leave substitute's attendance-only period has no class work to record.
+          if (!fresh.attendanceOnly) {
+            return { error: { message: "Record of the Class Work is required before submitting attendance", status: 400 } };
+          }
+          update.classNotes = `Attendance only - substitute: ${fresh.facultyName || "covering faculty"}`;
         }
         const reason = body.reason?.trim() || fresh.correctionReason;
         if (!reason) {

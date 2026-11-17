@@ -31,6 +31,8 @@ interface PeriodCoverageGridProps {
   // LeaveApprovalQueue) - this component only owns the grouping/layout, not
   // what's picked for each period.
   renderPeriod: (period: PeriodCoverageEntry, key: string) => ReactNode;
+  /** "list": one period per row (Apply Leave); default "grid": up to 3 a row. */
+  layout?: "grid" | "list";
 }
 
 // Every period-substitute picker in the leave module (LeaveApplyForm,
@@ -42,7 +44,7 @@ interface PeriodCoverageGridProps {
 // handful of periods and reads far more compactly as a small grid than a long
 // vertical scroll. Sorted by date, then by period number within a date,
 // regardless of the order the API returned them in.
-export function PeriodCoverageGrid({ periods, renderPeriod }: PeriodCoverageGridProps) {
+export function PeriodCoverageGrid({ periods, renderPeriod, layout = "grid" }: PeriodCoverageGridProps) {
   const byDate = new Map<string, PeriodCoverageEntry[]>();
   for (const p of periods) {
     if (!byDate.has(p.date)) byDate.set(p.date, []);
@@ -60,7 +62,7 @@ export function PeriodCoverageGrid({ periods, renderPeriod }: PeriodCoverageGrid
               {formatDate(new Date(date))}
               {dayPeriods[0]?.day ? <span className="font-normal text-muted-foreground"> · {dayPeriods[0].day}</span> : null}
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className={layout === "list" ? "divide-y rounded-lg border bg-background" : "grid grid-cols-1 sm:grid-cols-3 gap-2"}>
               {dayPeriods.map((p) => renderPeriod(p, `${p.date}|${p.timetableSlotId}`))}
             </div>
           </div>

@@ -1,3 +1,4 @@
+import { pickOwnAssignment } from "@/lib/classAdjustments/rules";
 import type { Firestore } from "firebase-admin/firestore";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
@@ -24,13 +25,16 @@ async function filterToCurrentSlots(
   collegeId: string,
   slots: (TimetableSlot & { id: string })[]
 ): Promise<(TimetableSlot & { id: string })[]> {
-  const currentAcademicYear = await resolveCollegeAcademicYear(db, collegeId);
   const distinctCourseYears = new Map<string, { courseId: string; year: number }>();
   for (const s of slots) distinctCourseYears.set(`${s.courseId} ${s.year}`, { courseId: s.courseId, year: s.year });
-  const semesterByCourseYear = new Map<string, number | null>();
-  for (const [key, { courseId, year }] of distinctCourseYears) {
-    semesterByCourseYear.set(key, await resolveSectionCurrentSemester(db, collegeId, courseId, year));
-  }
+  // All course-years at once: a whole college's day of slots spans dozens of them, and resolving them one after
+  // another (each a timing read, sometimes two) is what made the substitute list take ~25 s.
+  const [currentAcademicYear, semesters] = await Promise.all([
+    resolveCollegeAcademicYear(db, collegeId),
+    Promise.all([...distinctCourseYears].map(async ([key, { courseId, year }]) =>
+      [key, await resolveSectionCurrentSemester(db, collegeId, courseId, year)] as const)),
+  ]);
+  const semesterByCourseYear = new Map<string, number | null>(semesters);
   return slots.filter((s) =>
     matchesCurrentAcademicYear(s.academicYear, currentAcademicYear) &&
     slotMatchesCurrentSemester(s.semester, semesterByCourseYear.get(`${s.courseId} ${s.year}`) ?? null)
@@ -137,6 +141,9 @@ export interface SubstituteCandidate {
    *  the whole college, so two colleagues can share a name and the department
    *  is what tells them apart. */
   facultyDepartment: string;
+  /** Set when they teach this period's section: as a leave substitute they teach this (their own) subject there;
+   *  otherwise they mark attendance only (lib/leave/substituteTeaching.ts). */
+  ownSubject?: string;
 }
 
 export interface PeriodCoverageEntry extends RequiredPeriod {
@@ -186,23 +193,21 @@ export async function resolveRequiredPeriods(
   }
   if (required.length === 0) return required;
 
+  // Section names, course and subject short codes and the period times are independent reads, fetched once per
+  // distinct id and all at once. A missing doc simply leaves its value unset; callers fall back to the name they
+  // already have rather than showing a gap.
   const sectionIds = Array.from(new Set(required.map((p) => p.sectionId)));
-  const sectionSnaps = await Promise.all(sectionIds.map((id) => collegeRef.collection("sections").doc(id).get()));
+  const courseIds = Array.from(new Set(required.map((p) => p.courseId).filter((v): v is string => !!v)));
+  const subjectIds = Array.from(new Set(required.map((p) => p.subjectId).filter(Boolean)));
+  const [sectionSnaps, courseSnaps, subjectSnaps] = await Promise.all([
+    Promise.all(sectionIds.map((id) => collegeRef.collection("sections").doc(id).get())),
+    Promise.all(courseIds.map((id) => collegeRef.collection("courses").doc(id).get())),
+    Promise.all(subjectIds.map((id) => collegeRef.collection("subjects").doc(id).get())),
+    attachPeriodTimes(collegeRef, required),
+  ]);
   const sectionNameById = new Map(
     sectionSnaps.filter((s) => s.exists).map((s) => [s.id, (s.data() as { name?: string } | undefined)?.name])
   );
-  for (const p of required) p.sectionName = sectionNameById.get(p.sectionId) ?? undefined;
-
-  // Course and subject short codes, fetched once per distinct id - a leave
-  // spanning many periods usually repeats a handful of each. A missing doc
-  // simply leaves the code unset; callers fall back to the name they already
-  // have rather than showing a gap.
-  const courseIds = Array.from(new Set(required.map((p) => p.courseId).filter((v): v is string => !!v)));
-  const subjectIds = Array.from(new Set(required.map((p) => p.subjectId).filter(Boolean)));
-  const [courseSnaps, subjectSnaps] = await Promise.all([
-    Promise.all(courseIds.map((id) => collegeRef.collection("courses").doc(id).get())),
-    Promise.all(subjectIds.map((id) => collegeRef.collection("subjects").doc(id).get())),
-  ]);
   const courseCodeById = new Map(
     courseSnaps.filter((d) => d.exists).map((d) => [d.id, (d.data() as { code?: string } | undefined)?.code])
   );
@@ -213,11 +218,10 @@ export async function resolveRequiredPeriods(
     })
   );
   for (const p of required) {
+    p.sectionName = sectionNameById.get(p.sectionId) ?? undefined;
     p.courseCode = (p.courseId ? courseCodeById.get(p.courseId) : undefined) ?? undefined;
     p.subjectCode = subjectCodeById.get(p.subjectId) ?? undefined;
   }
-
-  await attachPeriodTimes(collegeRef, required);
 
   return required.sort((a, b) => (a.date === b.date ? a.periodNumber - b.periodNumber : a.date.localeCompare(b.date)));
 }
@@ -279,32 +283,30 @@ export async function buildPeriodCoverage(
   holidayDates: Set<string>,
   opts: CoverageOptions = {}
 ): Promise<PeriodCoverageEntry[]> {
+  const collegeRef = db.collection("colleges").doc(collegeId);
+  const workingDates = enumerateWorkingDates(fromDate, toDate, holidayDates);
+  const days = Array.from(new Set(workingDates.map(dayOfWeekFromDate).filter((d): d is DayOfWeek => !!d)));
+  if (days.length === 0) return [];
+  // The college-wide reads don't depend on the requester's own periods, so all of them start together with those
+  // (each is a round trip or more - run one after another they made the substitute list slow):
+  //  - every teaching faculty member in the college, not just the applicant's own department: cover is routinely
+  //    arranged across departments (a shared first-year subject especially). `department` still orders the list.
+  //    Only the fields used here - a full faculty record carries the whole profile (~1 MB for a college).
+  //  - the live slots of the weekdays in the range (a single-field `in`), which make people "busy" then.
+  //  - everyone on (or awaiting a decision on) leave, the subject of another adjustment, or already named to cover.
+  const settle = <T,>(p: Promise<T>) => { p.catch(() => undefined); return p; };
+  const facultyRead = settle(collegeRef.collection("facultyMembers")
+    .select("legalName", "honorific", "department", "status", "designation", "userUid").get());
+  const slotsRead = settle(collegeRef.collection("timetableSlots").where("day", "in", days).get()
+    .then((snap) => filterToCurrentSlots(db, collegeId, snap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string }))));
+  const unavailabilityRead = settle(loadUnavailability(
+    db, collegeId, isoDateKey(workingDates[0]), isoDateKey(workingDates[workingDates.length - 1]),
+    { excludeRequestId: opts.excludeRequestId, excludeAdjustmentId: opts.excludeAdjustmentId },
+  ));
   const required = await resolveRequiredPeriods(db, collegeId, facultyMemberId, fromDate, toDate, holidayDates);
   if (required.length === 0) return [];
 
-  const collegeRef = db.collection("colleges").doc(collegeId);
-  const [deptFacultySnap, allSlotsSnap, unavailability] = await Promise.all([
-    // Every teaching faculty member in the college, not just the applicant's
-    // own department: cover is routinely arranged across departments (a
-    // shared first-year subject especially), and restricting the list to one
-    // department left an applicant with "None available" whenever their own
-    // colleagues were all teaching that period. `department` still matters -
-    // it orders the list below, own department first.
-    collegeRef.collection("facultyMembers").get(),
-    // Only slots on the weekdays being covered can make anyone "busy" (the busy
-    // map below is keyed day:period), so fetch just those days - a single-field
-    // `in`, no composite index - instead of every slot of every day.
-    collegeRef.collection("timetableSlots").where("day", "in", Array.from(new Set(required.map((r) => r.day)))).get(),
-    // Everyone on (or awaiting a decision on) leave, the subject of another
-    // adjustment, or already named to cover a period - not just APPROVED leave
-    // as before, which let people with a pending leave or an existing cover
-    // assignment still show up as "free". Widened past the applicant's own
-    // department for the same reason the faculty list is.
-    loadUnavailability(
-      db, collegeId, required[0].date, required[required.length - 1].date,
-      { excludeRequestId: opts.excludeRequestId, excludeAdjustmentId: opts.excludeAdjustmentId }
-    ),
-  ]);
+  const [deptFacultySnap, currentSlots, unavailability] = await Promise.all([facultyRead, slotsRead, unavailabilityRead]);
 
   const eligibleFaculty = deptFacultySnap.docs
     .filter((d) => d.id !== facultyMemberId)
@@ -316,17 +318,28 @@ export async function buildPeriodCoverage(
     .filter((f) => isFacultyAvailable(f.status) && !LEGACY_TECHNICAL_DESIGNATIONS.includes(f.designation))
     .filter((f) => !opts.candidateFilter || opts.candidateFilter(f));
 
-  // Only the LIVE timetable counts as "already teaching then" - a section's
-  // earlier semester/session keeps its slot docs as history, and those used to
-  // count too, hiding people who are in fact free.
-  const allSlots = allSlotsSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string });
-  const currentSlots = await filterToCurrentSlots(db, collegeId, allSlots);
+  // Only the LIVE timetable counts as "already teaching then" (filterToCurrentSlots above) - a section's earlier
+  // semester/session keeps its slot docs as history, and those used to count too, hiding people who are in fact free.
   const busyByDayPeriod = new Map<string, Set<string>>();
   for (const s of currentSlots) {
     const key = `${s.day}:${s.periodNumber}`;
     let set = busyByDayPeriod.get(key);
     if (!set) { set = new Set(); busyByDayPeriod.set(key, set); }
     set.add(s.facultyId);
+  }
+
+  // Who teaches each affected section (current assignments): they'd teach their own subject there as a substitute.
+  const ownBySection = new Map<string, Map<string, { subjectName?: string; subjectType?: string }[]>>();
+  const sectionIds = Array.from(new Set(required.map((r) => r.sectionId).filter(Boolean)));
+  for (const ids of chunk(sectionIds, 30)) {
+    const snap = await collegeRef.collection("teachingAssignments").where("sectionId", "in", ids).get();
+    for (const d of snap.docs) {
+      const a = d.data() as { sectionId: string; facultyId?: string; subjectName?: string; subjectType?: string; isPast?: boolean };
+      if (a.isPast || !a.facultyId) continue;
+      const bySub = ownBySection.get(a.sectionId) ?? new Map();
+      bySub.set(a.facultyId, [...(bySub.get(a.facultyId) ?? []), a]);
+      ownBySection.set(a.sectionId, bySub);
+    }
   }
 
   return required.map((period) => {
@@ -337,12 +350,16 @@ export async function buildPeriodCoverage(
         !(f.userUid && unavailability.isUnavailableOn(f.userUid, period.date)) &&
         !unavailability.isCoveringAt(f.id, period.date, period.periodNumber)
       )
-      .map((f) => ({ facultyId: f.id, facultyName: facultyDisplayName(f), facultyDepartment: f.department ?? "" }))
-      // Own department first - the usual choice stays at the top of a list
-      // that now spans the college - then by name within each group.
+      .map((f) => {
+        const own = pickOwnAssignment(ownBySection.get(period.sectionId)?.get(f.id) ?? []);
+        return { facultyId: f.id, facultyName: facultyDisplayName(f), facultyDepartment: f.department ?? "", ...(own?.subjectName ? { ownSubject: own.subjectName } : {}) };
+      })
+      // People who teach the section first (they teach their own subject), then own department - the usual choice
+      // stays at the top of a list that now spans the college - then by name within each group.
       .sort((a, b) => {
         const own = (d: string) => (d === department ? 0 : 1);
-        return own(a.facultyDepartment) - own(b.facultyDepartment)
+        return Number(!a.ownSubject) - Number(!b.ownSubject)
+          || own(a.facultyDepartment) - own(b.facultyDepartment)
           || a.facultyDepartment.localeCompare(b.facultyDepartment)
           || a.facultyName.localeCompare(b.facultyName);
       });

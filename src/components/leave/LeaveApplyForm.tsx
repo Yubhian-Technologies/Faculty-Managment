@@ -798,16 +798,26 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
 
           {!isLoadingPeriods && periods.length > 0 && (
             <div className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <Label>Work Adjustment</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <Label>Work Adjustment</Label>
+                </div>
+                {(() => {
+                  const done = periods.filter((p) => substituteByPeriod[`${p.date}|${p.timetableSlotId}`]).length;
+                  return (
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${done === periods.length ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}>
+                      {done} of {periods.length} periods covered
+                    </span>
+                  );
+                })()}
               </div>
-              <p className="text-xs text-muted-foreground">Choose a faculty member to take each of your classes during this leave. Only faculty free at that time are shown, with faculty from your department listed first.</p>
+              <p className="text-xs text-muted-foreground">Choose a faculty member for each of your classes. Only faculty free at that time are listed - those who teach the section first (they teach their own subject), then your department. Others mark attendance only.</p>
               {substituteDepartments.length > 1 && (
                 <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground shrink-0">Department</Label>
+                  <Label className="text-xs text-muted-foreground shrink-0">Show Faculty From</Label>
                   <Select value={substituteDeptFilter || "ALL"} onValueChange={(v) => setSubstituteDeptFilter(v === "ALL" ? "" : v)}>
-                    <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-full sm:w-64"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">All Departments</SelectItem>
                       {substituteDepartments.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
@@ -815,60 +825,69 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                   </Select>
                 </div>
               )}
-              <div className="rounded-lg border p-3">
-                <PeriodCoverageGrid
+              <PeriodCoverageGrid
                   periods={periods}
+                  layout="list"
                   renderPeriod={(p, key) => {
                     const candidates = substituteDeptFilter
                       ? p.candidates.filter((c) => c.facultyDepartment === substituteDeptFilter)
                       : p.candidates;
+                    const picked = p.candidates.find((c) => c.facultyId === substituteByPeriod[key]) as
+                      | { facultyName: string; facultyDepartment?: string; ownSubject?: string } | undefined;
                     return (
-                      <div key={key} className="space-y-1 rounded-md border p-2">
-                        <p className="text-xs font-medium leading-tight">Period {p.periodNumber}</p>
-                        {/* Course - year - semester, then subject - section.
-                            Short codes and Roman year/semester, because three
-                            of these cards sit side by side: the full subject
-                            name alone used to wrap over two lines while still
-                            not saying which year or semester the class was.
-                            Each part is dropped rather than shown blank when
-                            its source is unset - a slot published before
-                            `semester` existed, a subject with no short code,
-                            a course doc since deleted. */}
-                        <p className="text-xs leading-tight">
-                          {[p.courseCode, toRoman(p.year), toRoman(p.semester)].filter(Boolean).join(" · ")}
-                        </p>
-                        <p className="text-xs leading-tight">
-                          {p.subjectCode || p.subjectName}
-                          {p.sectionName && <span className="text-muted-foreground"> · {p.sectionName}</span>}
-                        </p>
-                        {p.startTime && p.endTime && (
-                          <p className="text-xs text-muted-foreground leading-tight">
-                            {formatTime12h(p.startTime)}&ndash;{formatTime12h(p.endTime)}
-                          </p>
-                        )}
-                        <Select
-                          value={substituteByPeriod[key] ?? ""}
-                          onValueChange={(v) => setSubstituteByPeriod((prev) => ({ ...prev, [key]: v }))}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder={candidates.length === 0 ? "None available" : "Select faculty"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {candidates.map((c) => (
-                              <SelectItem key={c.facultyId} value={c.facultyId}>
-                                {c.facultyName}
-                                {c.facultyDepartment && (
-                                  <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
-                                )}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <div key={key} className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
+                        {/* Period + time, then course - year - semester and subject - section. Each part is
+                            dropped rather than shown blank when its source is unset. */}
+                        <div className="flex min-w-0 flex-1 items-start gap-3">
+                          <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md bg-primary/10 text-primary">
+                            <span className="text-[10px] font-medium leading-none">P</span>
+                            <span className="text-sm font-semibold leading-tight">{p.periodNumber}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="line-clamp-2 break-words text-sm font-medium">
+                              {p.subjectCode || p.subjectName}
+                              {p.sectionName && <span className="font-normal text-muted-foreground"> · {p.sectionName}</span>}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {[p.startTime && p.endTime ? `${formatTime12h(p.startTime)} – ${formatTime12h(p.endTime)}` : null,
+                                [p.courseCode, toRoman(p.year), toRoman(p.semester)].filter(Boolean).join(" · ")].filter(Boolean).join("  ·  ")}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="w-full sm:w-64 shrink-0 space-y-1">
+                          <Select
+                            value={substituteByPeriod[key] ?? ""}
+                            onValueChange={(v) => setSubstituteByPeriod((prev) => ({ ...prev, [key]: v }))}
+                            disabled={candidates.length === 0}
+                          >
+                            <SelectTrigger className="w-full">
+                              {picked ? <span className="truncate">{picked.facultyName}</span>
+                                : <SelectValue placeholder={candidates.length === 0 ? "No faculty free" : "Select faculty"} />}
+                            </SelectTrigger>
+                            <SelectContent>
+                              {candidates.map((c) => (
+                                <SelectItem key={c.facultyId} value={c.facultyId}>
+                                  <span className="flex flex-col">
+                                    <span>{c.facultyName}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {[c.facultyDepartment, (c as { ownSubject?: string }).ownSubject ? `Teaches ${(c as { ownSubject?: string }).ownSubject} here` : null].filter(Boolean).join(" · ")}
+                                    </span>
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {picked && (
+                            <p className="px-1 text-xs text-muted-foreground">
+                              {picked.ownSubject ? `Teaches ${picked.ownSubject} in this period` : "Marks attendance only"}
+                              {picked.facultyDepartment ? ` · ${picked.facultyDepartment}` : ""}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     );
                   }}
                 />
-              </div>
             </div>
           )}
 
