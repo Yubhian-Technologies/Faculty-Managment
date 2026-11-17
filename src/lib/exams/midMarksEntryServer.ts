@@ -146,3 +146,57 @@ export async function subjectExamDay(db: Db, c: string, plan: { id: string; days
   const dates = snap.docs.flatMap((d) => ((d.data() as { slots?: { subjectId: string; date: string }[] }).slots ?? []).filter((s) => s.subjectId === subjectId).map((s) => s.date));
   return [...dates].sort().pop() ?? [...(plan.days ?? [])].sort().pop() ?? null;
 }
+
+export interface SectionProgress {
+  sectionId: string; section: string; facultyId: string; facultyName: string; assignmentId: string | null;
+  /** Students with this Mid's marks entered, out of the section's total. */
+  entered: number; total: number;
+  status: "NOT_STARTED" | "DRAFT" | "SUBMITTED";
+  /** The Exam Cell locked this Mid's marks (Exam Cell mode). */
+  locked: boolean;
+}
+
+/**
+ * Per section of each subject + branch: how far this Mid's marks are (entered / total, the faculty's sheet status,
+ * Exam Cell lock). Keyed `${subjectId}|${branch}`. One read per section's marks sheet plus its configuration.
+ */
+export async function midProgress(
+  db: Db, c: string, mid: number,
+  rows: { subjectId: string; branch: string; sectionId: string; sectionName: string; facultyId: string; facultyName: string }[],
+): Promise<Map<string, SectionProgress[]>> {
+  const ref = college(db, c);
+  const subjectIds = [...new Set(rows.map((r) => r.subjectId))];
+  const assignmentOf = new Map<string, string>();
+  for (let i = 0; i < subjectIds.length; i += 30) {
+    const snap = await ref.collection("teachingAssignments").where("subjectId", "in", subjectIds.slice(i, i + 30)).get();
+    for (const d of snap.docs) {
+      const a = d.data() as { isPast?: boolean; sectionId?: string; subjectId: string; facultyId?: string };
+      if (a.isPast || !a.sectionId) continue;
+      assignmentOf.set(`${a.subjectId}|${a.sectionId}|${a.facultyId}`, d.id);
+    }
+  }
+  const ids = [...new Set(rows.map((r) => assignmentOf.get(`${r.subjectId}|${r.sectionId}|${r.facultyId}`)).filter((x): x is string => !!x))];
+  const snaps = ids.length ? await db.getAll(...ids.map((id) => ref.collection("internalExamMarks").doc(id))) : [];
+  const batches = new Map(snaps.filter((s) => s.exists).map((s) => [s.id, { ...(s.data() as InternalExamMarksBatch & { examCellLocks?: Record<string, unknown> }), id: s.id }]));
+  const compOf = new Map<string, string | null>();
+  await Promise.all([...batches.values()].map(async (b) => {
+    const resolved = await resolveExamConfigForBatch(db, ref, b);
+    compOf.set(b.id, resolved?.config.components.find((x) => x.isActive && x.midNumber === mid)?.id ?? null);
+  }));
+  const out = new Map<string, SectionProgress[]>();
+  for (const r of rows) {
+    const aid = assignmentOf.get(`${r.subjectId}|${r.sectionId}|${r.facultyId}`) ?? null;
+    const b = aid ? batches.get(aid) : undefined;
+    const cid = b ? compOf.get(b.id) : null;
+    const p: SectionProgress = {
+      sectionId: r.sectionId, section: r.sectionName, facultyId: r.facultyId, facultyName: r.facultyName, assignmentId: aid,
+      entered: b && cid ? b.entries.filter((e) => e.componentMarks?.[cid] != null).length : 0,
+      total: b ? b.entries.length : 0,
+      status: !b ? "NOT_STARTED" : b.status === "SUBMITTED" ? "SUBMITTED" : "DRAFT",
+      locked: !!(b && cid && b.examCellLocks?.[cid]),
+    };
+    const key = `${r.subjectId}|${r.branch}`;
+    out.set(key, [...(out.get(key) ?? []), p].sort((x, y) => x.section.localeCompare(y.section)));
+  }
+  return out;
+}

@@ -24,6 +24,7 @@ interface Row {
   source: "PAPER" | "LAYOUT" | "NONE"; layout: MidMarksLayout | null; paperMax?: number; questions?: number;
   /** Faculty entry of this subject opened by the Exam Cell (after its exam), and its exam day. */
   entryOpen: boolean; examDay: string | null;
+  progress: { sectionId: string; section: string; facultyName: string; entered: number; total: number; status: "NOT_STARTED" | "DRAFT" | "SUBMITTED"; locked: boolean }[];
 }
 
 const ROMAN = ["", "I", "II", "III", "IV", "V", "VI"];
@@ -62,6 +63,23 @@ export function MidMarksOverview() {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
   // Subjects whose exam is over and whose faculty entry is still closed (one subject can have several branch rows).
   const readyToOpen = [...new Set((rows ?? []).filter((r) => !r.entryOpen && (!r.examDay || r.examDay <= today)).map((r) => r.subjectId))];
+
+  async function remind() {
+    if (!plan) return;
+    setToggling("remind");
+    try {
+      const res = await fetch("/api/college/mid-marks/remind", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId: plan.id }),
+      });
+      const d = (await res.json()) as { error?: string; notified?: number };
+      if (!res.ok) throw new Error(d.error ?? "Unable to send reminders.");
+      toast({ title: d.notified ? `Reminder sent to ${d.notified} faculty.` : "Nobody is pending - every open subject is submitted." });
+    } catch (e) {
+      toast({ variant: "destructive", title: (e as Error).message });
+    } finally {
+      setToggling(null);
+    }
+  }
 
   async function toggleEntry(subjectIds: string[], open: boolean, tag: string) {
     if (!plan || subjectIds.length === 0) return;
@@ -115,6 +133,9 @@ export function MidMarksOverview() {
             <span className="text-muted-foreground">
               Questions ready for {counts.set} of {counts.total} subject-branch pairs. Change who enters in Mid Configuration › Marks.
             </span>
+            {mode === "FACULTY" && rows.some((r) => r.entryOpen) && (
+              <Button size="sm" variant="outline" className="ml-auto" loading={toggling === "remind"} onClick={() => void remind()}>Remind Pending Faculty</Button>
+            )}
           </div>
           {rows.length === 0 ? (
             <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No Mid-exam subjects with teaching assignments for this Mid.</CardContent></Card>
@@ -137,7 +158,19 @@ export function MidMarksOverview() {
                       <tr key={`${r.subjectId}|${r.branch}`}>
                         <td className="px-4 py-3"><span className="font-medium">{r.subjectCode}</span> <span className="text-muted-foreground">{r.subjectName}</span></td>
                         <td className="px-4 py-3">{r.branch}</td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{r.sections.map((s) => `${s.name} (${s.facultyName})`).join(", ")}</td>
+                        <td className="px-4 py-3">
+                          <div className="space-y-1">
+                            {(r.progress.length ? r.progress : r.sections.map((s) => ({ sectionId: s.id, section: s.name, facultyName: s.facultyName, entered: 0, total: 0, status: "NOT_STARTED" as const, locked: false }))).map((p) => (
+                              <div key={p.sectionId} className="flex flex-wrap items-center gap-1.5 text-xs">
+                                <span className="font-medium">{p.section}</span>
+                                <span className="text-muted-foreground">{p.facultyName}</span>
+                                <span className={p.status === "SUBMITTED" || p.locked ? "text-emerald-700" : p.status === "DRAFT" ? "text-amber-700" : "text-muted-foreground"}>
+                                  {p.locked ? "Locked by Exam Cell" : p.status === "SUBMITTED" ? "Submitted" : p.status === "DRAFT" ? `${p.entered}/${p.total} entered` : "Not started"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
                         <td className="px-4 py-3">
                           {r.source === "PAPER" ? <span>Finalized paper · {r.questions} columns · out of {r.paperMax}</span>
                             : r.source === "LAYOUT" ? <span>Set by Exam Cell · {r.questions} questions · out of {r.paperMax}</span>
