@@ -11,6 +11,7 @@ import { collegeLateAfter } from "@/lib/attendance/attendanceTimingsServer";
 import { reverseLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { nowInIndia } from "@/lib/leave/dayCounter";
 import { isHodOrUnitHead } from "@/lib/attendance/collegeStaffUnits";
+import { MAX_PERMISSION_DAYS, permissionDates } from "@/lib/attendance/permissionRange";
 import type { AttendanceCheckInPermission } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -26,12 +27,16 @@ function parseDocDate(dateStr: string): Date {
 // BEFORE that faculty member checks in themselves - see isLateCheckIn's own
 // doc-comment. One per (uid, date); posting again for the same day updates
 // it in place (e.g. the HOD changing their mind about the permitted time).
+// `toDate` (optional) grants the same time for every day from `date` to `toDate`
+// (Sundays left out, at most MAX_PERMISSION_DAYS) - one permission per day, so
+// everything that reads a day's permission is unchanged.
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
     const body = (await readJsonBody(request)) as {
       facultyId?: string;
       date?: string;
+      toDate?: string;
       permittedCheckInTime?: string;
       reason?: string;
     };
@@ -40,9 +45,17 @@ export async function POST(request: Request) {
     const date = body.date?.trim();
     const permittedCheckInTime = body.permittedCheckInTime?.trim();
     const reason = body.reason?.trim();
+    const toDate = body.toDate?.trim() || date;
 
     if (!facultyId || !date || !DATE_RE.test(date)) {
       return NextResponse.json({ error: "facultyId and a valid date (YYYY-MM-DD) are required" }, { status: 400 });
+    }
+    const dates = permissionDates(date, toDate ?? date);
+    if (!dates) {
+      return NextResponse.json({ error: `Select a To date on or after the From date, at most ${MAX_PERMISSION_DAYS} days later.` }, { status: 400 });
+    }
+    if (dates.length === 0) {
+      return NextResponse.json({ error: "The dates picked are all Sundays." }, { status: 400 });
     }
     if (!permittedCheckInTime || !TIME_RE.test(permittedCheckInTime)) {
       return NextResponse.json({ error: "A valid permitted check-in time (HH:MM) is required" }, { status: 400 });
@@ -106,23 +119,29 @@ export async function POST(request: Request) {
       grantedBy: session.uid,
       grantedByName: grantorName,
     };
-    const ref = CHECKIN_PERMISSIONS_COL(session.collegeId, db).doc(id);
-    const existing = await ref.get();
-    await ref.set({
-      ...permission,
-      date: docDate,
-      updatedAt: now,
-      ...(existing.exists ? {} : { createdAt: now }),
-    }, { merge: true });
+    // One permission per day of the range; an existing one for a day is updated in place.
+    const refs = dates.map((d) => CHECKIN_PERMISSIONS_COL(session.collegeId, db).doc(checkInPermissionDocId(facultyId, d)));
+    const existing = await db.getAll(...refs);
+    const batch = db.batch();
+    dates.forEach((d, i) => {
+      batch.set(refs[i], {
+        ...permission,
+        date: parseDocDate(d),
+        ...(dates.length > 1 ? { rangeFrom: date, rangeTo: toDate } : {}),
+        updatedAt: now,
+        ...(existing[i].exists ? {} : { createdAt: now }),
+      }, { merge: true });
+    });
+    await batch.commit();
 
     // The live check-in route only ever resolves a permission AT THE MOMENT
     // of check-in - so if this person already has that day's attendance
     // recorded (the common real flow: HOD sees someone arrived late, THEN
-    // excuses it), the existing record is stale until reconciled here. A
-    // permission is a full exemption for the day (see isLateCheckIn) and
+    // excuses it), the existing record is stale until reconciled here. Only the
+    // first day of a grant can already have one (no past dates are allowed).
+    // A permission is a full exemption for the day (see isLateCheckIn) and
     // this route always sets a non-empty permittedCheckInTime, so granting
-    // one can only ever REMOVE lateness here, never add it - nothing to
-    // handle in the other direction.
+    // one can only ever REMOVE lateness here, never add it.
     const recordRef = collegeRef.collection("attendanceRecords").doc(`${facultyId}_${date}`);
     const recordSnap = await recordRef.get();
     const record = recordSnap.data() as { checkIn?: string; permittedCheckInTime?: string; lateAfter?: string } | undefined;
@@ -151,11 +170,11 @@ export async function POST(request: Request) {
       performedBy: session.uid,
       performedByName: grantorName,
       targetId: id,
-      details: { facultyId, facultyName: target.name ?? "", date, permittedCheckInTime, reason },
+      details: { facultyId, facultyName: target.name ?? "", date, ...(toDate !== date ? { toDate, days: dates.length } : {}), permittedCheckInTime, reason },
       timestamp: now,
     });
 
-    return NextResponse.json({ id });
+    return NextResponse.json({ id, days: dates.length });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
