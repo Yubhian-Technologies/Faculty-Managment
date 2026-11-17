@@ -16,6 +16,7 @@ import { bestDistance } from "@/lib/attendance/faceThreshold";
 import { checkCampusGeofence, type CampusLocation } from "@/lib/attendance/geofence";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { nowInIndia } from "@/lib/leave/dayCounter";
+import { PasskeyAttendanceDialog } from "@/components/attendance/PasskeyAttendanceDialog";
 
 // Same 3-step guided liveness sequence for both Register and Check-in/out —
 // one instruction on screen at a time, in this order. "Tilt" accepts a head
@@ -54,7 +55,7 @@ interface MarkAttendanceDialogProps {
   onSuccess: () => void;
 }
 
-export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: MarkAttendanceDialogProps) {
+function FaceAttendanceDialog({ mode, open, onOpenChange, onSuccess }: MarkAttendanceDialogProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [stage, setStage] = useState<Stage>("init");
@@ -594,4 +595,32 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       </DialogContent>
     </Dialog>
   );
+}
+
+interface CheckInSetup { method: "FACE" | "PASSKEY" | "EITHER"; phones: number }
+
+/**
+ * The attendance pages' dialog: the face scan or the phone unlock (passkey), by the college's Self Check-In
+ * Method (Settings > Attendance Timings): FACE -> face; PASSKEY -> phone; EITHER -> phone when this person has
+ * registered one (with "Use Face Scan Instead"), else face.
+ */
+export function MarkAttendanceDialog(props: MarkAttendanceDialogProps) {
+  const [setup, setSetup] = useState<CheckInSetup | null>(null);
+  const [forceFace, setForceFace] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/college/attendance/passkey")
+      .then((r) => (r.ok ? r.json() : { method: "FACE", passkeys: [] }) as Promise<{ method?: CheckInSetup["method"]; passkeys?: unknown[] }>)
+      .then((d) => { if (live) setSetup({ method: d.method ?? "FACE", phones: d.passkeys?.length ?? 0 }); })
+      .catch(() => { if (live) setSetup({ method: "FACE", phones: 0 }); });
+    return () => { live = false; };
+  }, []);
+  if (!setup) return null;
+  const passkey = !forceFace && (
+    setup.method === "PASSKEY"
+    || (setup.method === "EITHER" && props.mode !== "register" && setup.phones > 0)
+  );
+  return passkey
+    ? <PasskeyAttendanceDialog {...props} onUseFace={setup.method === "EITHER" ? () => setForceFace(true) : undefined} />
+    : <FaceAttendanceDialog {...props} />;
 }

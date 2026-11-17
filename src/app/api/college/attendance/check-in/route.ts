@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     if (typeof latitude !== "number" || typeof longitude !== "number") {
       return NextResponse.json({ error: "Location is required" }, { status: 400 });
     }
-    const proof = await verifyAttendanceProof(db, session.collegeId, session.uid, body);
+    const proof = await verifyAttendanceProof(db, session.collegeId, session.uid, body, Date.now(), request);
     if (!proof.ok) {
       return NextResponse.json({ error: proof.error }, { status: proof.status });
     }
@@ -116,7 +116,7 @@ export async function POST(request: Request) {
           source: "BIOMETRIC",
           checkInLocation: { latitude, longitude },
           // Computed here from the posted descriptor - never the client's own figure.
-          checkInFaceMatchDistance: proof.distance,
+          ...(proof.distance != null ? { checkInFaceMatchDistance: proof.distance } : {}),
           checkInVerified: true,
           checkInProof: proof.evidence,
           ...(permittedCheckInTime ? { permittedCheckInTime } : {}),

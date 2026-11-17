@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
+import { SelfCheckInMethodSection } from "@/components/attendance/SelfCheckInMethodSection";
 import { lateAfterOf, MAX_GRACE_MINUTES } from "@/lib/attendance/attendanceTimings";
 
 // Principal / VP / College Office: the college's start time and grace minutes for faculty and staff self check-in.
@@ -75,6 +76,7 @@ export function AttendanceTimingsCard() {
           {" "}A change applies to check-ins from now on (within a minute); days already recorded keep the time they were recorded with.
         </p>
         <Button onClick={() => void save()} loading={busy} disabled={!valid}>Save</Button>
+        <SelfCheckInMethodSection />
       </CardContent>
     </Card>
   );

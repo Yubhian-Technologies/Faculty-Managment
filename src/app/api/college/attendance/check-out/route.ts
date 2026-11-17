@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     // The server compares the posted face descriptor with the registered one
     // itself (see lib/attendance/attendanceProof.ts); the client's own
     // "faceVerified" flag and distance are ignored.
-    const proof = await verifyAttendanceProof(db, session.collegeId, session.uid, body);
+    const proof = await verifyAttendanceProof(db, session.collegeId, session.uid, body, Date.now(), request);
     if (!proof.ok) {
       return NextResponse.json({ error: proof.error }, { status: proof.status });
     }
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     await recordRef.set({
       checkOut: currentTimeHHMM(),
       checkOutLocation: { latitude, longitude },
-      checkOutFaceMatchDistance: proof.distance,
+      ...(proof.distance != null ? { checkOutFaceMatchDistance: proof.distance } : {}),
       checkOutVerified: true,
       checkOutProof: proof.evidence,
       updatedAt: new Date(),

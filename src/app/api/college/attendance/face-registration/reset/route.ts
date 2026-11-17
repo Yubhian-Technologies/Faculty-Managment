@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { removeAllPasskeys } from "@/lib/attendance/passkeys";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
@@ -54,6 +55,8 @@ export async function POST(request: Request) {
         faceEmbeddingSamples: FieldValue.delete(),
         faceRegisteredAt: FieldValue.delete(),
       });
+      // Registered phones (passkey check-in) are reset with the face.
+      await removeAllPasskeys(db, session.collegeId, uid);
       return NextResponse.json({ ok: true });
     }
 
@@ -89,6 +92,7 @@ export async function POST(request: Request) {
         faceEmbeddingSamples: FieldValue.delete(),
         faceRegisteredAt: FieldValue.delete(),
       });
+      await removeAllPasskeys(db, session.collegeId, uid);
 
       return NextResponse.json({ ok: true });
     }
@@ -121,6 +125,7 @@ export async function POST(request: Request) {
       faceEmbeddingSamples: FieldValue.delete(),
       faceRegisteredAt: FieldValue.delete(),
     });
+    await removeAllPasskeys(db, session.collegeId, target.userUid);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

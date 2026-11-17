@@ -7,6 +7,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { MAX_FACE_SAMPLES, isValidDescriptor } from "@/lib/attendance/faceThreshold";
 import { registeredSamplesOf, resolveOwnDocRef } from "@/lib/attendance/faceRegistry";
+import { listPasskeys, selfCheckInMethod } from "@/lib/attendance/passkeys";
 
 // Whether the caller has registered their face yet - the gate the Faculty/HOD
 // attendance pages use to decide whether to offer "Register" or "Check In" -
@@ -20,8 +21,13 @@ export async function GET() {
     const ref = await resolveOwnDocRef(db, session.collegeId, session.uid);
     const snap = await ref.get();
     const samples = registeredSamplesOf(snap.data() as { faceEmbedding?: unknown; faceEmbeddingSamples?: unknown } | undefined);
-    const registered = samples.length > 0;
-    return NextResponse.json({ registered, embedding: registered ? samples[0] : null, embeddings: samples });
+    const faceRegistered = samples.length > 0;
+    // `registered` = ready to check in by the college's Self Check-In Method (the attendance pages' gate):
+    // FACE - a face; PASSKEY - a registered phone; EITHER - either one.
+    const method = await selfCheckInMethod(db, session.collegeId);
+    const phones = method === "FACE" ? 0 : (await listPasskeys(db, session.collegeId, session.uid)).length;
+    const registered = method === "FACE" ? faceRegistered : method === "PASSKEY" ? phones > 0 : faceRegistered || phones > 0;
+    return NextResponse.json({ registered, faceRegistered, phones, method, embedding: faceRegistered ? samples[0] : null, embeddings: samples });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
