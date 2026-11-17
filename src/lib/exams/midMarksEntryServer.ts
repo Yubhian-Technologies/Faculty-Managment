@@ -18,14 +18,15 @@ export const modeDocId = (courseKey: string, mid: number) => safe(`${courseKey}_
 export const layoutDocId = (subjectId: string, branch: string, mid: number) => safe(`${subjectId}__${branch}__m${mid}`);
 
 export const modesCol = (db: Db, c: string) => college(db, c).collection("midMarksEntry");
-/** colleges/{c}/midMarksOpen/{planId}: { courseKey, year, semester, midNumber, open, openedAt, openedByName } -
- *  faculty entry of that Mid (course + year + semester) is open; the Exam Cell opens it after the exam. */
+/** colleges/{c}/midMarksOpen/{planId}__{subjectId}: { courseKey, year, semester, midNumber, subjectId, open, ... } -
+ *  faculty entry of that SUBJECT's Mid marks is open; the Exam Cell opens it after that subject's exam. */
 export const openCol = (db: Db, c: string) => college(db, c).collection("midMarksOpen");
+export const openDocId = (planId: string, subjectId: string) => safe(`${planId}__${subjectId}`);
 
-/** Faculty entry of the Mid is open for this course + year (+ semester when known: else any open one of the year). */
-export async function isFacultyEntryOpen(db: Db, c: string, courseKey: string, year: number | undefined, semester: number | undefined, mid: number): Promise<boolean> {
+/** Faculty entry of the subject's Mid is open for this course + year (+ semester when known: else any open one of the year). */
+export async function isFacultyEntryOpen(db: Db, c: string, courseKey: string, year: number | undefined, semester: number | undefined, mid: number, subjectId: string): Promise<boolean> {
   if (!courseKey || year == null) return false;
-  const snap = await openCol(db, c).where("courseKey", "==", courseKey).where("year", "==", year).where("midNumber", "==", mid).get();
+  const snap = await openCol(db, c).where("subjectId", "==", subjectId).where("courseKey", "==", courseKey).where("year", "==", year).where("midNumber", "==", mid).get();
   return snap.docs.some((d) => {
     const o = d.data() as { open?: boolean; semester?: number };
     return o.open === true && (semester == null || o.semester === semester);
@@ -73,7 +74,7 @@ export async function midEntryFor(
   if (semester == null && batch.assignmentId) {
     semester = ((await college(db, c).collection("teachingAssignments").doc(batch.assignmentId).get()).data() as { timetableSemester?: number } | undefined)?.timetableSemester;
   }
-  const opens = await Promise.all(linked.map((x, i) => (modes[i] === "FACULTY" ? isFacultyEntryOpen(db, c, courseKey, batch.year, semester, x.midNumber!) : Promise.resolve(true))));
+  const opens = await Promise.all(linked.map((x, i) => (modes[i] === "FACULTY" ? isFacultyEntryOpen(db, c, courseKey, batch.year, semester, x.midNumber!, batch.subjectId) : Promise.resolve(true))));
   const states: Record<string, MidEntryState> = {};
   linked.forEach((x, i) => { states[x.id] = entryStateFor(x.midNumber!, modes[i], !!sheets[x.id], !!batch.examCellLocks?.[x.id], opens[i]); });
   return { sheets, states };
@@ -137,4 +138,11 @@ export async function sheetSourceFor(db: Db, c: string, subjectId: string, branc
     if (sheet?.source === "CHOSEN") return { source: "PAPER", layout, paperMax: sheet.paperMax, questions: sheet.columns.length };
   }
   return layout ? { source: "LAYOUT", layout, paperMax: layout.paperMax, questions: layout.questions.length } : { source: "NONE", layout: null };
+}
+
+/** The subject's exam day in a Mid timetable: its latest date across the branches' timetables, else the Mid's last day. */
+export async function subjectExamDay(db: Db, c: string, plan: { id: string; days?: string[] }, subjectId: string): Promise<string | null> {
+  const snap = await college(db, c).collection("midTimetables").where("planId", "==", plan.id).get();
+  const dates = snap.docs.flatMap((d) => ((d.data() as { slots?: { subjectId: string; date: string }[] }).slots ?? []).filter((s) => s.subjectId === subjectId).map((s) => s.date));
+  return [...dates].sort().pop() ?? [...(plan.days ?? [])].sort().pop() ?? null;
 }
