@@ -8,10 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { CampusBoundaryMap } from "@/components/attendance/CampusBoundaryMap";
 import {
-  loadFaceModels, getFaceDescriptor, compareFaceDescriptors, captureVideoFrame,
-  calibrateFaceBaseline, waitForGuidedBlink, waitForGuidedTurn, waitForGuidedRecenter,
+  loadFaceModels, warmFaceModels, getFaceDescriptor, captureVideoFrame, captureDescriptors,
+  calibrateFaceBaseline, waitForGuidedTurn, waitForGuidedRecenter,
   FACE_MATCH_THRESHOLD,
 } from "@/lib/attendance/faceMatch";
+import { bestDistance } from "@/lib/attendance/faceThreshold";
 import { checkCampusGeofence, type CampusLocation } from "@/lib/attendance/geofence";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
 import { nowInIndia } from "@/lib/leave/dayCounter";
@@ -22,14 +23,20 @@ import { nowInIndia } from "@/lib/leave/dayCounter";
 // varies by device, so which physical direction reads as "left" on screen
 // isn't reliable to assert without real-hardware testing — what matters here
 // is that a deliberate head movement away from center happened at all.
-const LIVENESS_STEPS = ["Blink your eyes", "Tilt your head to the left", "Look straight at the camera"];
+// The blink step was dropped: through this landmark model a real blink barely moves the eye ratio, so it
+// failed often and cost retries. The head turn is the clear signal; then look back for the capture.
+const LIVENESS_STEPS = ["Turn your head to either side", "Look straight at the camera"];
 
 // Deliberately slow: an instruction stays up at least this long even if the
 // action is detected almost instantly, so there's time to read and react to
 // it — and after detection, a short "Got it" confirmation holds before the
 // next instruction appears, rather than jumping straight to it.
-const STEP_MIN_DISPLAY_MS = 1500;
-const STEP_CONFIRM_HOLD_MS = 1300;
+const STEP_MIN_DISPLAY_MS = 600;
+const STEP_CONFIRM_HOLD_MS = 450;
+// Location is precise enough for the server (attendanceProof MAX_LOCATION_ACCURACY_M) at this accuracy.
+const GOOD_ACCURACY_M = 150;
+// How long the final step waits for a precise fix before sending the best one it has.
+const LOCATION_WAIT_MS = 10000;
 
 // "reason-first": late when Check In was tapped - the reason is asked BEFORE the camera opens, and a
 // successful scan then checks in at once. "late-reason": became late during the scan (or the server's
@@ -60,6 +67,11 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
   // which does the real comparison against the registered one (attendanceProof.ts).
   const capturedProofRef = useRef<{ descriptor: number[]; capturedAt: number } | null>(null);
   const cancelledRef = useRef(false);
+  // GPS runs from the moment the dialog opens (also while a late reason is typed), keeping the most precise fix.
+  const watchIdRef = useRef<number | null>(null);
+  const locationErrorRef = useRef<string | null>(null);
+  // The registered face samples, fetched as the dialog opens (not after the scan) - for the early match feedback.
+  const samplesRef = useRef<Promise<number[][] | null> | null>(null);
   const [campusLocation, setCampusLocation] = useState<CampusLocation | null>(null);
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
@@ -99,6 +111,56 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
     setStage("error");
   }
 
+  function stopLocation() {
+    if (watchIdRef.current != null) navigator.geolocation?.clearWatch(watchIdRef.current);
+    watchIdRef.current = null;
+  }
+
+  // Started as soon as the dialog opens, in parallel with the camera and the face models; keeps the most
+  // precise fix seen (GPS sharpens over a few seconds indoors).
+  function startLocation() {
+    if (isRegister || watchIdRef.current != null) return;
+    locationErrorRef.current = null;
+    if (!navigator.geolocation) { locationErrorRef.current = "Geolocation is not supported by this browser."; return; }
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const next = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
+        if (!coordsRef.current || next.accuracy <= coordsRef.current.accuracy) {
+          coordsRef.current = next;
+          setUserCoords({ latitude: next.latitude, longitude: next.longitude });
+        }
+      },
+      () => { locationErrorRef.current = "Unable to get your location. Check location permissions and try again."; },
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 },
+    );
+  }
+
+  // Waits (up to LOCATION_WAIT_MS) for a precise fix; returns whatever is best by then.
+  async function awaitLocation(): Promise<boolean> {
+    const deadline = Date.now() + LOCATION_WAIT_MS;
+    while (Date.now() < deadline && !cancelledRef.current) {
+      if (coordsRef.current && coordsRef.current.accuracy <= GOOD_ACCURACY_M) return true;
+      if (locationErrorRef.current && !coordsRef.current) return false;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    return !!coordsRef.current;
+  }
+
+  // Warm-up while the page is open (before anyone taps Check In): face models downloaded and compiled, and
+  // the registered samples fetched - so the scan itself starts immediately.
+  useEffect(() => {
+    const warm = () => { void warmFaceModels().catch(() => undefined); };
+    const w = window as Window & { requestIdleCallback?: (f: () => void) => number };
+    if (w.requestIdleCallback) w.requestIdleCallback(warm); else setTimeout(warm, 1200);
+  }, []);
+
+  function loadSamples() {
+    samplesRef.current = fetch("/api/college/attendance/face-registration")
+      .then((r) => r.json() as Promise<{ embeddings?: number[][]; embedding?: number[] | null }>)
+      .then((d) => (d.embeddings?.length ? d.embeddings : d.embedding ? [d.embedding] : []))
+      .catch(() => null);
+  }
+
   async function startCamera() {
     // Defensive: guards against ever running two live getUserMedia streams
     // at once (e.g. a caller invoking this again before the previous one
@@ -114,10 +176,6 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
     }
 
     if (!isRegister) {
-      if (!navigator.geolocation) {
-        fail("Geolocation is not supported by this browser.");
-        return;
-      }
       fetch("/api/college/attendance/campus-location")
         .then((r) => r.json() as Promise<{ campusLocation: CampusLocation | null; lateAfter?: string }>)
         .then((d) => {
@@ -130,20 +188,13 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
         })
         .catch(() => { /* non-critical - the map is a heads-up, not the actual check */ });
 
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
-          coordsRef.current = coords;
-          setUserCoords({ latitude: coords.latitude, longitude: coords.longitude });
-        },
-        () => { fail("Unable to get your location. Check location permissions and try again."); },
-        { enableHighAccuracy: true, timeout: 15000 }
-      );
+      startLocation();
     }
 
     try {
       await loadFaceModels();
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      // A modest resolution: plenty for a face filling the frame, and every frame is cheaper to analyse.
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -159,6 +210,9 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
     void (async () => {
       if (open) {
         cancelledRef.current = false;
+        coordsRef.current = null;
+        startLocation();
+        if (!isRegister) loadSamples();
         // Late already: ask why first, then open the camera (Continue to Face Scan).
         if (mode === "check-in" && isLateCheckIn(nowInIndia().timeHHMM, null, lateAfterRef.current)) {
           setIsLate(true);
@@ -169,6 +223,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       } else {
         cancelledRef.current = true;
         stopCamera();
+        stopLocation();
         setStage("init");
         setErrorMsg("");
         setResultTime("");
@@ -176,7 +231,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
         setLateReason("");
       }
     })();
-    return () => { cancelledRef.current = true; stopCamera(); };
+    return () => { cancelledRef.current = true; stopCamera(); stopLocation(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -204,8 +259,8 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
     return !cancelledRef.current;
   }
 
-  // Shared 3-step guided liveness check (blink → tilt → re-center) used by
-  // both Register and Check-in/out. Returns true once all 3 steps are
+  // Shared guided liveness check (turn → re-center) used by
+  // both Register and Check-in/out. Returns true once both steps are
   // confirmed; on failure it has already called fail() with a message.
   async function runGuidedLiveness(video: HTMLVideoElement): Promise<boolean> {
     const abortCheck = () => cancelledRef.current;
@@ -221,16 +276,6 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       }
 
       setStepIndex(0);
-      const blinkOk = await runLivenessStep(() =>
-        waitForGuidedBlink(video, baseline.ear, { shouldAbort: abortCheck, onHint: setStepHint })
-      );
-      if (cancelledRef.current) return false;
-      if (!blinkOk) {
-        fail("No blink detected. Try again.");
-        return false;
-      }
-
-      setStepIndex(1);
       const tiltOk = await runLivenessStep(async () =>
         (await waitForGuidedTurn(video, baseline.yawOffset, { shouldAbort: abortCheck, onHint: setStepHint })) !== null
       );
@@ -240,7 +285,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
         return false;
       }
 
-      setStepIndex(2);
+      setStepIndex(1);
       const centerOk = await runLivenessStep(() =>
         waitForGuidedRecenter(video, baseline.yawOffset, { shouldAbort: abortCheck, onHint: setStepHint })
       );
@@ -274,9 +319,9 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
   async function finishRegistration(video: HTMLVideoElement) {
     setStage("capturing");
     try {
-      const frame = captureVideoFrame(video);
-      const descriptor = await getFaceDescriptor(frame);
-      if (!descriptor) {
+      // A few frames, a moment apart - check-in then matches the closest of them.
+      const descriptors = await captureDescriptors(video, 3);
+      if (descriptors.length === 0) {
         fail("No face detected — center your face in the frame and try again.");
         return;
       }
@@ -286,7 +331,7 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
       const res = await fetch("/api/college/attendance/face-registration", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ embedding: Array.from(descriptor) }),
+        body: JSON.stringify({ embeddings: descriptors.map((d) => Array.from(d)) }),
       });
       const json = await res.json() as { error?: string };
       if (!res.ok) {
@@ -313,31 +358,26 @@ export function MarkAttendanceDialog({ mode, open, onOpenChange, onSuccess }: Ma
 
       capturedProofRef.current = { descriptor: Array.from(capturedDescriptor), capturedAt: Date.now() };
       setStage("verifying");
-      const regRes = await fetch("/api/college/attendance/face-registration");
-      const regJson = await regRes.json() as { registered?: boolean; embedding?: number[] | null };
-      if (!regJson.registered || !regJson.embedding) {
+      // Fetched when the dialog opened; the server makes the real comparison again on submit.
+      if (!samplesRef.current) loadSamples();
+      const samples = await samplesRef.current;
+      if (samples && samples.length === 0) {
         fail("You haven't registered your face yet. Register your face first.");
         return;
       }
-      const refDescriptor = new Float32Array(regJson.embedding);
-
-      const distance = await compareFaceDescriptors(capturedDescriptor, refDescriptor);
-      const faceVerified = distance < FACE_MATCH_THRESHOLD;
+      // Couldn't load them (network): let the server judge.
+      const faceVerified = !samples || bestDistance(capturedDescriptor, samples) < FACE_MATCH_THRESHOLD;
       if (!faceVerified) {
         fail("Face didn't match your registered face. Try again with better lighting, facing the camera directly.");
         return;
       }
 
-      if (!coordsRef.current) {
-        // Give the geolocation call a moment if it hasn't resolved yet.
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-      if (!coordsRef.current) {
-        fail("Still waiting on your location — check location permissions and try again.");
+      stopCamera();
+      // Usually in hand already (GPS started when the dialog opened); otherwise wait a little for a precise fix.
+      if (!(await awaitLocation())) {
+        fail(locationErrorRef.current ?? "Still waiting on your location — check location permissions and try again.");
         return;
       }
-
-      stopCamera();
 
       // The face matched and the location is in hand, so the check-in is going
       // to stand - only now is there anything to explain. Asking up front made

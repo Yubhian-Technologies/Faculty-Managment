@@ -5,8 +5,8 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
-import { EMBEDDING_LENGTH } from "@/lib/attendance/faceThreshold";
-import { resolveOwnDocRef } from "@/lib/attendance/faceRegistry";
+import { MAX_FACE_SAMPLES, isValidDescriptor } from "@/lib/attendance/faceThreshold";
+import { registeredSamplesOf, resolveOwnDocRef } from "@/lib/attendance/faceRegistry";
 
 // Whether the caller has registered their face yet - the gate the Faculty/HOD
 // attendance pages use to decide whether to offer "Register" or "Check In" -
@@ -19,9 +19,9 @@ export async function GET() {
     const db = getAdminDb();
     const ref = await resolveOwnDocRef(db, session.collegeId, session.uid);
     const snap = await ref.get();
-    const data = snap.data() as { faceEmbedding?: number[] } | undefined;
-    const registered = Array.isArray(data?.faceEmbedding) && data.faceEmbedding.length === EMBEDDING_LENGTH;
-    return NextResponse.json({ registered, embedding: registered ? data!.faceEmbedding : null });
+    const samples = registeredSamplesOf(snap.data() as { faceEmbedding?: unknown; faceEmbeddingSamples?: unknown } | undefined);
+    const registered = samples.length > 0;
+    return NextResponse.json({ registered, embedding: registered ? samples[0] : null, embeddings: samples });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
@@ -33,7 +33,7 @@ export async function GET() {
   }
 }
 
-// Stores the face descriptor (128 floats, ~1KB) captured client-side by
+// Stores the face descriptors (128 floats each, ~1KB; up to MAX_FACE_SAMPLES) captured client-side by
 // face-api.js during Register - never the image itself, and never the
 // HOD-managed profilePhotoUrl, which this deliberately leaves untouched.
 // Upserts, so a faculty member can re-register (e.g. after a haircut throws
@@ -41,16 +41,14 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
-    const body = (await readJsonBody(request)) as { embedding?: number[] };
-    const embedding = body.embedding;
-
-    if (
-      !Array.isArray(embedding) ||
-      embedding.length !== EMBEDDING_LENGTH ||
-      !embedding.every((n) => typeof n === "number" && Number.isFinite(n))
-    ) {
+    // `embeddings`: a few samples from consecutive frames (MarkAttendanceDialog); `embedding`: one (older pages).
+    const body = (await readJsonBody(request)) as { embedding?: unknown; embeddings?: unknown };
+    const samples = (Array.isArray(body.embeddings) ? body.embeddings : body.embedding !== undefined ? [body.embedding] : [])
+      .slice(0, MAX_FACE_SAMPLES);
+    if (samples.length === 0 || !samples.every(isValidDescriptor)) {
       return NextResponse.json({ error: "Invalid face data — try registering again" }, { status: 400 });
     }
+    const embeddings = samples as number[][];
 
     const db = getAdminDb();
     const ref = await resolveOwnDocRef(db, session.collegeId, session.uid);
@@ -60,7 +58,9 @@ export async function POST(request: Request) {
     }
 
     await ref.update({
-      faceEmbedding: embedding,
+      // The first sample stays in `faceEmbedding` - every "is registered" check reads that field.
+      faceEmbedding: embeddings[0],
+      faceEmbeddingSamples: embeddings.map((v) => ({ v })),
       faceRegisteredAt: new Date(),
     });
 

@@ -29,6 +29,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ co
 
     await principalSnap.docs[0].ref.update({
       faceEmbedding: FieldValue.delete(),
+      faceEmbeddingSamples: FieldValue.delete(),
       faceRegisteredAt: FieldValue.delete(),
     });
 

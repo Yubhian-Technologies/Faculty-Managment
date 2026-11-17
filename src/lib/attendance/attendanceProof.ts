@@ -1,5 +1,5 @@
-import { FACE_MATCH_THRESHOLD, euclideanDistance, isValidDescriptor } from "@/lib/attendance/faceThreshold";
-import { loadRegisteredEmbedding } from "@/lib/attendance/faceRegistry";
+import { FACE_MATCH_THRESHOLD, bestDistance, isValidDescriptor } from "@/lib/attendance/faceThreshold";
+import { loadRegisteredSamples } from "@/lib/attendance/faceRegistry";
 
 // What the server can and cannot establish about a self check-in / check-out.
 //
@@ -77,11 +77,12 @@ export async function verifyAttendanceProof(
     };
   }
 
-  const registered = await loadRegisteredEmbedding(db, collegeId, uid);
-  if (!registered) {
+  const registered = await loadRegisteredSamples(db, collegeId, uid);
+  if (!registered.length) {
     return { ok: false, status: 409, error: "You haven't registered your face yet - register it first" };
   }
-  const distance = euclideanDistance(body.faceDescriptor, registered);
+  // The closest of the registered samples decides.
+  const distance = bestDistance(body.faceDescriptor, registered);
   if (!(distance < FACE_MATCH_THRESHOLD)) {
     return { ok: false, status: 403, error: "Face didn't match your registered face. Try again with better lighting, facing the camera directly." };
   }
