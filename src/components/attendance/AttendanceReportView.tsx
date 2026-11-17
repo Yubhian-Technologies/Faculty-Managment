@@ -242,6 +242,8 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
   const [permissionTarget, setPermissionTarget] = useState<RosterEntry | null>(null);
   const [permissionTime, setPermissionTime] = useState("");
   const [permissionReason, setPermissionReason] = useState("");
+  // Last day the permission covers (same as `date` = just that day).
+  const [permissionUntil, setPermissionUntil] = useState("");
   const [isGrantingPermission, setIsGrantingPermission] = useState(false);
 
   const loadRoster = useCallback(async () => {
@@ -304,6 +306,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
     setPermissionTarget(row);
     setPermissionTime(row.permittedCheckInTime ?? "");
     setPermissionReason("");
+    setPermissionUntil(date);
   }
 
   async function handleGrantPermission() {
@@ -316,16 +319,23 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
         body: JSON.stringify({
           facultyId: permissionTarget.uid,
           date,
+          toDate: permissionUntil && permissionUntil > date ? permissionUntil : date,
           permittedCheckInTime: permissionTime,
           reason: permissionReason,
         }),
       });
-      const json = await res.json() as { error?: string };
+      const json = await res.json() as { error?: string; days?: number };
       if (!res.ok) {
         toast({ variant: "destructive", title: json.error ?? "Unable to grant permission" });
         return;
       }
-      toast({ title: `Check-in permission granted for ${permissionTarget.name}`, description: `${date} is excused - won't count as late no matter when they check in.` });
+      const ranged = permissionUntil && permissionUntil > date;
+      toast({
+        title: `Check-in permission granted for ${permissionTarget.name}.`,
+        description: ranged
+          ? `${date} to ${permissionUntil} (${json.days ?? ""} days, Sundays left out): check-in up to ${permissionTime} won't count as late.`
+          : `${date} is excused - won't count as late no matter when they check in.`,
+      });
       setPermissionTarget(null);
       await loadRoster();
     } catch {
@@ -775,17 +785,32 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
           open={!!permissionTarget}
           onOpenChange={(open) => { if (!open) setPermissionTarget(null); }}
           title={`Grant check-in permission to ${permissionTarget?.name ?? "faculty"}?`}
-          description={`For ${date}. This whole day is excused - however late they actually check in, it won't count as Late (or toward the 3-late -> 0.5 Casual Leave deduction). They still check in themselves as normal; the time below is just a record of what was agreed.`}
+          description={`From ${date}. Each day in the range is excused - however late they actually check in, it won't count as Late (or toward the 3-late -> 0.5 Casual Leave deduction). They still check in themselves as normal; the time below is the agreed check-in time for those days.`}
           confirmLabel="Grant"
           loading={isGrantingPermission}
           confirmDisabled={!permissionReason.trim() || !permissionTime}
           onConfirm={() => void handleGrantPermission()}
         >
           <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="permission-time">Permitted check-in time</Label>
-              <Input id="permission-time" type="time" value={permissionTime} onChange={(e) => setPermissionTime(e.target.value)} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="permission-until">Until</Label>
+                <Input
+                  id="permission-until" type="date" value={permissionUntil || date} min={date}
+                  max={(() => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 61); return d.toISOString().slice(0, 10); })()}
+                  onChange={(e) => setPermissionUntil(e.target.value || date)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="permission-time">Permitted Check-In Time</Label>
+                <Input id="permission-time" type="time" value={permissionTime} onChange={(e) => setPermissionTime(e.target.value)} />
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {permissionUntil && permissionUntil > date
+                ? `Applies every day from ${date} to ${permissionUntil}, Sundays left out (at most 62 days).`
+                : "Only this day. Pick a later Until date to give the same time for several days."}
+            </p>
             <div className="space-y-1.5">
               <Label htmlFor="permission-reason">Reason (required)</Label>
               <Textarea
