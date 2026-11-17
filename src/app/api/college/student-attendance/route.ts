@@ -9,6 +9,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { checkFacultyPeriodWindow, periodWindowMessage } from "@/lib/timetable/currentPeriod";
+import type { AdjustedFrom } from "@/lib/classAdjustments/rules";
 import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
 import { checkAllocatedAccess } from "@/lib/studentAttendance/labAllocation";
 import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
@@ -153,9 +154,11 @@ export async function POST(request: Request) {
     if (!windowCheck.ok) {
       return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
     }
+    // A period taken over through "Adjust / Swap a Class" (lib/classAdjustments): taught as the taker's own subject.
+    const adjustedFrom = (windowCheck.slot as { adjustedFrom?: AdjustedFrom }).adjustedFrom ?? null;
     // A lab's faculty take it on their own dates (set by the section's faculty incharge); a
-    // covering substitute or an HOD allocation is not bound by them.
-    if (!viaAllocation && !substituteFor) {
+    // covering substitute, an adjusted class or an HOD allocation is not bound by them.
+    if (!viaAllocation && !substituteFor && !adjustedFrom) {
       const windows = await loadLabWindows(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]);
       if (!facultyActiveOn(windows, sectionId, assignment.subjectId, assignment.facultyId, date)) {
         return NextResponse.json({ error: "This lab is not yours on this date - the section's faculty incharge set your teaching dates for it." }, { status: 403 });
@@ -266,6 +269,7 @@ export async function POST(request: Request) {
             facultyName: name,
             substituteForFacultyId: substituteFor ? substituteFor.originalFacultyId : FieldValue.delete(),
             substituteForFacultyName: substituteFor ? substituteFor.originalFacultyName : FieldValue.delete(),
+            attendanceOnly: substituteFor ? true : FieldValue.delete(),
           };
         }
         tx.update(ref, {
@@ -309,7 +313,9 @@ export async function POST(request: Request) {
         subjectCode: assignment.subjectCode,
         facultyId: session.uid,
         facultyName: facultyNameToStore,
-        ...(substituteFor ? { substituteForFacultyId: substituteFor.originalFacultyId, substituteForFacultyName: substituteFor.originalFacultyName } : {}),
+        // A leave substitute in a section they don't teach marks attendance only (lib/leave/substituteTeaching.ts).
+        ...(substituteFor ? { substituteForFacultyId: substituteFor.originalFacultyId, substituteForFacultyName: substituteFor.originalFacultyName, attendanceOnly: true } : {}),
+        ...(adjustedFrom ? { classAdjustment: adjustedFrom } : {}),
         date,
         periodNumber: windowCheck.slot.periodNumber,
         ...(labBatch ? { labBatch } : {}),

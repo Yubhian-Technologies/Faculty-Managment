@@ -110,7 +110,7 @@ export async function PATCH(
       viaAllocation = true;
     }
     // A lab's faculty take it on their own dates (set by the section's faculty incharge).
-    if (!viaAllocation && !existing.substituteForFacultyId && existing.sectionId) {
+    if (!viaAllocation && !existing.substituteForFacultyId && !existing.classAdjustment && existing.sectionId) {
       const windows = await loadLabWindows(db, session.collegeId, [{ sectionId: existing.sectionId, subjectId: existing.subjectId }]);
       if (!facultyActiveOn(windows, existing.sectionId, existing.subjectId, facultyMemberId, existing.date)) {
         return NextResponse.json({ error: "This lab is not yours on this date - the section's faculty incharge set your teaching dates for it." }, { status: 403 });
@@ -172,7 +172,11 @@ export async function PATCH(
         }
         const classNotes = ((update.classNotes as string | undefined) ?? fresh.classNotes ?? "").trim();
         if (!classNotes) {
-          return { error: { message: "Record of the Class Work is required before submitting attendance", status: 400 } };
+          // A leave substitute in a section they don't teach marks attendance only - no class work to record.
+          if (!fresh.attendanceOnly) {
+            return { error: { message: "Record of the Class Work is required before submitting attendance", status: 400 } };
+          }
+          update.classNotes = `Attendance only - substitute: ${fresh.facultyName || "covering faculty"}`;
         }
         update.status = "SUBMITTED";
         update.submittedAt = now;

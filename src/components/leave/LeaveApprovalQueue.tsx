@@ -627,6 +627,7 @@ export function LeaveApprovalQueue() {
                           {c.facultyDepartment && (
                             <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
                           )}
+                          {(c as { ownSubject?: string }).ownSubject ? <span className="text-xs text-blue-700"> · teaches {(c as { ownSubject?: string }).ownSubject} here</span> : null}
                         </SelectItem>
                                     ))}
                                   </SelectContent>
@@ -673,6 +674,7 @@ export function LeaveApprovalQueue() {
                                           {c.facultyDepartment && (
                                             <span className="text-muted-foreground"> · {c.facultyDepartment}</span>
                                           )}
+                                          {(c as { ownSubject?: string }).ownSubject ? <span className="text-xs text-blue-700"> · teaches {(c as { ownSubject?: string }).ownSubject} here</span> : null}
                                         </SelectItem>
                                       ))}
                                     </SelectContent>

@@ -2,10 +2,12 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { CourseYearTiming, DayOfWeek, TimetableSlot } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { loadEffectiveTiming, resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
-import { resolveSubstituteSlotsForDate } from "@/lib/leave/periodCoverage";
+import { substituteDay } from "@/lib/leave/substituteTeaching";
 import { istDateFromParts } from "@/lib/attendance/istTime";
 import { getTimetableDay } from "@/lib/studentAttendance/classDay";
 import { activeSlotsOn } from "@/lib/timetable/slotScope";
+import { classAdjustmentLegsOn } from "@/lib/classAdjustments/inForce";
+import { applyAdjustments, type AdjustedFrom } from "@/lib/classAdjustments/rules";
 
 // Exported for callers that need to map an arbitrary calendar date (not just
 // "now") to a DayOfWeek against published timetableSlots - e.g. backfilling
@@ -154,21 +156,13 @@ export async function getCurrentTimetableSlot(
     .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
     .filter((s) => s.day === day);
 
-  // Also resolve any slot this person is covering today as an approved
-  // substitute - their own facultyId never appears on that slot doc (see
-  // resolveSubstituteSlotsForDate's own doc-comment), so it's invisible to
-  // the query above without this.
-  const substituted = await resolveSubstituteSlotsForDate(db, collegeId, facultyMemberId, date);
+  // Also the periods this person covers today as an approved leave substitute (lib/leave/substituteTeaching.ts):
+  // their own subject where they teach that section, else the absent faculty's period (attendance only).
+  const sub = await substituteDay(db, collegeId, facultyMemberId, date);
   const ownSlotIds = new Set(ownTodaySlots.map((s) => s.id));
-  const missingSubIds = [...substituted.keys()].filter((id) => !ownSlotIds.has(id));
-  const subSlots: (TimetableSlot & { id: string })[] = [];
-  if (missingSubIds.length) {
-    const subSnaps = await Promise.all(missingSubIds.map((id) => collegeRef.collection("timetableSlots").doc(id).get()));
-    for (const snap of subSnaps) {
-      if (snap.exists) subSlots.push({ id: snap.id, ...snap.data() } as TimetableSlot & { id: string });
-    }
-  }
-  const todaySlots = [...ownTodaySlots, ...subSlots];
+  const subSlots = [...sub.attendanceOnly.filter((s) => !ownSlotIds.has(s.id)), ...sub.ownSubject];
+  // Class adjustments in force today (lib/classAdjustments): periods handed away drop out, periods taken over come in.
+  const todaySlots = applyAdjustments([...ownTodaySlots, ...subSlots], await classAdjustmentLegsOn(db, collegeId, date), facultyMemberId, collegeId);
   if (todaySlots.length === 0) return null;
 
   const timingCache: TimingCache = new Map();
@@ -189,6 +183,10 @@ export interface FacultyPeriodOnDate {
   startTime: string; // "HH:MM" 24h, resolved from the slot's own CourseYearTiming
   endTime: string;
   closeTime: string; // when posting closes: the year's college end time (>= endTime)
+  /** Set on a period taken over through "Adjust / Swap a Class" (the slot carries the taker's own subject). */
+  adjustedFrom?: AdjustedFrom;
+  /** A leave substitute's period in a section they don't teach: attendance only (no Record of the Class Work). */
+  attendanceOnly?: boolean;
   /** Set (with blank/other-semester times) only when listed leniently - see resolvePeriodWindow. */
   unavailableReason?: UnavailableReason;
 }
@@ -239,29 +237,24 @@ export async function getFacultyPeriodsForDate(
     .map((s) => ({ id: s.id, ...s.data() }) as TimetableSlot & { id: string })
     .filter((s) => s.day === day);
 
-  // Also include slots this person is covering on dateISO as an approved
-  // substitute (see resolveSubstituteSlotsForDate's own doc-comment) - this
-  // is what makes a covering faculty's own "today's classes" list (Mark
-  // Attendance, Attendance Completion) actually show the class they're
-  // standing in for, not just the ones they're directly assigned.
-  const substituted = await resolveSubstituteSlotsForDate(db, collegeId, facultyId, dateISO);
+  // Also the periods this person covers on dateISO as an approved leave substitute (lib/leave/substituteTeaching.ts)
+  // - what makes a covering faculty's own "today's classes" list (Mark Attendance, Attendance Completion) show the
+  // class they're standing in for: under their OWN subject where they teach that section, else the absent
+  // faculty's period, flagged attendanceOnly (no Record of the Class Work needed).
+  const sub = await substituteDay(db, collegeId, facultyId, dateISO);
   const ownSlotIds = new Set(ownDaySlots.map((s) => s.id));
-  const missingSubIds = [...substituted.keys()].filter((id) => !ownSlotIds.has(id));
-  const subSlots: (TimetableSlot & { id: string })[] = [];
-  if (missingSubIds.length) {
-    const subSnaps = await Promise.all(missingSubIds.map((id) => collegeRef.collection("timetableSlots").doc(id).get()));
-    for (const snap of subSnaps) {
-      if (snap.exists) subSlots.push({ id: snap.id, ...snap.data() } as TimetableSlot & { id: string });
-    }
-  }
-  // A slot scoped to one mid exam is only in force within that mid's teaching stretch (lib/timetable/slotScope.ts).
-  const daySlots = await activeSlotsOn(db, collegeId, [...ownDaySlots, ...subSlots], dateISO);
+  const attendanceOnlyIds = new Set(sub.attendanceOnly.map((s) => s.id));
+  const subSlots = [...sub.attendanceOnly.filter((s) => !ownSlotIds.has(s.id)), ...sub.ownSubject];
+  // Class adjustments in force on dateISO: a period handed to a colleague leaves this list, one taken over joins it.
+  const adjusted = applyAdjustments([...ownDaySlots, ...subSlots], await classAdjustmentLegsOn(db, collegeId, dateISO), facultyId, collegeId);
+  const daySlots = await activeSlotsOn(db, collegeId, adjusted, dateISO);
 
   const resolved: FacultyPeriodOnDate[] = [];
   const windows = await Promise.all(daySlots.map((slot) => resolvePeriodWindow(collegeRef, slot, timingCache, options.lenient, options.semesterOnDate ? istDateFromParts(y, m, d) : undefined)));
   daySlots.forEach((slot, i) => {
     const window = windows[i];
-    if (window) resolved.push({ slot, ...window });
+    const adjustedFrom = (slot as { adjustedFrom?: AdjustedFrom }).adjustedFrom;
+    if (window) resolved.push({ slot, ...window, ...(adjustedFrom ? { adjustedFrom } : {}), ...(attendanceOnlyIds.has(slot.id) && slot.facultyId !== facultyId ? { attendanceOnly: true } : {}) });
   });
   // Periods without a resolvable time go last.
   const minutesOf = (t: string) => (t ? toMinutes(t) : Number.MAX_SAFE_INTEGER);
@@ -340,23 +333,15 @@ export async function checkFacultyPeriodWindow(
     .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
     .filter((s) => s.day === day);
 
-  // Fallback: this exact facultyMemberId+assignmentId combo may belong to a
-  // different faculty (on leave), with facultyMemberId covering it today as
-  // an approved substitute instead - checked only when the direct query
-  // above finds nothing, so the ordinary (non-substitute) path never pays
-  // this extra cost. See resolveSubstituteSlotsForDate's own doc-comment.
-  if (todaySlots.length === 0) {
-    // fresh: this is the write gate - a just-approved substitute must not be refused for a cache's sake.
-    const substituted = await resolveSubstituteSlotsForDate(db, collegeId, facultyMemberId, dateISO, { fresh: true });
-    if (substituted.size > 0) {
-      const assignmentSlotsSnap = await collegeRef.collection("timetableSlots")
-        .where("assignmentId", "==", assignmentId)
-        .get();
-      todaySlots = assignmentSlotsSnap.docs
-        .map((d) => ({ id: d.id, ...d.data() }) as TimetableSlot & { id: string })
-        .filter((s) => s.day === day && substituted.has(s.id));
-    }
-  }
+  // Leave substitute (lib/leave/substituteTeaching.ts): a period they cover in a section they teach is posted under
+  // their OWN assignment (virtual slot); one in a section they don't teach under the absent faculty's assignment
+  // (attendance only). Fresh when the direct query found nothing - a just-approved substitute must not wait on a cache.
+  const sub = await substituteDay(db, collegeId, facultyMemberId, dateISO, { fresh: todaySlots.length === 0 });
+  if (todaySlots.length === 0) todaySlots = sub.attendanceOnly.filter((s) => s.assignmentId === assignmentId && s.day === day);
+  todaySlots = [...todaySlots, ...sub.ownSubject.filter((s) => s.assignmentId === assignmentId && s.day === day)];
+  // Class adjustments in force today (fresh - this is the write gate): this assignment's period handed to a
+  // colleague can't be posted by its own faculty; a period taken over under this (the taker's own) assignment can.
+  todaySlots = applyAdjustments(todaySlots, await classAdjustmentLegsOn(db, collegeId, dateISO, { fresh: true }), facultyMemberId, collegeId, { onlyAssignmentId: assignmentId });
   // A slot scoped to one mid exam is only in force within that mid's teaching stretch (lib/timetable/slotScope.ts).
   todaySlots = await activeSlotsOn(db, collegeId, todaySlots, dateISO);
   if (todaySlots.length === 0) return { ok: false, reason: "NOT_SCHEDULED" };

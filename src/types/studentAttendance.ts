@@ -111,6 +111,10 @@ export interface StudentAttendanceSession {
   // than the assignment's own facultyId. Absent on every ordinary session.
   substituteForFacultyId?: string;
   substituteForFacultyName?: string;
+  /** A leave substitute in a section they don't teach: attendance only, no Record of the Class Work needed. */
+  attendanceOnly?: boolean;
+  /** Taken over through "Adjust / Swap a Class": whose period it was and what they would have taught. */
+  classAdjustment?: { adjustmentId: string; fromFacultyId: string; fromFacultyName: string; fromSubjectName: string };
 
   submittedAt?: Timestamp | null;
   createdAt: Timestamp;

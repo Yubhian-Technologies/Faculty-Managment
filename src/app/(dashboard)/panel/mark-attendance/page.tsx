@@ -45,6 +45,10 @@ interface TodayPeriod {
   phase?: "UPCOMING" | "OPEN" | "ENDED";
   labBatch: string | null;
   allocated?: boolean;
+  /** Taken over from a colleague through "Adjust / Swap a Class". */
+  adjustedFrom?: { facultyName: string; subjectName: string; onLeave?: boolean } | null;
+  /** Leave substitute in a section they don't teach: attendance only (class work not needed). */
+  attendanceOnly?: boolean;
   // The period's student list, kept on the phone for marking with no internet (today-periods?withRosters=1).
   roster?: { studentId: string; rollNumber: string; name: string; status: "ON_DUTY" | null }[] | null;
 }
@@ -85,6 +89,8 @@ export interface TodayPeriodGroup {
   phase: "UPCOMING" | "OPEN" | "ENDED";
   labBatch: string | null;
   allocated?: boolean;
+  adjustedFrom?: { facultyName: string; subjectName: string; onLeave?: boolean } | null;
+  attendanceOnly?: boolean;
   unavailableMessage?: string | null;
 }
 
@@ -211,6 +217,8 @@ export function groupTodayPeriods(periods: TodayPeriod[]): TodayPeriodGroup[] {
         phase: phaseOf(p),
         labBatch: p.labBatch,
         allocated: p.allocated,
+        adjustedFrom: p.adjustedFrom ?? null,
+        attendanceOnly: !!p.attendanceOnly,
         unavailableMessage: p.unavailableMessage,
       });
     }
@@ -632,7 +640,9 @@ export default function MarkAttendancePage() {
   }, [expandedGroup, studentRoster, draft]);
 
   const allMarked = totalPossibleMarks > 0 && markedCount === totalPossibleMarks;
-  const hasClassWorkRecord = classNotes.trim().length > 0;
+  // A leave substitute in a section they don't teach marks attendance only - class work is optional there.
+  const attendanceOnly = !!expandedGroup?.attendanceOnly;
+  const hasClassWorkRecord = classNotes.trim().length > 0 || attendanceOnly;
   const canSubmit = allMarked && hasClassWorkRecord && isExpandedOpen && !isReadOnly;
 
   async function handleSubmit() {
@@ -841,6 +851,8 @@ export default function MarkAttendancePage() {
                       <p className="font-medium">{periodLabel} · {formatTime12h(g.startTime)} – {formatTime12h(g.endTime)}</p>
                       <p className="text-muted-foreground">{g.subjectName} ({g.courseName} {ordinalYear(g.year)})</p>
                       <p className="text-muted-foreground">Section {g.sectionName}{g.labBatch ? ` · Batch ${g.labBatch}` : ""}</p>
+                      {g.adjustedFrom && <p className="text-xs text-blue-700">{g.adjustedFrom.onLeave ? "Covering" : "Adjusted class -"} {g.adjustedFrom.facultyName}&apos;s period ({g.adjustedFrom.subjectName}){g.adjustedFrom.onLeave ? " - on leave; teach your subject" : ""}</p>}
+                      {g.attendanceOnly && <p className="text-xs text-blue-700">Covering a colleague on leave - attendance only</p>}
                     </div>
                     <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
                       {isPending ? "Pending Sync" : isSubmitted || g.phase === "ENDED" ? "Closed" : g.phase === "UPCOMING" ? "Upcoming" : "Open"}
@@ -882,7 +894,9 @@ export default function MarkAttendancePage() {
                     <tr key={g.groupId} className={isExpanded ? "bg-blue-50/60" : ""}>
                       <td className="px-4 py-3 font-medium">{periodLabel}</td>
                       <td className="px-4 py-3 whitespace-nowrap">{formatTime12h(g.startTime)} – {formatTime12h(g.endTime)}</td>
-                      <td className="px-4 py-3">{g.subjectName} <span className="text-muted-foreground">({g.courseName} {ordinalYear(g.year)})</span></td>
+                      <td className="px-4 py-3">{g.subjectName} <span className="text-muted-foreground">({g.courseName} {ordinalYear(g.year)})</span>
+                        {g.adjustedFrom && <span className="block text-xs text-blue-700">{g.adjustedFrom.onLeave ? "Covering" : "Adjusted class -"} {g.adjustedFrom.facultyName}&apos;s period ({g.adjustedFrom.subjectName})</span>}
+                        {g.attendanceOnly && <span className="block text-xs text-blue-700">Covering a colleague on leave - attendance only</span>}</td>
                       <td className="px-4 py-3">{g.sectionName}{g.labBatch ? ` (${g.labBatch})` : ""}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
@@ -1063,16 +1077,17 @@ export default function MarkAttendancePage() {
 
           <Card className="overflow-hidden">
             <div className="p-4 border-b">
-              <Label htmlFor="classNotes" className="text-sm font-medium">Record of the Class Work *</Label>
+              <Label htmlFor="classNotes" className="text-sm font-medium">Record of the Class Work{attendanceOnly ? "" : " *"}</Label>
+              {attendanceOnly && <p className="text-xs text-muted-foreground mt-1">You are covering a colleague on leave in a section you don&apos;t teach - attendance only, class work is optional.</p>}
               <Textarea
                 id="classNotes"
-                placeholder="What was taught/done in this lab/class session? (required)"
+                placeholder={attendanceOnly ? "Optional" : "What was taught/done in this lab/class session? (required)"}
                 value={classNotes}
                 onChange={(e) => setClassNotes(e.target.value)}
                 disabled={isReadOnly || !isExpandedOpen}
                 rows={3}
                 className="mt-2"
-                required
+                required={!attendanceOnly}
               />
             </div>
 

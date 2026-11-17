@@ -36,3 +36,4 @@ export * from "./incident";
 export * from "./invigilation";
 export * from "./payments";
 export * from "./cea";
+export * from "./classAdjustment";
