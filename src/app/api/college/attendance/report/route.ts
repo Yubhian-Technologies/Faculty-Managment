@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { checkInHowOf, type CheckInHow } from "@/lib/attendance/checkInHow";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -46,6 +47,9 @@ interface RosterEntry {
   checkOut: string | null;
   checkInVerified: boolean;
   checkOutVerified: boolean;
+  /** How the self check-in was proved (face scan / phone unlock), the phone's name, and whether it was made with
+   *  a face / phone registered in the last few days ("New device" on the report - a swap stands out). */
+  checkInHow?: CheckInHow | null;
   // HOD-granted exception for this specific day (see AttendanceRecord's own
   // doc-comment) - "Late" everywhere in the app derives from checkIn AND
   // this together (see lib/attendance/lateStatus.ts's isLateCheckIn).
@@ -121,6 +125,7 @@ export async function GET(request: Request) {
         remarks: string | null;
         checkInVerified: boolean;
         checkOutVerified: boolean;
+        checkInHow: CheckInHow | null;
         permittedCheckInTime: string | null;
         lateAfter?: string | null;
         lateReason: string | null;
@@ -136,6 +141,7 @@ export async function GET(request: Request) {
           ref: doc.ref, resolvedDate: d, status: rec.status,
           checkIn: rec.checkIn ?? null, checkOut: rec.checkOut ?? null, remarks: rec.remarks ?? null,
           checkInVerified: !!rec.checkInVerified, checkOutVerified: !!rec.checkOutVerified,
+          checkInHow: checkInHowOf(rec),
           permittedCheckInTime: rec.permittedCheckInTime ?? null,
           lateAfter: (rec as { lateAfter?: string }).lateAfter ?? null,
           lateReason: rec.lateReason ?? null,
@@ -150,6 +156,7 @@ export async function GET(request: Request) {
         p.entry.checkIn = p.checkIn;
         p.entry.checkOut = p.checkOut;
         p.entry.checkInVerified = p.checkInVerified;
+        p.entry.checkInHow = p.checkInHow;
         p.entry.checkOutVerified = p.checkOutVerified;
         p.entry.permittedCheckInTime = p.permittedCheckInTime;
         p.entry.lateAfter = p.lateAfter;
@@ -281,6 +288,7 @@ export async function GET(request: Request) {
       remarks: string | null;
       checkInVerified: boolean;
       checkOutVerified: boolean;
+      checkInHow: CheckInHow | null;
       permittedCheckInTime: string | null;
       lateAfter?: string | null;
       lateReason: string | null;
@@ -301,6 +309,7 @@ export async function GET(request: Request) {
         remarks: rec.remarks ?? null,
         checkInVerified: !!rec.checkInVerified,
         checkOutVerified: !!rec.checkOutVerified,
+        checkInHow: checkInHowOf(rec),
         permittedCheckInTime: rec.permittedCheckInTime ?? null,
         lateAfter: (rec as { lateAfter?: string }).lateAfter ?? null,
         lateReason: rec.lateReason ?? null,
@@ -315,6 +324,7 @@ export async function GET(request: Request) {
       p.entry.checkIn = p.checkIn;
       p.entry.checkOut = p.checkOut;
       p.entry.checkInVerified = p.checkInVerified;
+        p.entry.checkInHow = p.checkInHow;
       p.entry.checkOutVerified = p.checkOutVerified;
       p.entry.permittedCheckInTime = p.permittedCheckInTime;
       p.entry.lateAfter = p.lateAfter;

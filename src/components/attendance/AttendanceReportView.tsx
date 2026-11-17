@@ -3,7 +3,7 @@
 import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ShieldCheck, Search, Download, Upload, Pencil, CalendarDays, Clock3 } from "lucide-react";
+import { CheckCircle2, Fingerprint, ShieldCheck, Search, Download, Upload, Pencil, CalendarDays, Clock3 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -39,6 +39,7 @@ interface RosterEntry {
   checkOut: string | null;
   checkInVerified: boolean;
   checkOutVerified: boolean;
+  checkInHow?: { method: "FACE" | "PASSKEY"; device?: string; newDevice?: boolean } | null;
   // HOD-granted exception for this specific day (see "Permission" below) -
   // arriving at/before this time never counts as Late, even past 09:05.
   permittedCheckInTime?: string | null;
@@ -100,7 +101,17 @@ function CheckInCell({ row }: { row: RosterEntry }) {
   return row.checkIn ? (
     <span className="inline-flex items-center gap-1">
       {row.checkIn}
-      {row.checkInVerified && <ShieldCheck className="h-3.5 w-3.5 text-green-600" aria-label="Face + location verified" />}
+      {row.checkInVerified && (
+        row.checkInHow?.method === "PASSKEY"
+          ? <span title={`Phone unlock${row.checkInHow.device ? ` - ${row.checkInHow.device}` : ""} + location verified`}><Fingerprint className="h-3.5 w-3.5 text-green-600" aria-label="Phone unlock + location verified" /></span>
+          : <ShieldCheck className="h-3.5 w-3.5 text-green-600" aria-label="Face + location verified" />
+      )}
+      {row.checkInHow?.newDevice && (
+        <span
+          className="rounded border border-amber-300 bg-amber-50 px-1 text-[10px] font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+          title="Made with a face or phone registered in the last 3 days"
+        >New Device</span>
+      )}
     </span>
   ) : <>—</>;
 }

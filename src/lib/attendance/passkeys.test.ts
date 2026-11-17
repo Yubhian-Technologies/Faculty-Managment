@@ -46,3 +46,20 @@ describe("self check-in method", () => {
     expect(relyingParty(new Request("http://localhost:3000/x", { headers: { host: "localhost:3000" } }))).toEqual({ rpID: "localhost", origin: "http://localhost:3000" });
   });
 });
+
+describe("changing the registration is the HOD's reset, not self-service", () => {
+  it("a second phone is refused", async () => {
+    const { registrationOptions } = await import("./passkeys");
+    await expect(registrationOptions(db("PASSKEY"), "c1", "u1", "u1@x", req)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("the report flags a check-in made with a fresh registration", async () => {
+    const { checkInHowOf, isNewRegistration } = await import("./checkInHow");
+    const now = Date.now();
+    expect(isNewRegistration(new Date(now - 86_400_000), now)).toBe(true);
+    expect(isNewRegistration(new Date(now - 4 * 86_400_000), now)).toBe(false);
+    expect(checkInHowOf({ checkInProof: { method: "PASSKEY", deviceLabel: "Pixel", newRegistration: true } })).toEqual({ method: "PASSKEY", device: "Pixel", newDevice: true });
+    expect(checkInHowOf({ checkInProof: { method: "SERVER_DESCRIPTOR_MATCH" } })).toEqual({ method: "FACE" });
+    expect(checkInHowOf({})).toBeNull();
+  });
+});
