@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { removeAllPasskeys } from "@/lib/attendance/passkeys";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
@@ -32,6 +33,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ co
       faceEmbeddingSamples: FieldValue.delete(),
       faceRegisteredAt: FieldValue.delete(),
     });
+    // The registered phone (passkey check-in) is reset with the face.
+    await removeAllPasskeys(db, collegeId, principalSnap.docs[0].id);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

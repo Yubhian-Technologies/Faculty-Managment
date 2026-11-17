@@ -28,6 +28,12 @@ export function registeredSamplesOf(data: { faceEmbedding?: unknown; faceEmbeddi
 }
 
 export async function loadRegisteredSamples(db: FirebaseFirestore.Firestore, collegeId: string, uid: string): Promise<number[][]> {
+  return (await loadFaceRegistration(db, collegeId, uid)).samples;
+}
+
+/** The registered samples and when they were registered. */
+export async function loadFaceRegistration(db: FirebaseFirestore.Firestore, collegeId: string, uid: string): Promise<{ samples: number[][]; registeredAt: Date | null }> {
   const ref = await resolveOwnDocRef(db, collegeId, uid);
-  return registeredSamplesOf((await ref.get()).data() as { faceEmbedding?: unknown; faceEmbeddingSamples?: unknown } | undefined);
+  const data = (await ref.get()).data() as { faceEmbedding?: unknown; faceEmbeddingSamples?: unknown; faceRegisteredAt?: { toDate?: () => Date } } | undefined;
+  return { samples: registeredSamplesOf(data), registeredAt: data?.faceRegisteredAt?.toDate?.() ?? null };
 }

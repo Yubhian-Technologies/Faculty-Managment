@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Fingerprint, Smartphone, Trash2 } from "lucide-react";
+import { Fingerprint, Smartphone } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/hooks/useToast";
 import { warmFaceModels } from "@/lib/attendance/faceMatch";
 import { PasskeyAttendanceDialog } from "@/components/attendance/PasskeyAttendanceDialog";
 
@@ -12,7 +11,7 @@ import { PasskeyAttendanceDialog } from "@/components/attendance/PasskeyAttendan
 //  - warms the face models up while the page is open, when the college uses the face scan, so tapping Check In
 //    starts the camera straight away (the dialog itself is only mounted on the tap);
 //  - when the college allows phone check-in (Self Check-In Method PASSKEY / EITHER): this person's registered
-//    phones, Register This Phone and Remove.
+//    phone and Register This Phone (once - a change is the HOD's reset, see lib/attendance/passkeys.ts).
 
 interface Phone { id: string; label: string; createdAt: string | null; lastUsedAt: string | null }
 
@@ -30,7 +29,6 @@ export function PhoneCheckInCard({ onChanged }: { onChanged?: () => void }) {
   const [method, setMethod] = useState<"FACE" | "PASSKEY" | "EITHER" | null>(null);
   const [phones, setPhones] = useState<Phone[]>([]);
   const [registering, setRegistering] = useState(false);
-  const [removing, setRemoving] = useState<string | null>(null);
 
   const load = useCallback(() => fetchPhones().then((d) => {
     if (!d) return;
@@ -46,21 +44,6 @@ export function PhoneCheckInCard({ onChanged }: { onChanged?: () => void }) {
     const w = window as Window & { requestIdleCallback?: (f: () => void) => number };
     if (w.requestIdleCallback) w.requestIdleCallback(warm); else setTimeout(warm, 1200);
   }, [method]);
-
-  async function remove(p: Phone) {
-    setRemoving(p.id);
-    try {
-      const r = await fetch(`/api/college/attendance/passkey?id=${encodeURIComponent(p.id)}`, { method: "DELETE" });
-      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Unable to remove the phone.");
-      toast({ title: "Phone removed." });
-      await load();
-      onChanged?.();
-    } catch (e) {
-      toast({ variant: "destructive", title: (e as Error).message });
-    } finally {
-      setRemoving(null);
-    }
-  }
 
   if (method !== "PASSKEY" && method !== "EITHER") return null;
   return (
@@ -85,16 +68,19 @@ export function PhoneCheckInCard({ onChanged }: { onChanged?: () => void }) {
                   <p className="text-sm font-medium truncate">{p.label}</p>
                   <p className="text-xs text-muted-foreground">Registered {when(p.createdAt)} · last used {when(p.lastUsedAt)}</p>
                 </div>
-                <Button variant="ghost" size="sm" aria-label={`Remove ${p.label}`} disabled={removing === p.id} onClick={() => void remove(p)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
               </li>
             ))}
           </ul>
         )}
-        <Button variant={phones.length ? "outline" : "default"} onClick={() => setRegistering(true)}>
-          <Fingerprint className="h-4 w-4 mr-1.5" />Register This Phone
-        </Button>
+        {phones.length === 0 ? (
+          <Button onClick={() => setRegistering(true)}>
+            <Fingerprint className="h-4 w-4 mr-1.5" />Register This Phone
+          </Button>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            One phone per person. To change it (new or lost phone), ask your HOD to reset your check-in registration; the Principal does this for an HOD.
+          </p>
+        )}
       </CardContent>
       {registering && (
         <PasskeyAttendanceDialog

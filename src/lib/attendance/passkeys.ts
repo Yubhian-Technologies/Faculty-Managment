@@ -17,7 +17,11 @@ import {
 
 export type SelfCheckInMethod = "FACE" | "PASSKEY" | "EITHER";
 export const SELF_CHECK_IN_METHODS: SelfCheckInMethod[] = ["FACE", "PASSKEY", "EITHER"];
-export const MAX_PASSKEYS_PER_PERSON = 3;
+// One phone per person. Changing it is not self-service: the HOD / Principal resets the check-in registration
+// (removeAllPasskeys) and the person registers the new phone once - so nobody can quietly move their check-in
+// onto a colleague's phone.
+export const MAX_PASSKEYS_PER_PERSON = 1;
+export const CHANGE_REGISTRATION_MESSAGE = "To change it, ask your HOD to reset your check-in registration (the Principal for an HOD).";
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
 type Db = FirebaseFirestore.Firestore;
@@ -86,7 +90,7 @@ async function takeChallenge(db: Db, c: string, uid: string, purpose: string): P
 export async function registrationOptions(db: Db, c: string, uid: string, userName: string, request: Request) {
   const existing = await myPasskeys(db, c, uid);
   if (existing.length >= MAX_PASSKEYS_PER_PERSON) {
-    throw new PasskeyError(`You already have ${MAX_PASSKEYS_PER_PERSON} phones registered - remove one first.`, 409);
+    throw new PasskeyError(`Your phone is already registered. ${CHANGE_REGISTRATION_MESSAGE}`, 409);
   }
   const { rpID } = relyingParty(request);
   const options = await generateRegistrationOptions({
@@ -117,7 +121,7 @@ export async function verifyRegistration(db: Db, c: string, uid: string, respons
   if (!result.verified || !result.registrationInfo) throw new PasskeyError("This phone could not be registered. Try again.");
   const { credential } = result.registrationInfo;
   if ((await myPasskeys(db, c, uid)).length >= MAX_PASSKEYS_PER_PERSON) {
-    throw new PasskeyError(`You already have ${MAX_PASSKEYS_PER_PERSON} phones registered - remove one first.`, 409);
+    throw new PasskeyError(`Your phone is already registered. ${CHANGE_REGISTRATION_MESSAGE}`, 409);
   }
   const doc: StoredPasskey = {
     uid,
@@ -130,13 +134,6 @@ export async function verifyRegistration(db: Db, c: string, uid: string, respons
   };
   await college(db, c).collection("passkeys").doc(credential.id).set(doc);
   return { id: credential.id, label: doc.label };
-}
-
-export async function removePasskey(db: Db, c: string, uid: string, id: string) {
-  const ref = college(db, c).collection("passkeys").doc(id);
-  const snap = await ref.get();
-  if (!snap.exists || (snap.data() as StoredPasskey).uid !== uid) throw new PasskeyError("Phone not found. It may have been removed.", 404);
-  await ref.delete();
 }
 
 /** Removes every passkey of a person (an HOD / Principal resetting their check-in registration). */
@@ -162,7 +159,7 @@ export async function authenticationOptions(db: Db, c: string, uid: string, requ
 }
 
 /** Verifies a passkey signature made for an attendance check-in / check-out. Returns the passkey used. */
-export async function verifyAttendancePasskey(db: Db, c: string, uid: string, response: AuthenticationResponseJSON, request: Request): Promise<{ credentialId: string; label: string }> {
+export async function verifyAttendancePasskey(db: Db, c: string, uid: string, response: AuthenticationResponseJSON, request: Request): Promise<{ credentialId: string; label: string; registeredAt: Date | null }> {
   const ref = college(db, c).collection("passkeys").doc(response.id);
   const snap = await ref.get();
   const stored = snap.data() as StoredPasskey | undefined;
@@ -181,5 +178,7 @@ export async function verifyAttendancePasskey(db: Db, c: string, uid: string, re
   }
   if (!result.verified) throw new PasskeyError("Your phone's fingerprint / face unlock could not be verified. Try again.", 403);
   await ref.update({ counter: result.authenticationInfo.newCounter, lastUsedAt: new Date() });
-  return { credentialId: response.id, label: stored.label };
+  const created = stored.createdAt as unknown as { toDate?: () => Date } | Date | undefined;
+  const registeredAt = created instanceof Date ? created : created?.toDate?.() ?? null;
+  return { credentialId: response.id, label: stored.label, registeredAt };
 }

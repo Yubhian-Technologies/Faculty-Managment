@@ -1,5 +1,6 @@
 import { FACE_MATCH_THRESHOLD, bestDistance, isValidDescriptor } from "@/lib/attendance/faceThreshold";
-import { loadRegisteredSamples } from "@/lib/attendance/faceRegistry";
+import { loadFaceRegistration } from "@/lib/attendance/faceRegistry";
+import { isNewRegistration } from "@/lib/attendance/checkInHow";
 import { allowsFace, allowsPasskey, PasskeyError, selfCheckInMethod, verifyAttendancePasskey } from "@/lib/attendance/passkeys";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 
@@ -47,6 +48,8 @@ export type AttendanceProofEvidence =
       accuracyMeters: number;
       capturedAt: number;
       verifiedAt: number;
+      /** The face was registered in the last few days (checkInHow.ts) - shown as "New device" to the HOD. */
+      newRegistration?: boolean;
     }
   | {
       // The registered phone's own fingerprint / face unlock, verified as a WebAuthn signature on the server.
@@ -55,6 +58,7 @@ export type AttendanceProofEvidence =
       deviceLabel: string;
       accuracyMeters: number;
       verifiedAt: number;
+      newRegistration?: boolean;
     };
 
 export type AttendanceProofResult =
@@ -94,7 +98,13 @@ export async function verifyAttendanceProof(
     if (loc) return loc;
     try {
       const used = await verifyAttendancePasskey(db, collegeId, uid, body.passkey as AuthenticationResponseJSON, request);
-      return { ok: true, evidence: { method: "PASSKEY", credentialId: used.credentialId, deviceLabel: used.label, accuracyMeters: accuracy!, verifiedAt: now } };
+      return {
+        ok: true,
+        evidence: {
+          method: "PASSKEY", credentialId: used.credentialId, deviceLabel: used.label, accuracyMeters: accuracy!, verifiedAt: now,
+          ...(isNewRegistration(used.registeredAt, now) ? { newRegistration: true } : {}),
+        },
+      };
     } catch (err) {
       if (err instanceof PasskeyError) return { ok: false, status: err.status, error: err.message };
       throw err;
@@ -117,7 +127,7 @@ export async function verifyAttendanceProof(
   const loc = locationProblem();
   if (loc) return loc;
 
-  const registered = await loadRegisteredSamples(db, collegeId, uid);
+  const { samples: registered, registeredAt } = await loadFaceRegistration(db, collegeId, uid);
   if (!registered.length) {
     return { ok: false, status: 409, error: "You haven't registered your face yet - register it first" };
   }
@@ -129,6 +139,9 @@ export async function verifyAttendanceProof(
   return {
     ok: true,
     distance,
-    evidence: { method: "SERVER_DESCRIPTOR_MATCH", distance, threshold: FACE_MATCH_THRESHOLD, accuracyMeters: accuracy!, capturedAt, verifiedAt: now },
+    evidence: {
+      method: "SERVER_DESCRIPTOR_MATCH", distance, threshold: FACE_MATCH_THRESHOLD, accuracyMeters: accuracy!, capturedAt, verifiedAt: now,
+      ...(isNewRegistration(registeredAt, now) ? { newRegistration: true } : {}),
+    },
   };
 }

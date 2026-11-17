@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { removeAllPasskeys } from "@/lib/attendance/passkeys";
+import { noticeRegistration } from "@/lib/attendance/registrationNotice";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
       });
       // Registered phones (passkey check-in) are reset with the face.
       await removeAllPasskeys(db, session.collegeId, uid);
+      await noticeRegistration(db, session.collegeId, { event: "RESET", personUid: uid, actorUid: session.uid });
       return NextResponse.json({ ok: true });
     }
 
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
         faceRegisteredAt: FieldValue.delete(),
       });
       await removeAllPasskeys(db, session.collegeId, uid);
+      await noticeRegistration(db, session.collegeId, { event: "RESET", personUid: uid, actorUid: session.uid });
 
       return NextResponse.json({ ok: true });
     }
@@ -126,6 +129,7 @@ export async function POST(request: Request) {
       faceRegisteredAt: FieldValue.delete(),
     });
     await removeAllPasskeys(db, session.collegeId, target.userUid);
+    await noticeRegistration(db, session.collegeId, { event: "RESET", personUid: target.userUid, actorUid: session.uid });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

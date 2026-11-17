@@ -7,7 +7,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { MAX_FACE_SAMPLES, isValidDescriptor } from "@/lib/attendance/faceThreshold";
 import { registeredSamplesOf, resolveOwnDocRef } from "@/lib/attendance/faceRegistry";
-import { listPasskeys, selfCheckInMethod } from "@/lib/attendance/passkeys";
+import { CHANGE_REGISTRATION_MESSAGE, listPasskeys, selfCheckInMethod } from "@/lib/attendance/passkeys";
+import { noticeRegistration } from "@/lib/attendance/registrationNotice";
 
 // Whether the caller has registered their face yet - the gate the Faculty/HOD
 // attendance pages use to decide whether to offer "Register" or "Check In" -
@@ -42,8 +43,8 @@ export async function GET() {
 // Stores the face descriptors (128 floats each, ~1KB; up to MAX_FACE_SAMPLES) captured client-side by
 // face-api.js during Register - never the image itself, and never the
 // HOD-managed profilePhotoUrl, which this deliberately leaves untouched.
-// Upserts, so a faculty member can re-register (e.g. after a haircut throws
-// off match confidence) by simply registering again.
+// Only when nothing is registered yet: to register again (a changed look, a mismatch), the HOD /
+// Principal resets it first (face-registration/reset).
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_STAFF", ...COLLEGE_STAFF_UNIT_HEAD_ROLES);
@@ -62,6 +63,11 @@ export async function POST(request: Request) {
     if (!snap.exists) {
       return NextResponse.json({ error: "Your account record could not be found" }, { status: 404 });
     }
+    // Registering again over an existing face is not self-service - otherwise anyone signed in as this person
+    // could put their own face on the account. The HOD / Principal resets it (face-registration/reset) first.
+    if (registeredSamplesOf(snap.data() as { faceEmbedding?: unknown; faceEmbeddingSamples?: unknown }).length > 0) {
+      return NextResponse.json({ error: `Your face is already registered. ${CHANGE_REGISTRATION_MESSAGE}` }, { status: 409 });
+    }
 
     await ref.update({
       // The first sample stays in `faceEmbedding` - every "is registered" check reads that field.
@@ -70,6 +76,7 @@ export async function POST(request: Request) {
       faceRegisteredAt: new Date(),
     });
 
+    await noticeRegistration(db, session.collegeId, { event: "FACE_REGISTERED", personUid: session.uid, actorUid: session.uid });
     return NextResponse.json({ ok: true });
   } catch (err) {
     const badBody = badBodyResponse(err);

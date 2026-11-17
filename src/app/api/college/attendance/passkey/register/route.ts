@@ -6,7 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { registrationOptions, verifyRegistration } from "@/lib/attendance/passkeys";
 import { passkeyErrorResponse, SELF_CHECK_IN_ROLES } from "@/lib/attendance/passkeyRoutes";
-import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { noticeRegistration } from "@/lib/attendance/registrationNotice";
 import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 
 // Register THIS phone for check-in (passkey, unlocked with the phone's own fingerprint / face).
@@ -22,10 +22,8 @@ export async function POST(request: Request) {
     }
     if (body.step === "verify" && body.response && typeof body.response === "object") {
       const saved = await verifyRegistration(db, session.collegeId, session.uid, body.response as RegistrationResponseJSON, typeof body.label === "string" ? body.label : "", request);
-      await writeAuditLogSafe(db, session.collegeId, {
-        action: "CHECK_IN_PHONE_REGISTERED", performedBy: session.uid, performedByName: user?.name, targetId: session.uid,
-        details: { label: saved.label },
-      });
+      // Audited, and the HOD (Principal for an HOD) is told.
+      await noticeRegistration(db, session.collegeId, { event: "PHONE_REGISTERED", personUid: session.uid, actorUid: session.uid, detail: saved.label });
       return NextResponse.json(saved, { status: 201 });
     }
     return NextResponse.json({ error: "Start the phone registration again." }, { status: 400 });
