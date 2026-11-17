@@ -52,7 +52,7 @@
     "mammoth": "^1.12.3",
     "mathjax-full": "3.2.2",
     "mathlive": "^0.105.3",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "nodemailer": "^9.1.1",
     "pdf-parse": "^2.4.5",
     "qrcode-generator": "^2.0.4",
@@ -75,7 +75,7 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "typescript": "5.9.3",
     "vitest": "^4.1.11"
