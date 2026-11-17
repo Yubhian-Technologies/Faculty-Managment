@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Info, Lock, Pencil, RefreshCw } from "lucide-react";
+import { Download, FileText, Info, Lock, Pencil, RefreshCw, Upload } from "lucide-react";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { downloadMidPaperFinalPdf } from "@/lib/pdf/downloadMidPaperSet";
 import type { MidPaperFinal } from "@/types";
@@ -53,6 +53,8 @@ export default function InternalExamPage() {
   const [sheets, setSheets] = useState<Record<string, QuestionSheet>>({});
   // Mid-linked components: who enters them and whether this faculty can now (lib/exams/midMarksEntry.ts).
   const [midEntry, setMidEntry] = useState<Record<string, MidEntryState>>({});
+  // Absent in a Mid (question-wise component): counts as 0, shown "AB".
+  const [absentDraft, setAbsentDraft] = useState<Record<string, Record<string, boolean>>>({});
   const [viewing, setViewing] = useState("");
   /** The finalized paper (as printed by the Exam Cell, no answer key) - from the exam date on. */
   async function viewPaper(choiceId: string) {
@@ -171,6 +173,7 @@ export default function InternalExamPage() {
       const sh = json.sheets ?? {};
       setSheets(sh);
       setMidEntry(json.midEntry ?? {});
+      setAbsentDraft(Object.fromEntries(json.batch.entries.map((e) => [e.studentId, { ...(e.absentIn ?? {}) }])));
       setQuestionDraft(Object.fromEntries(json.batch.entries.map((e) => [e.studentId, Object.fromEntries(Object.keys(sh).map((cid) => [cid,
         Object.fromEntries(sh[cid].columns.map((c) => { const v = e.questionMarks?.[cid]?.[c.key]; return [c.key, v == null ? "" : String(v)]; }))]))])));
       const activeIds = json.configuration.components.filter((c) => c.isActive).map((c) => c.id);
@@ -206,6 +209,7 @@ export default function InternalExamPage() {
   function componentValue(studentId: string, componentId: string, max: number): number | null {
     // Not this faculty's to enter: what is saved (e.g. the Exam Cell's upload), read only.
     if (isLocked(componentId)) return batch?.entries.find((e) => e.studentId === studentId)?.componentMarks[componentId] ?? null;
+    if (absentDraft[studentId]?.[componentId]) return 0;
     // R26 CEA: worked out by the server from the submitted CEA units (Faculty > CEA Marks) - read only here.
     if (activeComponents.find((c) => c.id === componentId)?.cea) return batch?.entries.find((e) => e.studentId === studentId)?.componentMarks[componentId] ?? null;
     const sheet = sheets[componentId];
@@ -235,9 +239,87 @@ export default function InternalExamPage() {
       })
     ),
     ...(Object.keys(sheets).some((cid) => !isLocked(cid))
-      ? { questionMarks: Object.fromEntries(Object.keys(sheets).filter((cid) => !isLocked(cid)).map((cid) => [cid, numbers(questionDraft[e.studentId]?.[cid])])) }
+      ? {
+        questionMarks: Object.fromEntries(Object.keys(sheets).filter((cid) => !isLocked(cid) && !absentDraft[e.studentId]?.[cid]).map((cid) => [cid, numbers(questionDraft[e.studentId]?.[cid])])),
+        absent: Object.fromEntries(Object.keys(sheets).filter((cid) => !isLocked(cid)).map((cid) => [cid, !!absentDraft[e.studentId]?.[cid]])),
+      }
       : {}),
   }));
+
+  // Excel for the faculty: the section's sheet with every column they may enter (a Mid's "Absent" + its questions,
+  // and the other typed components). Uploading only fills this screen; Save / Submit and the server's checks follow.
+  type ExcelCol = { head: string; comp: string; kind: "absent" | "q" | "total"; key?: string };
+  const excelColumns = (): ExcelCol[] => activeComponents.filter((c) => !c.cea && !isLocked(c.id)).flatMap((c): ExcelCol[] => sheets[c.id]
+    ? [{ head: `${c.name} - Absent`, comp: c.id, kind: "absent" }, ...sheets[c.id].columns.map((col): ExcelCol => ({ head: `${c.name} - ${col.label} (/${col.max})`, comp: c.id, kind: "q", key: col.key }))]
+    : [{ head: `${c.name} (/${c.maxMarks})`, comp: c.id, kind: "total" }]);
+
+  async function downloadExcel() {
+    if (!batch || !selectedAssignment) return;
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Marks");
+    const cols = excelColumns();
+    ws.addRow(["Regd. No", "Name", ...cols.map((x) => x.head)]).font = { bold: true };
+    for (const e of batch.entries) {
+      ws.addRow([e.rollNumber, e.name, ...cols.map((x) =>
+        x.kind === "absent" ? (absentDraft[e.studentId]?.[x.comp] ? "AB" : "")
+          : x.kind === "q" ? (questionDraft[e.studentId]?.[x.comp]?.[x.key!] ?? "")
+            : (marksDraft[e.studentId]?.[x.comp] ?? ""))]);
+    }
+    ws.columns = [{ width: 16 }, { width: 30 }, ...cols.map((x) => ({ width: Math.max(10, Math.min(x.head.length + 2, 24)) }))];
+    ws.views = [{ state: "frozen", ySplit: 1, xSplit: 2 }];
+    const blob = new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${selectedAssignment.subjectCode || "marks"}_${batch.sectionName}_internal-marks.xlsx`.replace(/[\\/:*?"<>|\s]+/g, "-");
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function uploadExcel(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || !batch) return;
+    try {
+      if (!f.name.toLowerCase().endsWith(".xlsx")) throw new Error("Upload the .xlsx file you downloaded, filled in.");
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(await f.arrayBuffer());
+      const ws = wb.worksheets[0];
+      const cell = (v: unknown) => String(v && typeof v === "object" && "result" in v ? (v as { result: unknown }).result : v ?? "").trim();
+      const rows: string[][] = [];
+      ws?.eachRow((row) => { rows.push((row.values as unknown[]).slice(1).map(cell)); });
+      const head = rows[0] ?? [];
+      if (!/^regd/i.test(head[0] ?? "")) throw new Error("The first column's heading must be \"Regd. No\" - download the sheet and fill that.");
+      const cols = excelColumns();
+      const at = cols.map((x) => head.indexOf(x.head));
+      const byRoll = new Map(batch.entries.map((x) => [x.rollNumber.trim().toUpperCase(), x.studentId]));
+      const q = structuredClone(questionDraft), m = structuredClone(marksDraft), ab = structuredClone(absentDraft);
+      let filled = 0;
+      const unknown: string[] = [];
+      for (const r of rows.slice(1)) {
+        const roll = (r[0] ?? "").toUpperCase();
+        if (!roll) continue;
+        const sid = byRoll.get(roll);
+        if (!sid) { unknown.push(roll); continue; }
+        cols.forEach((x, i) => {
+          if (at[i] < 0) return;
+          const v = r[at[i]] ?? "";
+          if (x.kind === "absent") ab[sid] = { ...ab[sid], [x.comp]: /^(ab|a|y|yes|absent)$/i.test(v) };
+          else if (x.kind === "q") q[sid] = { ...q[sid], [x.comp]: { ...q[sid]?.[x.comp], [x.key!]: v } };
+          else m[sid] = { ...m[sid], [x.comp]: v };
+        });
+        filled++;
+      }
+      setQuestionDraft(q); setMarksDraft(m); setAbsentDraft(ab);
+      toast({
+        title: `Marks filled for ${filled} students from the file. Check them, then Save Draft or Submit.`,
+        ...(unknown.length ? { description: `Not in this section: ${unknown.slice(0, 6).join(", ")}${unknown.length > 6 ? " …" : ""}` } : {}),
+      });
+    } catch (err) {
+      toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to read the file." });
+    }
+  }
 
   /** Keep what is entered so far (nothing is submitted). */
   async function handleSaveDraft() {
@@ -443,13 +525,22 @@ export default function InternalExamPage() {
                             {activeComponents.map((c) => sheets[c.id] ? (
                               <td key={c.id} className="px-2 py-2.5" colSpan={sheets[c.id].columns.length + 1}>
                                 <div className="flex items-center gap-1">
+                                  {!isLocked(c.id) && (
+                                    <button type="button" disabled={isReadOnly}
+                                      aria-pressed={!!absentDraft[entry.studentId]?.[c.id]} aria-label={`${entry.name} absent for ${c.name}`}
+                                      title="Absent - counts as 0"
+                                      onClick={() => setAbsentDraft((prev) => ({ ...prev, [entry.studentId]: { ...prev[entry.studentId], [c.id]: !prev[entry.studentId]?.[c.id] } }))}
+                                      className={`h-8 w-9 rounded border text-xs font-semibold ${absentDraft[entry.studentId]?.[c.id] ? "border-destructive bg-destructive/10 text-destructive" : "text-muted-foreground hover:bg-muted"}`}>
+                                      AB
+                                    </button>
+                                  )}
                                   {sheets[c.id].columns.map((col) => (
-                                    <Input key={col.key} type="number" min={0} max={col.max} step={0.5} className="h-8 w-14 px-1.5 text-center" disabled={isReadOnly || isLocked(c.id)}
+                                    <Input key={col.key} type="number" min={0} max={col.max} step={0.5} className="h-8 w-14 px-1.5 text-center" disabled={isReadOnly || isLocked(c.id) || !!absentDraft[entry.studentId]?.[c.id]}
                                       aria-label={`${col.label} marks for ${entry.name}`}
                                       value={questionDraft[entry.studentId]?.[c.id]?.[col.key] ?? ""}
                                       onChange={(e) => handleQuestionChange(entry.studentId, c.id, col.key, e.target.value)} />
                                   ))}
-                                  <span className="w-14 text-center font-semibold">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</span>
+                                  <span className="w-14 text-center font-semibold">{(absentDraft[entry.studentId]?.[c.id] || entry.absentIn?.[c.id]) && isLocked(c.id) ? "AB" : absentDraft[entry.studentId]?.[c.id] ? "AB" : componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</span>
                                 </div>
                               </td>
                             ) : c.cea || isLocked(c.id) ? (
@@ -493,7 +584,15 @@ export default function InternalExamPage() {
                       You have entered marks for {enteredCount} out of {batch.totalStudents} students
                     </p>
                     {!isReadOnly && (
-                      <Button variant="outline" onClick={() => void handleSaveDraft()} loading={isSaving} disabled={isSubmitting} className="shrink-0">Save draft</Button>
+                      <div className="flex shrink-0 gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => void downloadExcel()}><Download className="mr-1 h-4 w-4" />Excel</Button>
+                        <Button asChild variant="ghost" size="sm">
+                          <label className="cursor-pointer"><Upload className="mr-1 h-4 w-4" />Upload<input type="file" accept=".xlsx" className="hidden" onChange={(e) => void uploadExcel(e)} /></label>
+                        </Button>
+                      </div>
+                    )}
+                    {!isReadOnly && (
+                      <Button variant="outline" onClick={() => void handleSaveDraft()} loading={isSaving} disabled={isSubmitting} className="shrink-0">Save Draft</Button>
                     )}
                     {!isReadOnly && (
                       <Button

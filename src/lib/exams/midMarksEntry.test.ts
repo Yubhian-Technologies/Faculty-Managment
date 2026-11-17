@@ -32,6 +32,6 @@ describe("who enters a Mid", () => {
     expect(entryStateFor(1, "FACULTY", false, false)).toMatchObject({ facultyCanEdit: false, note: expect.stringMatching(/finalizes/) });
     expect(entryStateFor(1, "EXAM_CELL", true, true)).toMatchObject({ facultyCanEdit: false, lockedByExamCell: true });
     // Faculty mode, not yet opened by the Exam Cell after the exam.
-    expect(entryStateFor(2, "FACULTY", true, false, false)).toMatchObject({ facultyCanEdit: false, note: expect.stringMatching(/opens Mid-2 marks entry/) });
+    expect(entryStateFor(2, "FACULTY", true, false, false)).toMatchObject({ facultyCanEdit: false, note: expect.stringMatching(/Mid-2 marks entry/) });
   });
 });

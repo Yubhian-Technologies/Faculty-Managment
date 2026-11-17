@@ -55,7 +55,7 @@ export async function PATCH(
     const session = await requireCollegeMember("PANEL_MEMBER", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
     const isPrincipalTier = PRINCIPAL_TIER_ROLES.includes(session.role);
     const body = (await readJsonBody(request)) as {
-      entries?: { studentId: string; componentMarks: Record<string, number | null>; questionMarks?: Record<string, unknown> }[];
+      entries?: { studentId: string; componentMarks: Record<string, number | null>; questionMarks?: Record<string, unknown>; absent?: Record<string, unknown> }[];
       submit?: boolean;
     };
 
@@ -117,7 +117,7 @@ export async function PATCH(
     // go through mid-marks-upload, not here. Principal-tier corrections of submitted marks are unchanged.
     if (!isPrincipalTier) {
       for (const e of body.entries ?? []) {
-        for (const cid of new Set([...Object.keys(e.componentMarks ?? {}), ...Object.keys(e.questionMarks ?? {})])) {
+        for (const cid of new Set([...Object.keys(e.componentMarks ?? {}), ...Object.keys(e.questionMarks ?? {}), ...Object.keys(e.absent ?? {})])) {
           const state = midEntry[cid];
           if (!state) continue;
           if (!state.facultyCanEdit) {
@@ -142,6 +142,18 @@ export async function PATCH(
         const total = paperTotal(sheet, values);
         e.componentMarks = { ...(e.componentMarks ?? {}), [cid]: total == null ? null : scaleToComponent(total, sheet.paperMax, comp.maxMarks) };
         questionUpdates.set(e.studentId, { ...(questionUpdates.get(e.studentId) ?? {}), [cid]: values });
+      }
+    }
+    // Absent in a Mid (question-wise components): counted as 0, its question marks cleared, shown "AB".
+    const absentUpdates = new Map<string, Record<string, boolean>>();
+    for (const e of body.entries ?? []) {
+      for (const [cid, v] of Object.entries(e.absent ?? {})) {
+        if (!sheets[cid] || !componentsById.has(cid)) continue;
+        absentUpdates.set(e.studentId, { ...(absentUpdates.get(e.studentId) ?? {}), [cid]: v === true });
+        if (v === true) {
+          e.componentMarks = { ...(e.componentMarks ?? {}), [cid]: 0 };
+          questionUpdates.set(e.studentId, { ...(questionUpdates.get(e.studentId) ?? {}), [cid]: {} });
+        }
       }
     }
     if (body.entries) {
@@ -181,7 +193,17 @@ export async function PATCH(
           merged[componentId] = marks;
         }
         const q = questionUpdates.get(e.studentId);
-        return { ...e, componentMarks: merged, ...(q ? { questionMarks: { ...(e.questionMarks ?? {}), ...q } } : {}) };
+        const ab = absentUpdates.get(e.studentId);
+        let absentIn = e.absentIn;
+        if (ab) {
+          absentIn = { ...(e.absentIn ?? {}) };
+          for (const [cid, v] of Object.entries(ab)) { if (v) absentIn[cid] = true; else delete absentIn[cid]; }
+        }
+        return {
+          ...e, componentMarks: merged,
+          ...(q ? { questionMarks: { ...(e.questionMarks ?? {}), ...q } } : {}),
+          ...(absentIn ? { absentIn } : {}),
+        };
       });
     }
     // R26 CEA: the component linked to CEA is worked out from the submitted CEA units - never typed.

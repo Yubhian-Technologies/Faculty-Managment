@@ -22,16 +22,19 @@ interface Row {
   subjectId: string; subjectName: string; subjectCode: string; branch: string;
   sections: { id: string; name: string; facultyName: string }[];
   source: "PAPER" | "LAYOUT" | "NONE"; layout: MidMarksLayout | null; paperMax?: number; questions?: number;
+  /** Faculty entry of this subject opened by the Exam Cell (after its exam), and its exam day. */
+  entryOpen: boolean; examDay: string | null;
+  progress: { sectionId: string; section: string; facultyName: string; entered: number; total: number; status: "NOT_STARTED" | "DRAFT" | "SUBMITTED"; locked: boolean }[];
 }
 
 const ROMAN = ["", "I", "II", "III", "IV", "V", "VI"];
-interface FacultyEntry { open: boolean; openedByName: string | null; lastExamDay: string | null }
+
 
 export function MidMarksOverview() {
   const [plans, setPlans] = useState<MidExamPlan[] | null>(null);
   const [planId, setPlanId] = useState("");
-  const [data, setData] = useState<{ key: string; mode: MidMarksMode; rows: Row[]; facultyEntry?: FacultyEntry } | null>(null);
-  const [toggling, setToggling] = useState(false);
+  const [data, setData] = useState<{ key: string; mode: MidMarksMode; rows: Row[] } | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Row | null>(null);
   const [uploading, setUploading] = useState<Row | null>(null);
@@ -49,7 +52,7 @@ export function MidMarksOverview() {
     let live = true;
     const q = new URLSearchParams({ courseKey: plan.courseKey, year: String(plan.year), semester: String(plan.semester), mid: String(plan.midNumber) });
     fetch(`/api/college/mid-marks/overview?${q}`)
-      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? "Unable to load the subjects."); return d as { mode: MidMarksMode; rows: Row[]; facultyEntry?: FacultyEntry }; })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? "Unable to load the subjects."); return d as { mode: MidMarksMode; rows: Row[] }; })
       .then((d) => { if (live) { setError(null); setData({ key, ...d }); } })
       .catch((e: Error) => { if (live) setError(e.message); });
     return () => { live = false; };
@@ -57,23 +60,42 @@ export function MidMarksOverview() {
 
   const rows = data?.key === key ? data.rows : null;
   const mode = data?.key === key ? data.mode : null;
-  const entry = data?.key === key ? data.facultyEntry : undefined;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+  // Subjects whose exam is over and whose faculty entry is still closed (one subject can have several branch rows).
+  const readyToOpen = [...new Set((rows ?? []).filter((r) => !r.entryOpen && (!r.examDay || r.examDay <= today)).map((r) => r.subjectId))];
 
-  async function toggleEntry(open: boolean) {
+  async function remind() {
     if (!plan) return;
-    setToggling(true);
+    setToggling("remind");
     try {
-      const res = await fetch("/api/college/mid-marks/open", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId: plan.id, open }),
+      const res = await fetch("/api/college/mid-marks/remind", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId: plan.id }),
       });
       const d = (await res.json()) as { error?: string; notified?: number };
+      if (!res.ok) throw new Error(d.error ?? "Unable to send reminders.");
+      toast({ title: d.notified ? `Reminder sent to ${d.notified} faculty.` : "Nobody is pending - every open subject is submitted." });
+    } catch (e) {
+      toast({ variant: "destructive", title: (e as Error).message });
+    } finally {
+      setToggling(null);
+    }
+  }
+
+  async function toggleEntry(subjectIds: string[], open: boolean, tag: string) {
+    if (!plan || subjectIds.length === 0) return;
+    setToggling(tag);
+    try {
+      const res = await fetch("/api/college/mid-marks/open", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId: plan.id, subjectIds, open }),
+      });
+      const d = (await res.json()) as { error?: string; notified?: number; opened?: string[] };
       if (!res.ok) throw new Error(d.error ?? "Unable to change marks entry.");
-      toast({ title: open ? `Marks entry opened. ${d.notified ?? 0} faculty notified.` : "Marks entry closed." });
+      toast({ title: open ? `Marks entry opened for ${d.opened?.length ?? 0} subject(s). ${d.notified ?? 0} faculty notified.` : "Marks entry closed." });
       setReload((n) => n + 1);
     } catch (e) {
       toast({ variant: "destructive", title: (e as Error).message });
     } finally {
-      setToggling(false);
+      setToggling(null);
     }
   }
   const counts = useMemo(() => ({
@@ -100,30 +122,20 @@ export function MidMarksOverview() {
 
       {rows && (
         <>
-          {mode === "FACULTY" && entry && (
-            <Card>
-              <CardContent className="flex flex-wrap items-center gap-3 py-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">
-                    Faculty marks entry: {entry.open ? <span className="text-emerald-700">Open</span> : <span className="text-amber-700">Closed</span>}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {entry.open
-                      ? `Opened${entry.openedByName ? ` by ${entry.openedByName}` : ""}. Faculty can enter and submit their sections' marks.`
-                      : `Open it once the exam is over${entry.lastExamDay ? ` (last exam day ${entry.lastExamDay})` : ""}; faculty teaching these subjects are notified.`}
-                  </p>
-                </div>
-                <Button variant={entry.open ? "outline" : "default"} loading={toggling} onClick={() => void toggleEntry(!entry.open)}>
-                  {entry.open ? "Close Marks Entry" : "Open Marks Entry"}
-                </Button>
-              </CardContent>
-            </Card>
+          {mode === "FACULTY" && readyToOpen.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+              <span className="flex-1">{readyToOpen.length} subject(s) have had their exam and are still closed for faculty marks entry.</span>
+              <Button size="sm" loading={toggling === "all"} onClick={() => void toggleEntry(readyToOpen, true, "all")}>Open All of Them</Button>
+            </div>
           )}
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Badge variant="outline">{mode === "EXAM_CELL" ? "Uploaded by Exam Cell" : "Entered by subject faculty"}</Badge>
             <span className="text-muted-foreground">
               Questions ready for {counts.set} of {counts.total} subject-branch pairs. Change who enters in Mid Configuration › Marks.
             </span>
+            {mode === "FACULTY" && rows.some((r) => r.entryOpen) && (
+              <Button size="sm" variant="outline" className="ml-auto" loading={toggling === "remind"} onClick={() => void remind()}>Remind Pending Faculty</Button>
+            )}
           </div>
           {rows.length === 0 ? (
             <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No Mid-exam subjects with teaching assignments for this Mid.</CardContent></Card>
@@ -137,6 +149,7 @@ export function MidMarksOverview() {
                       <th className="px-4 py-3">Branch</th>
                       <th className="px-4 py-3">Sections</th>
                       <th className="px-4 py-3">Questions</th>
+                      {mode === "FACULTY" && <th className="px-4 py-3">Faculty Entry</th>}
                       <th className="px-4 py-3" />
                     </tr>
                   </thead>
@@ -145,12 +158,38 @@ export function MidMarksOverview() {
                       <tr key={`${r.subjectId}|${r.branch}`}>
                         <td className="px-4 py-3"><span className="font-medium">{r.subjectCode}</span> <span className="text-muted-foreground">{r.subjectName}</span></td>
                         <td className="px-4 py-3">{r.branch}</td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{r.sections.map((s) => `${s.name} (${s.facultyName})`).join(", ")}</td>
+                        <td className="px-4 py-3">
+                          <div className="space-y-1">
+                            {(r.progress.length ? r.progress : r.sections.map((s) => ({ sectionId: s.id, section: s.name, facultyName: s.facultyName, entered: 0, total: 0, status: "NOT_STARTED" as const, locked: false }))).map((p) => (
+                              <div key={p.sectionId} className="flex flex-wrap items-center gap-1.5 text-xs">
+                                <span className="font-medium">{p.section}</span>
+                                <span className="text-muted-foreground">{p.facultyName}</span>
+                                <span className={p.status === "SUBMITTED" || p.locked ? "text-emerald-700" : p.status === "DRAFT" ? "text-amber-700" : "text-muted-foreground"}>
+                                  {p.locked ? "Locked by Exam Cell" : p.status === "SUBMITTED" ? "Submitted" : p.status === "DRAFT" ? `${p.entered}/${p.total} entered` : "Not started"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
                         <td className="px-4 py-3">
                           {r.source === "PAPER" ? <span>Finalized paper · {r.questions} columns · out of {r.paperMax}</span>
                             : r.source === "LAYOUT" ? <span>Set by Exam Cell · {r.questions} questions · out of {r.paperMax}</span>
                             : <span className="text-amber-700">Not set</span>}
                         </td>
+                        {mode === "FACULTY" && (
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={r.entryOpen ? "text-emerald-700" : "text-muted-foreground"}>{r.entryOpen ? "Open" : "Closed"}</span>
+                              {r.examDay && !r.entryOpen && <span className="text-xs text-muted-foreground">exam {r.examDay}</span>}
+                              <Button size="sm" variant="ghost" loading={toggling === `${r.subjectId}|${r.branch}`}
+                                disabled={!r.entryOpen && !!r.examDay && r.examDay > today}
+                                title={!r.entryOpen && r.examDay && r.examDay > today ? `Can be opened from ${r.examDay}` : undefined}
+                                onClick={() => void toggleEntry([r.subjectId], !r.entryOpen, `${r.subjectId}|${r.branch}`)}>
+                                {r.entryOpen ? "Close" : "Open"}
+                              </Button>
+                            </div>
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-right">
                           {mode === "EXAM_CELL" ? (
                             <Button size="sm" onClick={() => setUploading(r)}>Upload Marks</Button>

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { courseIdsForKey, teachingFor } from "@/lib/midBank/server";
-import { loadMode, openCol, sheetSourceFor } from "@/lib/exams/midMarksEntryServer";
+import { loadMode, midProgress, openCol, sheetSourceFor } from "@/lib/exams/midMarksEntryServer";
 import { loadPlan, planIdFor } from "@/lib/midTimetable/server";
 import { MID_MARKS_READERS, MidMarksError, midMarksErrorResponse } from "@/lib/exams/midMarksRoutes";
 
@@ -30,15 +30,34 @@ export async function GET(request: Request) {
       groups.set(key, g);
     }
     const list = [...groups.values()].sort((a, b) => a.branch.localeCompare(b.branch) || a.subjectCode.localeCompare(b.subjectCode));
-    const sources = await Promise.all(list.map((g) => sheetSourceFor(db, session.collegeId, g.subjectId, g.branch, year, mid, mode)));
-    // Faculty entry of this Mid timetable: opened by the Exam Cell after the exam (mid-marks/open).
+    const [sources, progress] = await Promise.all([
+      Promise.all(list.map((g) => sheetSourceFor(db, session.collegeId, g.subjectId, g.branch, year, mid, mode))),
+      midProgress(db, session.collegeId, mid, rows),
+    ]);
+    // Faculty entry per subject: opened by the Exam Cell after that subject's exam (mid-marks/open).
     const planId = planIdFor(courseKey, year, semester, mid);
-    const [openSnap, plan] = await Promise.all([openCol(db, session.collegeId).doc(planId).get(), loadPlan(db, session.collegeId, planId)]);
-    const o = openSnap.data() as { open?: boolean; openedByName?: string } | undefined;
+    const [openSnap, ttSnap, plan] = await Promise.all([
+      openCol(db, session.collegeId).where("planId", "==", planId).get(),
+      db.collection("colleges").doc(session.collegeId).collection("midTimetables").where("planId", "==", planId).get(),
+      loadPlan(db, session.collegeId, planId),
+    ]);
+    const openBy = new Map(openSnap.docs.map((d) => { const o = d.data() as { subjectId: string; open?: boolean; openedByName?: string }; return [o.subjectId, o]; }));
+    const examDay = new Map<string, string>();
+    for (const d of ttSnap.docs) {
+      for (const sl of ((d.data() as { slots?: { subjectId: string; date: string }[] }).slots ?? [])) {
+        if (!examDay.has(sl.subjectId) || sl.date > examDay.get(sl.subjectId)!) examDay.set(sl.subjectId, sl.date);
+      }
+    }
+    const lastDay = [...(plan?.days ?? [])].sort().pop() ?? null;
     return NextResponse.json({
       mode,
-      facultyEntry: { open: o?.open === true, openedByName: o?.openedByName ?? null, lastExamDay: [...(plan?.days ?? [])].sort().pop() ?? null },
-      rows: list.map((g, i) => ({ ...g, sections: g.sections.sort((a, b) => a.name.localeCompare(b.name)), ...sources[i] })),
+      planId,
+      rows: list.map((g, i) => ({
+        ...g, sections: g.sections.sort((a, b) => a.name.localeCompare(b.name)), ...sources[i],
+        entryOpen: openBy.get(g.subjectId)?.open === true,
+        examDay: examDay.get(g.subjectId) ?? lastDay,
+        progress: progress.get(`${g.subjectId}|${g.branch}`) ?? [],
+      })),
     });
   } catch (err) {
     return midMarksErrorResponse(err, "mid-marks/overview GET");

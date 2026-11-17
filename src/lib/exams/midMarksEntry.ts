@@ -74,9 +74,9 @@ export function entryStateFor(midNumber: number, mode: MidMarksMode, hasSheet: b
   if (mode === "EXAM_CELL") {
     return { midNumber, mode, facultyCanEdit: false, lockedByExamCell: locked, note: locked ? "Entered and submitted by the Exam Cell." : "The Exam Cell uploads these marks." };
   }
-  // Faculty entry opens only when the Exam Cell opens it, after the Mid's exams (midMarksOpen).
+  // Faculty entry opens only when the Exam Cell opens it for the subject, after its exam (midMarksOpen).
   if (!open) {
-    return { midNumber, mode, facultyCanEdit: false, note: `Opens when the Exam Cell opens Mid-${midNumber} marks entry, after the exam.` };
+    return { midNumber, mode, facultyCanEdit: false, note: `Opens when the Exam Cell opens this subject's Mid-${midNumber} marks entry, after its exam.` };
   }
   if (!hasSheet) {
     return { midNumber, mode, facultyCanEdit: false, note: "Opens once the Exam Cell finalizes this Mid's question paper (or sets its questions)." };
