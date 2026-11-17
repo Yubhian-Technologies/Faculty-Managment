@@ -51,6 +51,7 @@ export async function POST(request: Request) {
       }
       await targetSnap.ref.update({
         faceEmbedding: FieldValue.delete(),
+        faceEmbeddingSamples: FieldValue.delete(),
         faceRegisteredAt: FieldValue.delete(),
       });
       return NextResponse.json({ ok: true });
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
 
       await targetSnap.ref.update({
         faceEmbedding: FieldValue.delete(),
+        faceEmbeddingSamples: FieldValue.delete(),
         faceRegisteredAt: FieldValue.delete(),
       });
 
@@ -116,6 +118,7 @@ export async function POST(request: Request) {
 
     await targetSnap.ref.update({
       faceEmbedding: FieldValue.delete(),
+      faceEmbeddingSamples: FieldValue.delete(),
       faceRegisteredAt: FieldValue.delete(),
     });
 

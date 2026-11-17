@@ -39,6 +39,9 @@ const nextConfig: NextConfig = {
     return [
       // The service worker (public/sw.js) must always be checked for a newer copy.
       { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }] },
+      // Face models for attendance check-in (6.7 MB, change only when the library is upgraded): kept by the
+      // browser for 30 days instead of being re-checked on every check-in.
+      { source: "/models/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=2592000, stale-while-revalidate=86400" }] },
       {
         source: "/:path*",
         headers: [

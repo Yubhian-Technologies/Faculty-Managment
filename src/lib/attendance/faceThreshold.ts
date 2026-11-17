@@ -21,3 +21,13 @@ export function euclideanDistance(a: ArrayLike<number>, b: ArrayLike<number>): n
   }
   return Math.sqrt(sum);
 }
+
+/** Distance to the CLOSEST registered sample (registration keeps a few: glasses, lighting ...). */
+export function bestDistance(probe: ArrayLike<number>, samples: ArrayLike<number>[]): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (const s of samples) best = Math.min(best, euclideanDistance(probe, s));
+  return best;
+}
+
+/** At most this many face samples are kept per person. */
+export const MAX_FACE_SAMPLES = 5;

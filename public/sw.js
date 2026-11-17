@@ -5,18 +5,21 @@
  *  - the Mark Attendance page itself: network first (always the latest when online), and a copy kept so the page
  *    opens from it when there is no network;
  *  - the app's built files under /_next/static/ (names change with every release, so a copy never goes stale):
- *    from the copy when present, else the network (and kept).
+ *    from the copy when present, else the network (and kept);
+ *  - the face models under /models/ (attendance check-in, 6.7 MB): from the copy when present, else the network
+ *    (and kept) - so a phone downloads them once, not on every check-in. Bump MODEL_CACHE when they change.
  * The page's data (classes, student lists, the queue) is kept by the page itself (offlineDayCache / offline queue).
  */
 const PAGE_CACHE = "fms-pages-v1";
 const STATIC_CACHE = "fms-static-v1";
+const MODEL_CACHE = "fms-models-v1";
 const OFFLINE_PAGES = ["/panel/mark-attendance"];
 const STATIC_LIMIT = 600;
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    const keep = new Set([PAGE_CACHE, STATIC_CACHE]);
+    const keep = new Set([PAGE_CACHE, STATIC_CACHE, MODEL_CACHE]);
     for (const name of await caches.keys()) if (name.startsWith("fms-") && !keep.has(name)) await caches.delete(name);
     await self.clients.claim();
   })());
@@ -57,6 +60,19 @@ self.addEventListener("fetch", (event) => {
           { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } },
         );
       }
+    })());
+    return;
+  }
+
+  // Face models: kept once, served from the copy.
+  if (url.pathname.startsWith("/models/")) {
+    event.respondWith((async () => {
+      const cache = await caches.open(MODEL_CACHE);
+      const copy = await cache.match(url.pathname);
+      if (copy) return copy;
+      const res = await fetch(req);
+      if (res.ok) await cache.put(url.pathname, res.clone());
+      return res;
     })());
     return;
   }

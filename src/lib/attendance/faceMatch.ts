@@ -28,6 +28,28 @@ export async function loadFaceModels(): Promise<void> {
   return modelsLoadedPromise;
 }
 
+// Downloads the models and runs one detection on a blank frame, so the first real scan doesn't pay for
+// TensorFlow.js compiling its shaders (seconds on a mid-range phone). Called when an attendance page
+// opens, while the browser is idle; safe to call any number of times.
+let warmPromise: Promise<void> | null = null;
+export function warmFaceModels(): Promise<void> {
+  if (!warmPromise) {
+    warmPromise = (async () => {
+      await loadFaceModels();
+      const faceapi = await import("face-api.js");
+      const canvas = document.createElement("canvas");
+      canvas.width = 160; canvas.height = 120;
+      await faceapi.detectSingleFace(canvas, LIVENESS_DETECTOR(faceapi)).withFaceLandmarks();
+    })().catch((err) => { warmPromise = null; throw err; });
+  }
+  return warmPromise;
+}
+
+// The per-frame liveness loop only needs the face's pose, so it runs the detector on a small input
+// (much faster per frame); the one descriptor capture keeps the default, larger input for accuracy.
+const LIVENESS_DETECTOR = (faceapi: typeof import("face-api.js")) =>
+  new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 });
+
 // Returns null if no face (or more than one face's worth of ambiguity) was
 // confidently detected in the given image/video/canvas.
 export async function getFaceDescriptor(
@@ -113,7 +135,7 @@ interface FaceReading {
 async function readFace(input: HTMLVideoElement | HTMLCanvasElement): Promise<FaceReading | null> {
   const faceapi = await import("face-api.js");
   const result = await faceapi
-    .detectSingleFace(input, new faceapi.TinyFaceDetectorOptions())
+    .detectSingleFace(input, LIVENESS_DETECTOR(faceapi))
     .withFaceLandmarks();
   if (!result) return null;
 
@@ -131,9 +153,8 @@ async function readFace(input: HTMLVideoElement | HTMLCanvasElement): Promise<Fa
   return { ear, yawOffset };
 }
 
-// Slowed from an initial 1200ms so the "hold still" calibration moment isn't
-// rushed before the first instruction even appears.
-const CALIBRATION_MS = 1800;
+// Long enough for a few readings of the "looking straight" pose (the liveness frames are small and fast).
+const CALIBRATION_MS = 800;
 // Loosened from an initial 0.75 after real-world testing showed genuine
 // blinks only reaching ~83-90% of baseline through this model - see git
 // history for the two measured data points this was tuned against.
@@ -365,4 +386,18 @@ export async function waitForGuidedRecenter(
     }
   }
   return false;
+}
+
+/**
+ * Several descriptors of the face from consecutive frames (`count`, `gapMs` apart) - registration keeps
+ * them all, so check-in matches the closest one (glasses on / off, light from another side ...).
+ */
+export async function captureDescriptors(video: HTMLVideoElement, count = 3, gapMs = 350): Promise<Float32Array[]> {
+  const out: Float32Array[] = [];
+  for (let i = 0; i < count; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, gapMs));
+    const d = await getFaceDescriptor(captureVideoFrame(video));
+    if (d) out.push(d);
+  }
+  return out;
 }
