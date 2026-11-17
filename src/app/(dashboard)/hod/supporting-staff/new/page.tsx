@@ -24,6 +24,9 @@ import { toast } from "@/hooks/useToast";
 import { hasSupportingStaffSplit } from "@/lib/designations/config";
 import { PHONE_REGEX, EMAIL_REGEX, APAAR_REGEX } from "@/lib/validations";
 import type { DesignationCatalogItem } from "@/types";
+import { useMyDepartments } from "@/hooks/useMyDepartments";
+import { fetchDepartments } from "@/lib/client/departmentsFetch";
+import { facultyDepartmentOptions, type FacultyDepartmentLike } from "@/lib/departments/facultyDepartmentOptions";
 
 const schema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
@@ -86,6 +89,23 @@ export default function NewHodSupportingStaffPage() {
     })();
   }, []);
 
+  // The department the staff member is filed under: the HOD's own department or one of its sub-departments.
+  // Sent explicitly - the server can't guess it for an HOD of several departments.
+  const ownDepartments = useMyDepartments();
+  const [allDepartments, setAllDepartments] = useState<(FacultyDepartmentLike & { isActive?: boolean })[]>([]);
+  useEffect(() => {
+    fetchDepartments()
+      .then((r) => r.json() as Promise<{ departments?: (FacultyDepartmentLike & { isActive?: boolean })[] }>)
+      .then((d) => setAllDepartments((d.departments ?? []).filter((dep) => dep.isActive !== false)))
+      .catch(() => {});
+  }, []);
+  const departmentOptions = useMemo(() => {
+    const opts = facultyDepartmentOptions(allDepartments, ownDepartments).map((d) => d.name);
+    return opts.length ? opts : ownDepartments;
+  }, [allDepartments, ownDepartments]);
+  const [pickedDepartment, setPickedDepartment] = useState("");
+  const department = pickedDepartment || (departmentOptions.length === 1 ? departmentOptions[0] : "");
+
   const steps: WizardStep[] = useMemo(() => [
     { key: "core", label: "Identity & Employment", icon: User, description: "Official ID, login credentials, designation and employment details." },
     ...getSupportingStaffProfileModules().map((m) => ({ key: m.key as WizardStepKey, label: m.label, icon: m.icon })),
@@ -140,6 +160,12 @@ export default function NewHodSupportingStaffPage() {
       toast({ variant: "destructive", title: "Some required fields are missing", description: `Personal Details: ${missingPersonal.join(", ")}` });
       return;
     }
+    if (!department) {
+      setErroredSteps(new Set<WizardStepKey>(["core"]));
+      setStepIndex(steps.findIndex((s) => s.key === "core"));
+      toast({ variant: "destructive", title: "Some required fields are missing", description: "Identity & Employment: Department" });
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch("/api/college/supporting-staff", {
@@ -149,6 +175,7 @@ export default function NewHodSupportingStaffPage() {
           ...data,
           staffCategory: "TECHNICAL",
           ...record,
+          department,
           additionalPhoneNumbers: extraPhones.filter((p) => p.number.trim()),
           supportingStaffProfile: record.supportingStaffProfile ?? {},
           ...(photoUrl ? { profilePhotoUrl: photoUrl } : {}),
@@ -280,6 +307,16 @@ export default function NewHodSupportingStaffPage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Department *</Label>
+                    <Select value={department} onValueChange={setPickedDepartment}>
+                      <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                      <SelectContent>
+                        {departmentOptions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Your department or one of its sub-departments.</p>
+                  </div>
                   <div className="space-y-2">
                     <Label>Designation *</Label>
                     <Select value={designation} onValueChange={(v) => setValue("designation", v)}>
@@ -288,6 +325,9 @@ export default function NewHodSupportingStaffPage() {
                         {designationOptions.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    {designationOptions.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No Technical designations yet - the Principal adds them under Settings &gt; Designations.</p>
+                    )}
                     {errors.designation && <p className="text-sm text-destructive">{errors.designation.message}</p>}
                   </div>
                   <div className="space-y-2">

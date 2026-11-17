@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     const { session, db, scope, department } = ctx;
 
     const { uid } = (await readJsonBody(request)) as { uid?: string };
-    if (!uid) return NextResponse.json({ error: "Pick a faculty member" }, { status: 400 });
+    if (!uid) return NextResponse.json({ error: "Select a faculty or staff member." }, { status: 400 });
 
     const users = db.collection("colleges").doc(session.collegeId).collection("users");
     const targetSnap = await users.doc(uid).get();
@@ -122,12 +122,21 @@ export async function POST(request: Request) {
     if (target.isActive === false) {
       return NextResponse.json({ error: "That account is inactive" }, { status: 400 });
     }
-    // Teaching faculty only. The post carries this department's full HOD
-    // authority, and supporting staff / office logins are not in that line -
-    // the same rule FACULTY_ONLY_SEAT_ROLES applies to the HOD seat itself.
-    if (target.role !== "PANEL_MEMBER") {
+    // Teaching faculty, or the department's own TECHNICAL supporting staff (Lab Assistant, Programmer ...) - the
+    // office work is often theirs. Never Non-Technical / office logins of other units.
+    if (target.role === "COLLEGE_STAFF") {
+      const staffSnap = await db.collection("colleges").doc(session.collegeId).collection("supportingStaff")
+        .where("userUid", "==", uid).limit(1).get();
+      const staff = staffSnap.docs[0]?.data() as { staffCategory?: string; status?: string } | undefined;
+      if (!staff || staff.staffCategory !== "TECHNICAL") {
+        return NextResponse.json({ error: "Only teaching faculty or Technical supporting staff can be the Department Office head" }, { status: 400 });
+      }
+      if (staff.status === "RESIGNED" || staff.status === "RETIRED") {
+        return NextResponse.json({ error: `${target.name ?? "They"} has left the college, so they can't be appointed.` }, { status: 400 });
+      }
+    } else if (target.role !== "PANEL_MEMBER") {
       return NextResponse.json(
-        { error: "Only a teaching faculty member can be the Department Office head" },
+        { error: "Only teaching faculty or Technical supporting staff can be the Department Office head" },
         { status: 400 }
       );
     }

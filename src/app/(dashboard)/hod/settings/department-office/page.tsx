@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar } from "@/components/shared/Avatar";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -86,6 +86,21 @@ export default function DepartmentOfficePage() {
     enabled: showCreate,
   });
 
+  // The department's Technical supporting staff with a login (Lab Assistant, Programmer ...) can hold the post too.
+  // HOD callers get only their own departments' Technical staff from this endpoint.
+  const { data: staff = [] } = useQuery({
+    queryKey: ["hod-department-technical-staff"],
+    queryFn: async () => {
+      const res = await fetch("/api/college/supporting-staff");
+      if (!res.ok) return [];
+      const data = await res.json() as { staff?: { userUid?: string; legalName?: string; name?: string; employeeId?: string; designation?: string; status?: string; staffCategory?: string }[] };
+      return (data.staff ?? [])
+        .filter((x) => x.userUid && x.staffCategory === "TECHNICAL" && x.status !== "RESIGNED" && x.status !== "RETIRED")
+        .map((x) => ({ uid: x.userUid as string, name: x.legalName || x.name || "", employeeId: x.employeeId ?? "", designation: x.designation ?? "" }));
+    },
+    enabled: showCreate,
+  });
+
   const load = useCallback(
     () => queryClient.invalidateQueries({ queryKey: ["hod-department-office"] }),
     [queryClient]
@@ -97,10 +112,10 @@ export default function DepartmentOfficePage() {
   // HOD's own seat is recorded.
   async function handleAppoint() {
     if (!pickedUid) {
-      toast({ variant: "destructive", title: "Pick a faculty member first" });
+      toast({ variant: "destructive", title: "Select a faculty or staff member." });
       return;
     }
-    const picked = faculty.find((f) => f.uid === pickedUid);
+    const picked = faculty.find((f) => f.uid === pickedUid) ?? staff.find((f) => f.uid === pickedUid);
     setIsCreating(true);
     try {
       const res = await fetch("/api/college/department-office", {
@@ -234,28 +249,39 @@ export default function DepartmentOfficePage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="do-faculty">Faculty Member *</Label>
+              <Label htmlFor="do-faculty">Faculty or Technical Staff *</Label>
               <Select value={pickedUid} onValueChange={setPickedUid}>
                 <SelectTrigger id="do-faculty">
-                  <SelectValue placeholder="Select a faculty member" />
+                  <SelectValue placeholder="Select a person" />
                 </SelectTrigger>
                 <SelectContent>
-                  {faculty.map((f) => {
-                    const employeeId = f.employeeId?.trim() || employeeIdByUid.get(f.uid);
-                    return (
+                  {faculty.length > 0 && <SelectGroup><SelectLabel>Faculty</SelectLabel>
+                    {faculty.map((f) => {
+                      const employeeId = f.employeeId?.trim() || employeeIdByUid.get(f.uid);
+                      return (
+                        <SelectItem key={f.uid} value={f.uid}>
+                          {f.name}
+                          {employeeId ? ` (${employeeId})` : ""}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectGroup>}
+                  {staff.length > 0 && <SelectGroup><SelectLabel>Technical Staff</SelectLabel>
+                    {staff.map((f) => (
                       <SelectItem key={f.uid} value={f.uid}>
                         {f.name}
-                        {employeeId ? ` (${employeeId})` : ""}
+                        {f.employeeId ? ` (${f.employeeId})` : ""}
+                        {f.designation ? ` · ${f.designation}` : ""}
                       </SelectItem>
-                    );
-                  })}
+                    ))}
+                  </SelectGroup>}
                 </SelectContent>
               </Select>
-              {faculty.length === 0 && (
-                <p className="text-xs text-muted-foreground">No faculty in this department yet. Add faculty from the Faculty page first.</p>
+              {faculty.length === 0 && staff.length === 0 && (
+                <p className="text-xs text-muted-foreground">No faculty or Technical staff with a login in this department yet.</p>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">They keep their own login and faculty work; this department&apos;s modules appear alongside it, with the same access you have.</p>
+            <p className="text-xs text-muted-foreground">They keep their own login and their own work (and daily check-in); this department&apos;s modules appear alongside it, with the same access you have.</p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
