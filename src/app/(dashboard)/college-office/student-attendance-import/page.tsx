@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { parseCSV, parseExcelWorkbook, readFileAsText } from "@/lib/utils/csv";
 import { parsePastAttendanceGrid, type PastAttendanceGrid } from "@/lib/studentAttendance/pastImportGrid";
 import { buildPastAttendanceTemplate } from "@/lib/studentAttendance/pastImportTemplate";
+import { joiningDatesFromRegister } from "@/lib/studentAttendance/joiningFromRegister";
 
 interface SectionOption { id: string; name: string; department: string; year: number; accessLevel?: "primary" | "secondary" }
 interface DayReport {
@@ -21,7 +22,10 @@ interface DayReport {
   skippedPeriods: string[]; detail: string[]; timetableNote?: string;
 }
 interface Result { days: DayReport[]; unmatchedRolls: string[]; rosterNotInFile: string[]; beforeJoining: { roll: string; joinedOn: string; days: number }[] }
-interface SheetState { name: string; grid: PastAttendanceGrid; sectionId: string; result?: Result; applied?: boolean; runId?: string }
+// A late joiner found in the register (blank on the first class days): their first marked date, offered as the
+// student's Date of Joining - set on Import while ticked, never over one already entered.
+interface JoiningRow { roll: string; date: string; blankClassDays: number; status: "SET" | "SAME" | "DIFFERENT" | "NOT_FOUND"; existing?: string; on: boolean }
+interface SheetState { name: string; grid: PastAttendanceGrid; sectionId: string; result?: Result; applied?: boolean; runId?: string; joining?: JoiningRow[] }
 
 const DATES_PER_REQUEST = 7;
 const STEPS = ["Upload file", "Match sections", "Preview", "Import"] as const;
@@ -121,9 +125,31 @@ export default function StudentAttendanceImportPage() {
   }
 
   // Sends one sheet's dates in chunks and merges the day reports.
+  /** The register's late joiners for one sheet: checked (preview) or saved (Import, the ticked ones only). */
+  async function joiningDates(sh: SheetState, apply: boolean): Promise<JoiningRow[]> {
+    const found = apply
+      ? (sh.joining ?? []).filter((j) => j.on && j.status === "SET")
+      : joiningDatesFromRegister(sh.grid).map((j) => ({ ...j, status: "SET" as const, on: true }));
+    if (found.length === 0) return apply ? sh.joining ?? [] : [];
+    const res = await fetch("/api/college/student-attendance/past-import/joining-dates", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sectionId: sh.sectionId, apply, items: found.map((j) => ({ roll: j.roll, date: j.date })) }),
+    });
+    const json = (await res.json()) as { items?: { roll: string; date: string; status: JoiningRow["status"]; existing?: string }[]; error?: string };
+    if (!res.ok) throw new Error(`${sh.name}: ${json.error ?? "Unable to check the Dates of Joining"}`);
+    const by = new Map((json.items ?? []).map((x) => [x.roll, x]));
+    const rows = apply ? sh.joining ?? [] : found;
+    return rows.map((j) => {
+      const x = by.get(j.roll);
+      return x ? { ...j, status: x.status, existing: x.existing, on: apply ? j.on : x.status === "SET" } : j;
+    });
+  }
+
   async function runSheet(i: number, apply: boolean): Promise<void> {
     const sh = sheets[i];
     const runId = apply ? `pastimport-${Date.now()}-${i}` : undefined;
+    // Dates of Joining first: on Import the ticked ones are saved before the attendance goes in.
+    const joining = await joiningDates(sh, apply);
     const merged: Result = { days: [], unmatchedRolls: [], rosterNotInFile: [], beforeJoining: [] };
     for (let from = 0; from < sh.grid.dates.length; from += DATES_PER_REQUEST) {
       const idxs = sh.grid.dates.map((_, k) => k).slice(from, from + DATES_PER_REQUEST);
@@ -147,7 +173,7 @@ export default function StudentAttendanceImportPage() {
         if (cur) cur.days += b.days; else merged.beforeJoining.push({ ...b });
       }
     }
-    patch(i, { result: merged, applied: apply, ...(runId ? { runId } : {}) });
+    patch(i, { result: merged, applied: apply, joining, ...(runId ? { runId } : {}) });
   }
 
   async function runAll(apply: boolean) {
@@ -281,7 +307,8 @@ export default function StudentAttendanceImportPage() {
             <li>A Regd. No column (kept as text) and one column per date. Write dates in full, like 11-8-2026.</li>
             <li>Cells: <strong>P</strong> or <strong>A</strong>. Leave blank when there is no record.</li>
             <li>Sundays, holidays and days with no timetable are skipped. A period that already has attendance is never changed.</li>
-            <li>Attendance counts from each student&apos;s Date of Joining: marks dated before it are left out (enter the Date of Joining on the student&apos;s details first).</li>
+            <li>Attendance counts from each student&apos;s Date of Joining: marks dated before it are left out.</li>
+            <li>A student who joined late: leave their cells blank before they joined. Their first P / A is offered as their Date of Joining in the preview, and saved when you import (a Date of Joining already entered is never changed).</li>
           </ul>
           {fileName && (
             <p className="flex items-center gap-2 text-sm">
@@ -355,7 +382,7 @@ export default function StudentAttendanceImportPage() {
                     </details>
                   )}
 
-                  {sh.result && <SheetResult sheet={sh} />}
+                  {sh.result && <SheetResult sheet={sh} onToggleJoining={(roll, on) => patch(i, { joining: (sh.joining ?? []).map((j) => (j.roll === roll ? { ...j, on } : j)) })} />}
                 </CardContent>
               </Card>
             );
@@ -437,8 +464,9 @@ function Stat({ label, value }: { label: string; value: number }) {
 }
 
 // One sheet's preview / result: notes first (what to look at), the day-by-day table folded away until asked for.
-function SheetResult({ sheet }: { sheet: SheetState }) {
+function SheetResult({ sheet, onToggleJoining }: { sheet: SheetState; onToggleJoining: (roll: string, on: boolean) => void }) {
   const r = sheet.result!;
+  const joining = sheet.joining ?? [];
   const notes = r.days.filter((d) => d.timetableNote);
   return (
     <div className="space-y-3 border-t pt-3">
@@ -461,6 +489,35 @@ function SheetResult({ sheet }: { sheet: SheetState }) {
           Left out - dated before the student&apos;s Date of Joining (attendance counts from that date):{" "}
           {r.beforeJoining.map((b) => `${b.roll} (joined ${b.joinedOn}, ${b.days} day${b.days === 1 ? "" : "s"})`).join(", ")}
         </Note>
+      )}
+
+      {joining.length > 0 && (
+        <div className="space-y-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+          <p className="font-medium">Dates of Joining found in the register</p>
+          <p className="text-xs">
+            These students are blank on the first class days and start with P / A later. Their first marked date is taken as their Date of Joining,
+            so attendance counts from it everywhere. {sheet.applied ? "" : "Untick anyone who was not a late joiner. It is saved when you import."}
+          </p>
+          <ul className="space-y-1">
+            {joining.map((j) => (
+              <li key={j.roll} className="flex flex-wrap items-center gap-2">
+                {j.status === "SET" && !sheet.applied ? (
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="h-4 w-4" checked={j.on} onChange={(e) => onToggleJoining(j.roll, e.target.checked)} />
+                    <span><b>{j.roll}</b> - Date of Joining {j.date} <span className="text-xs text-muted-foreground">(blank on {j.blankClassDays} class day{j.blankClassDays === 1 ? "" : "s"} before)</span></span>
+                  </label>
+                ) : (
+                  <span>
+                    <b>{j.roll}</b> - {j.status === "SET" ? (j.on ? `Date of Joining set to ${j.date}` : `not set (unticked)`)
+                      : j.status === "SAME" ? `Date of Joining already ${j.date}`
+                      : j.status === "DIFFERENT" ? `register starts ${j.date}, but ${j.existing ? `Date of Joining ${j.existing} is already entered` : "a Date of Joining was entered meanwhile"} - left as it is; check it`
+                      : "not in this section"}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <details>
