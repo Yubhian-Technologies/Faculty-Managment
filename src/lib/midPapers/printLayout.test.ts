@@ -37,7 +37,7 @@ describe("one part on its own sheet", () => {
     const html = getMidPaperSetHTML({ ...data, onlyPartId: "B", partHeader: { durationMinutes: 60, maxMarks: 20 } });
     expect(html).toContain("GAMMA");
     expect(html).not.toContain("ALPHA");
-    expect(html).toContain("<b>PART B</b>");
+    expect(html).toContain("<b>MID-I EXAMINATION - PART B</b>");
     expect(html).toContain("60 Mins.");
     expect(html).toContain("Max. Marks: <b>20</b>");
     // Part A had 2 questions, so Part B starts at 3 as on the full paper.
@@ -49,6 +49,6 @@ describe("one part on its own sheet", () => {
     expect(html).toContain("ALPHA");
     expect(html).toContain("GAMMA");
     expect(html).toContain("90 Mins.");
-    expect(html).not.toContain("<b>PART B</b>");
+    expect(html).not.toContain("PART B</b>");
   });
 });

@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import type { Timestamp } from "firebase-admin/firestore";
-import { requireCollegeMember, isCollegeAdmin } from "@/lib/auth/verifySession";
+import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { resolveMergedCourseIds } from "@/lib/departments/courseGrouping";
@@ -66,8 +66,7 @@ function formatISTTime(ts: Timestamp | null | undefined): string | null {
 // and /api/college/section-attendance-report (per-section subject grid).
 // Principal/VP see every department; HOD is locked to their own department
 // tree (getHodDepartmentScope/canHodEditDepartment, same convention as
-// GET /api/college/faculty). Deliberately excludes COLLEGE_ADMIN even though
-// its session reads role="PRINCIPAL" - see verifySession.isCollegeAdmin.
+// GET /api/college/faculty). College Admin (session role "PRINCIPAL") sees it like the Principal (decided 2026-11-17).
 //
 // Two modes, selected by which query params are present:
 //   date + department + courseId (no facultyId) -> { faculty: [...] }
@@ -79,10 +78,8 @@ function formatISTTime(ts: Timestamp | null | undefined): string | null {
 //     is "did they complete all their classes", not one course's worth.
 export async function GET(request: Request) {
   try {
+    // College Admin (session role PRINCIPAL) sees it like the Principal - its Attendance Reports page offers it.
     const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL");
-    if (isCollegeAdmin(session)) {
-      return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 403 });
-    }
 
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date") ?? "";

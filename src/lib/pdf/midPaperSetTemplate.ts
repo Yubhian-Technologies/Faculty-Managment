@@ -75,19 +75,22 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
   const classLine = `${ROMAN[d.exam.year] ?? d.exam.year} ${esc(shortCourse(d.exam.courseName))} ${ROMAN[semNo] ?? semNo}-SEM`;
   const sw = outcomeSwitches(d.outcomes);
   const extra = [sw.cos && "CO", sw.bloom && "BL", sw.poMapping && d.college.printPo === true && "PO"].filter(Boolean) as string[];
-  const cols = 3;
+  // Each tag in its own box at the right, in this order: Bloom's level (L1), COs (CO1), POs when printed, marks ([3M]) -
+  // no heading row above them.
+  const tagCols = [sw.bloom && "BL", sw.cos && "CO", extra.includes("PO") && "PO"].filter(Boolean) as string[];
+  const cols = 3 + tagCols.length;
   const byId = new Map(d.questions.map((q) => [q.id, q]));
-  const regCode = d.subject.regulation.match(/\d+/)?.[0] ?? d.subject.regulation;
+  // The regulation box at the top: "R26" (a regulation saved as just "26" gets its R).
+  const regDigits = d.subject.regulation.match(/\d+/)?.[0];
+  const regCode = regDigits ? `R${regDigits}` : d.subject.regulation;
   const text = (t: string, img?: string, cap?: string) => `${renderMathHtml(t, d.formula)}${img ? `<img class="qimg" src="${esc(img)}" alt="" />${cap ? `<div class="cap">${esc(cap)}</div>` : ""}` : ""}`;
-  // One cell per question at the right: "L3, CO1 [3M]" (Bloom's level, COs, the PO mapping when printed, marks) -
-  // no CO / BL / marks column headings.
   const tagCell = (q: MidPaperQuestion | undefined, marks: string | number) => {
-    const bits: string[] = [];
-    if (q && sw.bloom && q.bloom) bits.push(esc(String(q.bloom)));
-    if (q && sw.cos && q.cos.length) bits.push(esc(q.cos.join(", ")));
-    if (q && extra.includes("PO")) { const po = derivePoPso(q.cos, d.mapping ?? {}); if (po.length) bits.push(esc(po.join(", "))); }
-    const m = marks === "" || marks == null ? "" : `[${marks}M]`;
-    return `<td class="tag">${[bits.join(", "), m].filter(Boolean).join(" ")}</td>`;
+    const cells = tagCols.map((x) => {
+      const v = !q ? "" : x === "BL" ? String(q.bloom ?? "") : x === "CO" ? q.cos.join(", ") : derivePoPso(q.cos, d.mapping ?? {}).join(", ");
+      return `<td class="tag">${esc(v)}</td>`;
+    });
+    cells.push(`<td class="tag">${marks === "" || marks == null ? "" : `[${marks}M]`}</td>`);
+    return cells.join("");
   };
 
   let no = 0;
@@ -141,7 +144,7 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${PAPER_STYLE}
     .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; margin-top: 4px; }
-    td.tag { text-align: center; vertical-align: middle; white-space: nowrap; font-size: 11.5px; font-weight: 600; }
+    td.tag { text-align: center; vertical-align: middle; white-space: nowrap; font-size: 12px; font-weight: 600; padding: 4px 3px; }
   </style></head><body><div class="page">
     <div class="pdf-page-header"></div>
     <div class="top"><span class="code">${esc(d.subject.code)}</span><span>${regCode ? `<span class="code">${esc(regCode)}</span>` : ""}</span><span class="regd"><span>Regd. No:</span>${"<i></i>".repeat(d.pattern.regdBoxes || 12)}</span></div>
@@ -149,19 +152,23 @@ export function getMidPaperSetHTML(d: PaperSetPdfData): string {
       <img src="${logoSrc(d.college.logoUrl)}" alt="College logo" />
       <div class="center">
         <p class="uni">${esc(d.college.name)}</p>
-        <p class="line">${only?.cea
-          ? classLine
-          : `${classLine} MID EXAMINATION-${d.exam.midNumber}`}${d.answerKey ? " - ANSWER KEY" : ""}</p>
+        <p class="line">${classLine}${d.answerKey ? " - ANSWER KEY" : ""}</p>
         ${d.exam.academicYear ? `<p class="line">Academic Year: ${esc(d.exam.academicYear)}</p>` : ""}
         <p class="subject">${esc(d.subject.name)}</p>
-        ${only ? `<p class="line"><b>${esc(only.label.toUpperCase())}</b></p>` : ""}
+        ${(() => {
+          // Under the subject: the exam - "MID-I EXAMINATION" (a part printed on its own adds its name when it isn't
+          // just "Mid Examination", e.g. "MID-I EXAMINATION - PART A"); the CIE paper keeps its own name.
+          if (only?.cea) return `<p class="line"><b>${esc(only.label.toUpperCase())}</b></p>`;
+          const extraName = only && !/^mid examination$/i.test(only.label.trim()) ? ` - ${esc(only.label.toUpperCase())}` : "";
+          return `<p class="line"><b>MID-${ROMAN[d.exam.midNumber] ?? d.exam.midNumber} EXAMINATION${extraName}</b></p>`;
+        })()}
       </div><span></span>
     </div>
     <div class="meta"><span>${d.sections.length || d.branch.includes("(") ? "Branch &amp; Sections" : "Branch"}: <b>${esc(d.branch)}${d.sections.length ? ` - ${esc(d.sections.join(", "))}` : ""}</b></span><span>${d.exam.date ? `Date: <b>${dmy(d.exam.date)}</b>` : ""}</span></div>
     <div class="meta"><span>Time: <b>${duration} Mins.</b></span><span>Max. Marks: <b>${maxMarks}</b></span></div>
     <hr />
     ${d.pattern.instruction && !d.answerKey ? `<p class="instr">${esc(d.pattern.instruction)}</p>` : ""}
-    <table><colgroup><col style="width:7%" /><col style="width:75%" /><col style="width:18%" /></colgroup>${parts}</table>
+    <table><colgroup><col style="width:7%" /><col style="width:${85 - tagCols.reduce((n, x) => n + (x === "PO" ? 10 : 7), 0)}%" />${tagCols.map((x) => `<col style="width:${x === "PO" ? 10 : 7}%" />`).join("")}<col style="width:8%" /></colgroup>${parts}</table>
     <p class="end">*****</p>
   </div></body></html>`;
 }

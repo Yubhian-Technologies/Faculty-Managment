@@ -47,7 +47,11 @@ describe("the CIE paper inside a Mid paper set", () => {
     // Heading: "I B.Tech. I-SEM" (no "Continuous Evaluation" line); the Mid paper keeps its own.
     expect(pages[1]).toContain("I B.Tech. I-SEM</p>");
     expect(pages[1]).not.toContain("CONTINUOUS EVALUATION (WITH");
-    expect(pages[0]).toContain("I B.Tech. I-SEM MID EXAMINATION-1</p>");
+    // The class line alone at the top; "MID EXAMINATION-1" under the subject.
+    expect(pages[0]).toContain("I B.Tech. I-SEM</p>");
+    // The regulation box reads "R26", not "26".
+    expect(pages[0]).toContain('<span class="code">R26</span>');
+    expect(pages[0]).toMatch(/Maths<\/p>\s*<p class="line"><b>MID-I EXAMINATION<\/b><\/p>/);
     // PO / PSO column only when the Exam Cell prints POs (Mid Configuration).
     const withPo = (printPo: boolean) => paperSetHtmls({
       college: { name: "VWU", printPo }, exam: { courseName: "B.Tech", year: 1, semester: 1, midNumber: 1 }, subject: { name: "Maths", code: "MA101", regulation: "R26" },
@@ -70,9 +74,9 @@ describe("the CIE paper inside a Mid paper set", () => {
     })[0];
     expect(stemmed).not.toContain('<td class="no"></td>');
     expect(stemmed).not.toContain("STEM");
-    // Each row carries its own "L3, CO1 [6M]" - no marks / CO / BL column headings, no Course Outcomes paragraph.
-    expect(stemmed).toMatch(/<td class="no">3a<\/td><td class="q">PARTA<\/td><td class="tag">L3, CO1 \[6M\]<\/td>/);
-    expect(stemmed).toMatch(/<td class="no">3b<\/td><td class="q">PARTB<\/td><td class="tag">L3, CO1 \[4M\]<\/td>/);
+    // Each row carries L3 | CO1 | [6M], each in its own box - no column headings, no Course Outcomes paragraph.
+    expect(stemmed).toMatch(/<td class="no">3a<\/td><td class="q">PARTA<\/td><td class="tag">L3<\/td><td class="tag">CO1<\/td><td class="tag">\[6M\]<\/td>/);
+    expect(stemmed).toMatch(/<td class="no">3b<\/td><td class="q">PARTB<\/td><td class="tag">L3<\/td><td class="tag">CO1<\/td><td class="tag">\[4M\]<\/td>/);
     expect(stemmed).not.toMatch(/class="[^"]*colhead/);
     expect(stemmed).not.toContain("Course Outcomes:");
     for (const h of [...withPo(false), ...withPo(true)]) expect(h).not.toMatch(/colhead">(CO|BL|PO)</);
