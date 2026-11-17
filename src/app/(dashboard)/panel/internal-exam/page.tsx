@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import type { ExamConfiguration, InternalExamMarksBatch, TeachingAssignment } from "@/types";
 import { paperTotal, scaleToComponent, type QuestionSheet } from "@/lib/exams/questionMarks";
+import type { MidEntryState } from "@/lib/exams/midMarksEntry";
 
 interface Option {
   value: string;
@@ -50,6 +51,8 @@ export default function InternalExamPage() {
   const [marksDraft, setMarksDraft] = useState<Record<string, Record<string, string>>>({});
   // Components taken from a Mid question paper: their question columns, and studentId -> componentId -> key -> value.
   const [sheets, setSheets] = useState<Record<string, QuestionSheet>>({});
+  // Mid-linked components: who enters them and whether this faculty can now (lib/exams/midMarksEntry.ts).
+  const [midEntry, setMidEntry] = useState<Record<string, MidEntryState>>({});
   const [viewing, setViewing] = useState("");
   /** The finalized paper (as printed by the Exam Cell, no answer key) - from the exam date on. */
   async function viewPaper(choiceId: string) {
@@ -158,7 +161,7 @@ export default function InternalExamPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignmentId: selectedAssignment.id }),
       });
-      const json = (await res.json()) as { batch?: InternalExamMarksBatch; configuration?: ExamConfiguration; sheets?: Record<string, QuestionSheet>; error?: string };
+      const json = (await res.json()) as { batch?: InternalExamMarksBatch; configuration?: ExamConfiguration; sheets?: Record<string, QuestionSheet>; midEntry?: Record<string, MidEntryState>; error?: string };
       if (!res.ok || !json.batch || !json.configuration) {
         setLoadError(json.error ?? "Unable to load students");
         return;
@@ -167,6 +170,7 @@ export default function InternalExamPage() {
       setConfiguration(json.configuration);
       const sh = json.sheets ?? {};
       setSheets(sh);
+      setMidEntry(json.midEntry ?? {});
       setQuestionDraft(Object.fromEntries(json.batch.entries.map((e) => [e.studentId, Object.fromEntries(Object.keys(sh).map((cid) => [cid,
         Object.fromEntries(sh[cid].columns.map((c) => { const v = e.questionMarks?.[cid]?.[c.key]; return [c.key, v == null ? "" : String(v)]; }))]))])));
       const activeIds = json.configuration.components.filter((c) => c.isActive).map((c) => c.id);
@@ -195,8 +199,13 @@ export default function InternalExamPage() {
   const numbers = (row: Record<string, string> | undefined) =>
     Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, v.trim() === "" ? null : Number(v)]));
 
+  /** A Mid component this faculty can't type into now (the Exam Cell enters it, or its questions aren't set yet). */
+  const isLocked = (componentId: string) => !!midEntry[componentId] && !midEntry[componentId].facultyCanEdit;
+
   /** A component's marks for a student: typed, or worked out from the paper's questions (scaled to its max). */
   function componentValue(studentId: string, componentId: string, max: number): number | null {
+    // Not this faculty's to enter: what is saved (e.g. the Exam Cell's upload), read only.
+    if (isLocked(componentId)) return batch?.entries.find((e) => e.studentId === studentId)?.componentMarks[componentId] ?? null;
     // R26 CEA: worked out by the server from the submitted CEA units (Faculty > CEA Marks) - read only here.
     if (activeComponents.find((c) => c.id === componentId)?.cea) return batch?.entries.find((e) => e.studentId === studentId)?.componentMarks[componentId] ?? null;
     const sheet = sheets[componentId];
@@ -220,12 +229,14 @@ export default function InternalExamPage() {
   const entriesToSend = () => (batch?.entries ?? []).map((e) => ({
     studentId: e.studentId,
     componentMarks: Object.fromEntries(
-      activeComponents.filter((c) => !sheets[c.id] && !c.cea).map((c) => {
+      activeComponents.filter((c) => !sheets[c.id] && !c.cea && !isLocked(c.id)).map((c) => {
         const raw = marksDraft[e.studentId]?.[c.id];
         return [c.id, raw?.trim() ? Number(raw) : null];
       })
     ),
-    ...(Object.keys(sheets).length ? { questionMarks: Object.fromEntries(Object.keys(sheets).map((cid) => [cid, numbers(questionDraft[e.studentId]?.[cid])])) } : {}),
+    ...(Object.keys(sheets).some((cid) => !isLocked(cid))
+      ? { questionMarks: Object.fromEntries(Object.keys(sheets).filter((cid) => !isLocked(cid)).map((cid) => [cid, numbers(questionDraft[e.studentId]?.[cid])])) }
+      : {}),
   }));
 
   /** Keep what is entered so far (nothing is submitted). */
@@ -409,14 +420,16 @@ export default function InternalExamPage() {
                           <th className="px-4 py-3">Student Name</th>
                           {activeComponents.map((c) => sheets[c.id] ? (
                             <th key={c.id} className="px-2 py-3" colSpan={sheets[c.id].columns.length + 1}>
-                              {c.name} (Max {c.maxMarks}) - from the question paper (out of {sheets[c.id].paperMax})
+                              {c.name} (Max {c.maxMarks}) - {sheets[c.id].source === "LAYOUT" ? "questions set by the Exam Cell" : "from the question paper"} (out of {sheets[c.id].paperMax})
+                              {isLocked(c.id) && <span className="block font-normal normal-case text-amber-700">{midEntry[c.id].note}</span>}
                               <div className="mt-1 flex gap-1 normal-case">
                                 {sheets[c.id].columns.map((col) => <span key={col.key} className="w-14 text-center" title={`Max ${col.max}`}>{col.label}<br /><span className="font-normal">/{col.max}</span></span>)}
                                 <span className="w-14 text-center">= /{c.maxMarks}</span>
                               </div>
                             </th>
                           ) : (
-                            <th key={c.id} className="px-4 py-3">{c.name} (Max {c.maxMarks}){c.cea && <span className="block font-normal normal-case">from CIE Marks</span>}</th>
+                            <th key={c.id} className="px-4 py-3">{c.name} (Max {c.maxMarks}){c.cea && <span className="block font-normal normal-case">from CIE Marks</span>}
+                              {isLocked(c.id) && <span className="block max-w-[14rem] font-normal normal-case text-amber-700">{midEntry[c.id].note}</span>}</th>
                           ))}
                           <th className="px-4 py-3">Total (Out of {configuration.internalMaxMarks})</th>
                         </tr>
@@ -431,7 +444,7 @@ export default function InternalExamPage() {
                               <td key={c.id} className="px-2 py-2.5" colSpan={sheets[c.id].columns.length + 1}>
                                 <div className="flex items-center gap-1">
                                   {sheets[c.id].columns.map((col) => (
-                                    <Input key={col.key} type="number" min={0} max={col.max} step={0.5} className="h-8 w-14 px-1.5 text-center" disabled={isReadOnly}
+                                    <Input key={col.key} type="number" min={0} max={col.max} step={0.5} className="h-8 w-14 px-1.5 text-center" disabled={isReadOnly || isLocked(c.id)}
                                       aria-label={`${col.label} marks for ${entry.name}`}
                                       value={questionDraft[entry.studentId]?.[c.id]?.[col.key] ?? ""}
                                       onChange={(e) => handleQuestionChange(entry.studentId, c.id, col.key, e.target.value)} />
@@ -439,8 +452,8 @@ export default function InternalExamPage() {
                                   <span className="w-14 text-center font-semibold">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</span>
                                 </div>
                               </td>
-                            ) : c.cea ? (
-                              <td key={c.id} className="px-4 py-2.5 font-medium" title="Calculated from the submitted CIE units.">{componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</td>
+                            ) : c.cea || isLocked(c.id) ? (
+                              <td key={c.id} className="px-4 py-2.5 font-medium" title={c.cea ? "Calculated from the submitted CIE units." : midEntry[c.id]?.note}>{entry.absentIn?.[c.id] ? "AB" : componentValue(entry.studentId, c.id, c.maxMarks) ?? "-"}</td>
                             ) : (
                               <td key={c.id} className="px-4 py-2.5">
                                 <Input

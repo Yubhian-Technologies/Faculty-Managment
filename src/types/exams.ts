@@ -22,6 +22,8 @@ export interface InternalExamMarkEntry {
    * The component's own total in `componentMarks` is worked out from these by the server.
    */
   questionMarks?: Record<string, Record<string, number | null>>;
+  /** Components the student was absent for (Exam Cell upload): counted as 0, shown as "AB". */
+  absentIn?: Record<string, boolean>;
 }
 
 export interface InternalExamMarksBatch {
