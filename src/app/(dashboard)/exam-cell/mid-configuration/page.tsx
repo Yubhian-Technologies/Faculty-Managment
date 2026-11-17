@@ -14,6 +14,7 @@ import { formatDate, stripLeadingZeros } from "@/lib/utils";
 import { MidBankRulesCard } from "@/components/exams/MidBankRulesCard";
 import { ExamConfigurationPanel } from "@/components/exams/ExamConfigurationPanel";
 import { ExamMarksCategoriesCard } from "@/components/exams/ExamMarksCategoriesCard";
+import { MidMarksEntryCard } from "@/components/exams/MidMarksEntryCard";
 import { MidPaperTemplateCard } from "@/components/exams/MidPaperTemplateCard";
 import { MidPaperPatternCard } from "@/components/exams/MidPaperPatternCard";
 import { MidSubjectSplitsCard } from "@/components/exams/MidSubjectSplitsCard";
@@ -48,7 +49,7 @@ function MidConfigurationTabs() {
             className={cn("rounded-lg px-3.5 py-1.5 font-medium", tab === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}>{label}</Link>
         ))}
       </nav>
-      {tab === "marks" ? <div className="space-y-6"><ExamConfigurationPanel embedded /><ExamMarksCategoriesCard /></div> : tab === "paper" ? <PaperTab /> : tab === "cea" ? <CeaSettingsCard /> : <MidSettings />}
+      {tab === "marks" ? <div className="space-y-6"><MidMarksEntryCard /><ExamConfigurationPanel embedded /><ExamMarksCategoriesCard /></div> : tab === "paper" ? <PaperTab /> : tab === "cea" ? <CeaSettingsCard /> : <MidSettings />}
     </div>
   );
 }

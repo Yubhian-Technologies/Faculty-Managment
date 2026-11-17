@@ -17,7 +17,9 @@ export interface SheetPart {
   objectiveTotal?: { max: number; nos: number[] };
 }
 export interface QuestionSheet {
-  paperMax: number; parts: SheetPart[]; columns: SheetColumn[]; source: "CHOSEN" | "PATTERN";
+  paperMax: number; parts: SheetPart[]; columns: SheetColumn[];
+  /** CHOSEN: the Exam Cell's paper; PATTERN: the course pattern; LAYOUT: questions + max marks the Exam Cell set (midMarksEntry.ts). */
+  source: "CHOSEN" | "PATTERN" | "LAYOUT";
   /** The finalized (printed) paper this sheet comes from - the faculty can view it once the exam date has come. */
   paper?: { choiceId: string; date: string };
 }
@@ -112,6 +114,11 @@ export function questionMarksError(sheet: QuestionSheet, values: Values): string
     if (v == null) continue;
     if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > c.max) return `${c.label} must be between 0 and ${c.max}`;
     if (Math.round(v * 2) !== v * 2) return `${c.label}: marks in halves only`;
+  }
+  // An Exam Cell layout has no choice rule: what was entered adds up, and can't go above the paper max.
+  if (sheet.source === "LAYOUT") {
+    const total = paperTotal(sheet, values);
+    if (total != null && total > sheet.paperMax) return `the total (${total}) is above the paper max (${sheet.paperMax})`;
   }
   return null;
 }

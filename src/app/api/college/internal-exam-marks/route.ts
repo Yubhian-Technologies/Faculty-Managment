@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
-import { questionSheetsFor } from "@/lib/exams/questionMarksServer";
+import { midEntryFor } from "@/lib/exams/midMarksEntryServer";
 import { sectionRoster } from "@/lib/exams/sectionRoster";
 import { ceaValuesForBatch } from "@/lib/cea/marksServer";
 import { AggregateField } from "firebase-admin/firestore";
@@ -221,10 +221,13 @@ export async function POST(request: Request) {
     const id = assignmentId;
     const ref = collegeRef.collection("internalExamMarks").doc(id);
     const now = new Date();
-    // Components taken from a Mid question paper: the question columns the faculty fill in (empty for other colleges).
-    const sheets = await questionSheetsFor(db, session.collegeId, { subjectId: assignment.subjectId, department: assignment.department, year: year ?? undefined }, config);
-
     const existingSnap = await ref.get();
+    // Components linked to a Mid: their question columns (the finalized paper, else the Exam Cell's layout) and
+    // where entry stands - who enters (faculty / Exam Cell), open or not yet (lib/exams/midMarksEntry.ts).
+    const { sheets, states: midEntry } = await midEntryFor(db, session.collegeId, {
+      subjectId: assignment.subjectId, department: assignment.department, year: year ?? undefined, semester: assignment.timetableSemester,
+      examCellLocks: (existingSnap.data() as { examCellLocks?: Record<string, unknown> } | undefined)?.examCellLocks,
+    }, config);
 
     // Current roster, ordered for a stable S.No. column (lib/exams/sectionRoster.ts - shared with CEA marks).
     const students = await sectionRoster(collegeRef, { department: assignment.department, sectionName, courseId: assignment.courseId, year });
@@ -265,7 +268,7 @@ export async function POST(request: Request) {
         updatedAt: now,
       };
       await ref.set(batch);
-      return NextResponse.json({ batch: { id, ...batch }, configuration: config, sheets }, { status: 201 });
+      return NextResponse.json({ batch: { id, ...batch }, configuration: config, sheets, midEntry }, { status: 201 });
     }
 
     const existing = existingSnap.data() as InternalExamMarksBatch;
@@ -282,6 +285,7 @@ export async function POST(request: Request) {
         name: s.name,
         componentMarks: existingByStudent.get(s.id)?.componentMarks ?? {},
         ...(existingByStudent.get(s.id)?.questionMarks ? { questionMarks: existingByStudent.get(s.id)!.questionMarks } : {}),
+        ...(existingByStudent.get(s.id)?.absentIn ? { absentIn: existingByStudent.get(s.id)!.absentIn } : {}),
       }));
       const enteredCount = countEntered(entries, config);
 
@@ -294,11 +298,11 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         batch: { ...existing, id, entries, totalStudents: entries.length, enteredCount },
-        configuration: config, sheets,
+        configuration: config, sheets, midEntry,
       });
     }
 
-    return NextResponse.json({ batch: { ...existing, id }, configuration: config, sheets });
+    return NextResponse.json({ batch: { ...existing, id }, configuration: config, sheets, midEntry });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

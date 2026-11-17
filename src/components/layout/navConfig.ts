@@ -170,6 +170,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Mid Timetable", href: "/exam-cell/mid-timetable", iconName: "CalendarDays", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Mid Question Bank", href: "/exam-cell/question-banks", iconName: "BookOpenCheck", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Mid Question Paper", href: "/exam-cell/mid-question-paper", iconName: "FileText", roles: ["EXAM_CELL"], legacyModule: "General" },
+  { label: "Mid Marks", href: "/exam-cell/mid-marks", iconName: "ClipboardCheck", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "CIE", href: "/exam-cell/cea", iconName: "ClipboardList", roles: ["EXAM_CELL"], legacyModule: "General" },
   { label: "Exam Rooms", href: "/exam-cell/exam-rooms", iconName: "DoorOpen", roles: ["EXAM_CELL"], section: "Exam Conduct", legacyModule: "General" },
   { label: "Exam Seating", href: "/exam-cell/seating", iconName: "Armchair", roles: ["EXAM_CELL"], legacyModule: "General" },

@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
-import { questionSheetsFor } from "@/lib/exams/questionMarksServer";
+import { midEntryFor } from "@/lib/exams/midMarksEntryServer";
 import { ceaValuesForBatch } from "@/lib/cea/marksServer";
 import { cleanQuestionValues, paperTotal, questionMarksError, scaleToComponent } from "@/lib/exams/questionMarks";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -111,7 +111,24 @@ export async function PATCH(
     const changes: { studentId: string; studentName: string; componentId: string; componentName: string; from: number | null; to: number | null }[] = [];
     // A component taken from a Mid question paper: the marks per question are checked against the paper and the
     // component's total is worked out here (never trusted from the client).
-    const sheets = body.entries?.some((e) => e.questionMarks) ? await questionSheetsFor(db, session.collegeId, existing, config) : {};
+    const { sheets, states: midEntry } = await midEntryFor(db, session.collegeId, existing, config);
+    // A Mid's marks: the faculty enter them question by question, only while it's theirs to enter (FACULTY mode and
+    // the Exam Cell has finalized the paper or set the questions); never as a typed total. The Exam Cell's uploads
+    // go through mid-marks-upload, not here. Principal-tier corrections of submitted marks are unchanged.
+    if (!isPrincipalTier) {
+      for (const e of body.entries ?? []) {
+        for (const cid of new Set([...Object.keys(e.componentMarks ?? {}), ...Object.keys(e.questionMarks ?? {})])) {
+          const state = midEntry[cid];
+          if (!state) continue;
+          if (!state.facultyCanEdit) {
+            const name = componentsById.get(cid)?.name ?? "This Mid";
+            return NextResponse.json({ error: `${name}: ${state.note ?? "not open for entry."}` }, { status: 409 });
+          }
+          // Worked out from the question marks below - a typed total is ignored.
+          if (e.componentMarks) delete e.componentMarks[cid];
+        }
+      }
+    }
     const questionUpdates = new Map<string, Record<string, Record<string, number | null>>>();
     for (const e of body.entries ?? []) {
       if (!e.questionMarks) continue;
