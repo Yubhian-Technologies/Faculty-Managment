@@ -32,6 +32,19 @@ function guessDeviceLabel(): string {
   return "My phone";
 }
 
+/** Sent with every passkey request: tells an iPhone / iPad asking for the desktop site from a Mac (passkeyDevice.ts). */
+function touchPoints(): number {
+  return typeof navigator === "undefined" ? 0 : navigator.maxTouchPoints ?? 0;
+}
+
+/** Best guess for the hint shown before the prompt; the server decides. */
+function looksLikeComputer(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPod/i.test(ua) || (/Android/i.test(ua) && /Mobile/i.test(ua))) return false;
+  return !(/Macintosh/i.test(ua) && touchPoints() > 1);
+}
+
 function webauthnMessage(err: unknown): string {
   const name = (err as { name?: string })?.name;
   if (name === "NotAllowedError") return "Phone unlock was cancelled or timed out. Try again.";
@@ -49,6 +62,7 @@ export function PasskeyAttendanceDialog({ mode, open, onOpenChange, onSuccess, o
   onUseFace?: () => void;
 }) {
   const isRegister = mode === "register";
+  const [onComputer] = useState(looksLikeComputer);
   const label = mode === "check-in" ? "Check In" : mode === "check-out" ? "Check Out" : "Register This Phone";
   const [stage, setStage] = useState<Stage>("ready");
   const [errorMsg, setErrorMsg] = useState("");
@@ -116,7 +130,7 @@ export function PasskeyAttendanceDialog({ mode, open, onOpenChange, onSuccess, o
     setStage("working");
     try {
       const optRes = await fetch("/api/college/attendance/passkey/register", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ step: "options" }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ step: "options", touchPoints: touchPoints() }),
       });
       const options = await optRes.json();
       if (!optRes.ok) return fail(options.error ?? "Unable to register this phone.");
@@ -138,7 +152,9 @@ export function PasskeyAttendanceDialog({ mode, open, onOpenChange, onSuccess, o
   async function attend(withReason: boolean) {
     setStage("working");
     try {
-      const optRes = await fetch("/api/college/attendance/passkey/options", { method: "POST" });
+      const optRes = await fetch("/api/college/attendance/passkey/options", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ touchPoints: touchPoints() }),
+      });
       const options = await optRes.json();
       if (!optRes.ok) return fail(options.error ?? "Unable to start phone unlock.");
       const passkey = await startAuthentication({ optionsJSON: options });
@@ -156,7 +172,7 @@ export function PasskeyAttendanceDialog({ mode, open, onOpenChange, onSuccess, o
       const res = await fetch(`/api/college/attendance/${mode}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          latitude: c.latitude, longitude: c.longitude, accuracy: c.accuracy, passkey,
+          latitude: c.latitude, longitude: c.longitude, accuracy: c.accuracy, passkey, touchPoints: touchPoints(),
           ...(late ? { lateReason: lateReason.trim() } : {}),
         }),
       });
@@ -188,7 +204,9 @@ export function PasskeyAttendanceDialog({ mode, open, onOpenChange, onSuccess, o
           <DialogDescription>
             {isRegister
               ? "Registers this phone for check-in. Each check-in is then one tap and your phone's own fingerprint or face unlock."
-              : "Unlock with your phone's fingerprint or face. Your location must be inside the campus."}
+              : onComputer
+                ? "On a computer, check in with your registered phone: choose \"Use a phone or tablet\" when asked, scan the QR code with that phone and unlock it. Your location must be inside the campus."
+                : "Unlock with your phone's fingerprint or face. Your location must be inside the campus."}
           </DialogDescription>
         </DialogHeader>
 
@@ -235,7 +253,7 @@ export function PasskeyAttendanceDialog({ mode, open, onOpenChange, onSuccess, o
           ) : stage === "working" ? (
             <>
               <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Follow your phone&apos;s prompt…</p>
+              <p className="text-sm text-muted-foreground">{onComputer && !isRegister ? "Scan the QR code with your registered phone…" : "Follow your phone’s prompt…"}</p>
             </>
           ) : (
             <Fingerprint className="h-12 w-12 text-primary" />
