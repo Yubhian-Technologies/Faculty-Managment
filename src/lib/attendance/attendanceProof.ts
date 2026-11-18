@@ -2,6 +2,7 @@ import { FACE_MATCH_THRESHOLD, bestDistance, isValidDescriptor } from "@/lib/att
 import { loadFaceRegistration } from "@/lib/attendance/faceRegistry";
 import { isNewRegistration } from "@/lib/attendance/checkInHow";
 import { allowsFace, allowsPasskey, PasskeyError, selfCheckInMethod, verifyAttendancePasskey } from "@/lib/attendance/passkeys";
+import { COMPUTER_COPY_MESSAGE, deviceKindOf, passkeyRouteOf, type DeviceKind, type PasskeyRoute } from "@/lib/attendance/passkeyDevice";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 
 // What the server can and cannot establish about a self check-in / check-out.
@@ -38,6 +39,8 @@ export interface AttendanceProofBody {
   accuracy?: unknown;
   /** A passkey signature (WebAuthn assertion) made for this check-in / check-out - see lib/attendance/passkeys.ts. */
   passkey?: unknown;
+  /** `navigator.maxTouchPoints` of the page - tells an iPhone / iPad asking for the desktop site from a Mac (passkeyDevice.ts). */
+  touchPoints?: unknown;
 }
 
 export type AttendanceProofEvidence =
@@ -56,6 +59,12 @@ export type AttendanceProofEvidence =
       method: "PASSKEY";
       credentialId: string;
       deviceLabel: string;
+      /** ON_PHONE, or NEARBY_PHONE = signed by the phone through a computer's QR code. Missing on older records. */
+      route?: PasskeyRoute;
+      /** The device the request came from, as the browser reported it. */
+      deviceKind?: DeviceKind;
+      /** The passkey is a synced copy (iCloud Keychain / Google Password Manager). */
+      synced?: boolean;
       accuracyMeters: number;
       verifiedAt: number;
       newRegistration?: boolean;
@@ -96,12 +105,17 @@ export async function verifyAttendanceProof(
     if (!request) return { ok: false, status: 400, error: "Unable to verify the phone - try again." };
     const loc = locationProblem();
     if (loc) return loc;
+    // Only the registered phone itself may sign - not a laptop's synced copy of its passkey.
+    const deviceKind = deviceKindOf(request.headers, body.touchPoints);
+    const route = passkeyRouteOf((body.passkey as { authenticatorAttachment?: unknown } | null)?.authenticatorAttachment, deviceKind);
+    if (!route) return { ok: false, status: 403, error: COMPUTER_COPY_MESSAGE };
     try {
       const used = await verifyAttendancePasskey(db, collegeId, uid, body.passkey as AuthenticationResponseJSON, request);
       return {
         ok: true,
         evidence: {
-          method: "PASSKEY", credentialId: used.credentialId, deviceLabel: used.label, accuracyMeters: accuracy!, verifiedAt: now,
+          method: "PASSKEY", credentialId: used.credentialId, deviceLabel: used.label, route, deviceKind, synced: used.synced,
+          accuracyMeters: accuracy!, verifiedAt: now,
           ...(isNewRegistration(used.registeredAt, now) ? { newRegistration: true } : {}),
         },
       };

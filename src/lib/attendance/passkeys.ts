@@ -1,4 +1,5 @@
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
+import { preferNearbyPhone, REGISTER_ON_PHONE_MESSAGE, type DeviceKind } from "@/lib/attendance/passkeyDevice";
 import {
   generateAuthenticationOptions, generateRegistrationOptions,
   verifyAuthenticationResponse, verifyRegistrationResponse,
@@ -87,7 +88,8 @@ async function takeChallenge(db: Db, c: string, uid: string, purpose: string): P
   });
 }
 
-export async function registrationOptions(db: Db, c: string, uid: string, userName: string, request: Request) {
+export async function registrationOptions(db: Db, c: string, uid: string, userName: string, request: Request, kind: DeviceKind = "PHONE") {
+  if (kind === "COMPUTER") throw new PasskeyError(REGISTER_ON_PHONE_MESSAGE, 400);
   const existing = await myPasskeys(db, c, uid);
   if (existing.length >= MAX_PASSKEYS_PER_PERSON) {
     throw new PasskeyError(`Your phone is already registered. ${CHANGE_REGISTRATION_MESSAGE}`, 409);
@@ -145,7 +147,7 @@ export async function removeAllPasskeys(db: Db, c: string, uid: string): Promise
   return snap.size;
 }
 
-export async function authenticationOptions(db: Db, c: string, uid: string, request: Request) {
+export async function authenticationOptions(db: Db, c: string, uid: string, request: Request, kind: DeviceKind = "PHONE") {
   const mine = await myPasskeys(db, c, uid);
   if (!mine.length) throw new PasskeyError("Register this phone first.", 409);
   const { rpID } = relyingParty(request);
@@ -155,11 +157,12 @@ export async function authenticationOptions(db: Db, c: string, uid: string, requ
     userVerification: "required",
   });
   await saveChallenge(db, c, uid, options.challenge, "ATTENDANCE");
-  return options;
+  // On a computer only the phone itself may sign (passkeyDevice.ts): go straight to the "use a phone" QR code.
+  return kind === "COMPUTER" ? preferNearbyPhone(options) : options;
 }
 
 /** Verifies a passkey signature made for an attendance check-in / check-out. Returns the passkey used. */
-export async function verifyAttendancePasskey(db: Db, c: string, uid: string, response: AuthenticationResponseJSON, request: Request): Promise<{ credentialId: string; label: string; registeredAt: Date | null }> {
+export async function verifyAttendancePasskey(db: Db, c: string, uid: string, response: AuthenticationResponseJSON, request: Request): Promise<{ credentialId: string; label: string; registeredAt: Date | null; synced: boolean }> {
   const ref = college(db, c).collection("passkeys").doc(response.id);
   const snap = await ref.get();
   const stored = snap.data() as StoredPasskey | undefined;
@@ -180,5 +183,5 @@ export async function verifyAttendancePasskey(db: Db, c: string, uid: string, re
   await ref.update({ counter: result.authenticationInfo.newCounter, lastUsedAt: new Date() });
   const created = stored.createdAt as unknown as { toDate?: () => Date } | Date | undefined;
   const registeredAt = created instanceof Date ? created : created?.toDate?.() ?? null;
-  return { credentialId: response.id, label: stored.label, registeredAt };
+  return { credentialId: response.id, label: stored.label, registeredAt, synced: result.authenticationInfo.credentialBackedUp };
 }

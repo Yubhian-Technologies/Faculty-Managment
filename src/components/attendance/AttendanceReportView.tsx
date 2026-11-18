@@ -39,7 +39,7 @@ interface RosterEntry {
   checkOut: string | null;
   checkInVerified: boolean;
   checkOutVerified: boolean;
-  checkInHow?: { method: "FACE" | "PASSKEY"; device?: string; newDevice?: boolean } | null;
+  checkInHow?: { method: "FACE" | "PASSKEY"; device?: string; viaComputer?: boolean; newDevice?: boolean } | null;
   // HOD-granted exception for this specific day (see "Permission" below) -
   // arriving at/before this time never counts as Late, even past 09:05.
   permittedCheckInTime?: string | null;
@@ -103,8 +103,14 @@ function CheckInCell({ row }: { row: RosterEntry }) {
       {row.checkIn}
       {row.checkInVerified && (
         row.checkInHow?.method === "PASSKEY"
-          ? <span title={`Phone unlock${row.checkInHow.device ? ` - ${row.checkInHow.device}` : ""} + location verified`}><Fingerprint className="h-3.5 w-3.5 text-green-600" aria-label="Phone unlock + location verified" /></span>
+          ? <span title={`Phone unlock${row.checkInHow.device ? ` - ${row.checkInHow.device}` : ""}${row.checkInHow.viaComputer ? ", on a computer with the phone nearby (QR)" : ""} + location verified`}><Fingerprint className="h-3.5 w-3.5 text-green-600" aria-label="Phone unlock + location verified" /></span>
           : <ShieldCheck className="h-3.5 w-3.5 text-green-600" aria-label="Face + location verified" />
+      )}
+      {row.checkInHow?.viaComputer && (
+        <span
+          className="rounded border border-border bg-muted px-1 text-[10px] font-medium text-muted-foreground"
+          title="Checked in on a computer, signed by the registered phone held nearby (QR code)"
+        >Via Computer</span>
       )}
       {row.checkInHow?.newDevice && (
         <span

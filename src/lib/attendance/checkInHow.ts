@@ -5,6 +5,8 @@ export interface CheckInHow {
   method: "FACE" | "PASSKEY";
   /** The registered phone's name (phone unlock only). */
   device?: string;
+  /** Phone unlock made on a computer through the phone held near it (QR) - passkeyDevice.ts. */
+  viaComputer?: boolean;
   /** Made with a face / phone registered in the last NEW_REGISTRATION_DAYS days - a swap stands out. */
   newDevice?: boolean;
 }
@@ -17,12 +19,13 @@ export function isNewRegistration(registeredAt: Date | null | undefined, now: nu
 }
 
 export function checkInHowOf(rec: object): CheckInHow | null {
-  const p = (rec as { checkInProof?: unknown }).checkInProof as { method?: string; deviceLabel?: string; newRegistration?: boolean } | undefined;
+  const p = (rec as { checkInProof?: unknown }).checkInProof as { method?: string; deviceLabel?: string; newRegistration?: boolean; route?: string } | undefined;
   if (!p?.method) return null;
   const method: CheckInHow["method"] = p.method === "PASSKEY" ? "PASSKEY" : "FACE";
   return {
     method,
     ...(method === "PASSKEY" && p.deviceLabel ? { device: p.deviceLabel } : {}),
+    ...(method === "PASSKEY" && p.route === "NEARBY_PHONE" ? { viaComputer: true } : {}),
     ...(p.newRegistration ? { newDevice: true } : {}),
   };
 }
