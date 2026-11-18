@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { loadGroupLeavePolicy } from "@/lib/leave/groupLeavePolicy";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
@@ -362,7 +363,7 @@ export async function POST(request: Request) {
 
     let leaveType = null;
     if (body.leaveTypeCode) {
-      leaveType = resolveLeaveType(settings.leaveTypeRuleOverrides, body.leaveTypeCode) ?? null;
+      leaveType = resolveLeaveType(settings.leaveTypeRuleOverrides, body.leaveTypeCode, await loadGroupLeavePolicy(db)) ?? null;
       if (!leaveType?.isActive || !leaveType.rules.eligibleCategories.includes(effectiveCategory)) {
         return NextResponse.json({ error: "This leave type isn't available for your leave profile" }, { status: 400 });
       }
@@ -403,7 +404,7 @@ export async function POST(request: Request) {
     // /api/leave/balances computes, via the same two balanceEngine calls, so
     // this can never disagree with what the Apply form displayed.
     if (body.leaveTypeCode === "EL") {
-      const clType = resolveLeaveType(settings.leaveTypeRuleOverrides, "CL");
+      const clType = resolveLeaveType(settings.leaveTypeRuleOverrides, "CL", await loadGroupLeavePolicy(db));
       if (clType) {
         const clYear = fromDate.getFullYear();
         await initBalancesForYear(db, session.collegeId, session.uid, profile, settings.newJoiningYears, clYear, [clType]);

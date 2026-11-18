@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { stampTimetableAdminUpdate } from "@/lib/timetable/adminStamp";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -45,6 +46,7 @@ export async function DELETE(
     }
 
     await ref.delete();
+    await stampTimetableAdminUpdate(db, session.collegeId, (snap.data() as { sectionId?: string } | undefined)?.sectionId, session);
     return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

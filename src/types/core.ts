@@ -2861,6 +2861,8 @@ export interface AcademicSession {
 // ─── Section ──────────────────────────────────────────────────────────────────
 
 export interface Section {
+  /** The last timetable change by the College Admin / Principal (lib/timetable/adminStamp.ts) - "Updated by <name> (Admin)". */
+  timetableAdminUpdate?: { byUid: string; byName: string; at: unknown };
   id: string;
   collegeId: string;
   department: string;

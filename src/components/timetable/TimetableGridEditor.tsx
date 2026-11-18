@@ -51,6 +51,8 @@ interface TimetableGridEditorProps {
   // "Back to sections" is meaningless - the filters ARE the way back. The
   // header, title and every export/edit action still render either way.
   backHref?: string;
+  /** The College Admin / Principal editing any department's section: full rights (publish), never "notify only". */
+  asAdmin?: boolean;
   // Which semester's timetable this grid shows and edits. Omitted (or null) lets
   // the server resolve whichever semester is running today, as before.
   semester?: number | null;
@@ -76,7 +78,16 @@ interface TimetableGridEditorProps {
 // goes through the same API routes either visitor already had server-side
 // authorization checks added for (see teaching-assignments/timetable/
 // timetable-slots routes' isTimetableIncharge branches).
-export function TimetableGridEditor({ courseId, year, sectionId, backHref, semester, publishedWeekTools = false, gridFirst = false, footer }: TimetableGridEditorProps) {
+/** " on 18 Nov 2026" from a stored timestamp (Firestore Timestamp as JSON, Date or ISO), or "". */
+function adminUpdatedOn(at: unknown): string {
+  const v = at as { _seconds?: number; seconds?: number; toDate?: () => Date } | string | null | undefined;
+  const d = typeof v === "string" ? new Date(v)
+    : v && typeof v === "object" && typeof v.toDate === "function" ? v.toDate()
+      : v && typeof v === "object" && (v._seconds ?? v.seconds) != null ? new Date(((v._seconds ?? v.seconds) as number) * 1000) : null;
+  return d && !Number.isNaN(d.getTime()) ? ` on ${d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}` : "";
+}
+
+export function TimetableGridEditor({ courseId, year, sectionId, backHref, asAdmin = false, semester, publishedWeekTools = false, gridFirst = false, footer }: TimetableGridEditorProps) {
   const semesterQuery = semester != null ? `&semester=${semester}` : "";
   const semesterBody = semester != null ? { semester } : {};
   const router = useRouter();
@@ -441,7 +452,7 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
   // Science sub-HOD running Mechanical's 1st year) - so it is theirs to publish,
   // exactly as the publish route already allows (canHodEditDepartment).
   const ownsSectionYear = section?.accessLevel === "primary";
-  const isCrossDepartment = !isLoading && (!section || (!ownsSectionYear && myDepartments.length > 0 && !myDepartments.includes(section.department)));
+  const isCrossDepartment = !asAdmin && !isLoading && (!section || (!ownsSectionYear && myDepartments.length > 0 && !myDepartments.includes(section.department)));
   // A cross-department contributor never publishes this section themselves
   // (see handleNotify/handlePublish below and the server-side guard in
   // /api/college/timetable/publish) - so there's nothing for them to "view
@@ -1130,9 +1141,8 @@ export function TimetableGridEditor({ courseId, year, sectionId, backHref, semes
               : "Timetable"
         }
         description={
-          mode === "draft"
-            ? "Draft - not visible to faculty or students until published"
-            : "Published timetable"
+          `${mode === "draft" ? "Draft - not visible to faculty or students until published" : "Published timetable"}${
+            section?.timetableAdminUpdate ? ` · Updated by ${section.timetableAdminUpdate.byName || "Admin"} (Admin)${adminUpdatedOn(section.timetableAdminUpdate.at)}` : ""}`
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">

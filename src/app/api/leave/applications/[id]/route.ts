@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { loadGroupLeavePolicy } from "@/lib/leave/groupLeavePolicy";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { FieldValue } from "firebase-admin/firestore";
@@ -402,7 +403,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       let leaveType = null;
       if (req.leaveTypeCode) {
-        leaveType = resolveLeaveType(settings.leaveTypeRuleOverrides, req.leaveTypeCode);
+        leaveType = resolveLeaveType(settings.leaveTypeRuleOverrides, req.leaveTypeCode, await loadGroupLeavePolicy(db));
         if (leaveType?.rules.reasonOptions?.length && !leaveType.rules.allowCustomReason) {
           if (!leaveType.rules.reasonOptions.some((o) => o.label === body.reason!.trim())) {
             return NextResponse.json({ error: "Pick one of the listed reasons for this leave type" }, { status: 400 });

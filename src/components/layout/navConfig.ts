@@ -98,6 +98,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Staff Profile Completion Statistics", href: "/super-admin/faculty-profile-completion", iconName: "ClipboardCheck", roles: ["SUPER_ADMIN"], section: "Reports" },
   { label: "Audit Logs", href: "/super-admin/audit-logs", iconName: "ScrollText", roles: ["SUPER_ADMIN"], section: "System" },
   { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
+  { label: "Leave Policy", href: "/super-admin/leave-policy", iconName: "CalendarClock", roles: ["SUPER_ADMIN"] },
 
   // Administration
   { label: "Dashboard", href: "/administration", iconName: "LayoutDashboard", roles: ["ADMINISTRATION"] },

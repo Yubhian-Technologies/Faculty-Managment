@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { loadGroupLeavePolicy } from "@/lib/leave/groupLeavePolicy";
+import { lockedOverrideConflict, withoutLockedFields } from "@/lib/leave/resolveLeaveTypes";
 import { sanitizeSubjectBlockSizes } from "@/lib/timetable/subjectBlockSize";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
@@ -32,8 +34,9 @@ export async function GET(request: Request) {
     }
 
     const db = getAdminDb();
-    const settings = await loadCollegeSettings(db, collegeId);
-    return NextResponse.json({ settings });
+    const [settings, groupLeavePolicy] = await Promise.all([loadCollegeSettings(db, collegeId), loadGroupLeavePolicy(db)]);
+    // The Super Admin's leave rules for every college - the Leave Policy card shows locked rules read-only.
+    return NextResponse.json({ settings, groupLeavePolicy });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;
@@ -196,6 +199,12 @@ export async function PUT(request: Request) {
       const checked = sanitizeLeaveTypeRuleOverrides(body.leaveTypeRuleOverrides);
       if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
       leaveTypeRuleOverrides = checked.overrides;
+      // Rules the Super Admin locked for every college can't be set here: a different value is refused, the same
+      // value (or none) is dropped - the group's value applies (resolveLeaveTypes.ts).
+      const group = await loadGroupLeavePolicy(getAdminDb(), { fresh: true });
+      const refused = lockedOverrideConflict(leaveTypeRuleOverrides, group);
+      if (refused) return NextResponse.json({ error: refused }, { status: 409 });
+      leaveTypeRuleOverrides = withoutLockedFields(leaveTypeRuleOverrides, group);
     }
 
     let leaveBlackoutWindows: FacultyNorms["leaveBlackoutWindows"];

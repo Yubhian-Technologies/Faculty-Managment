@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { loadGroupLeavePolicy } from "@/lib/leave/groupLeavePolicy";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
     const effectiveCategory = computeEffectiveCategory(profile, settings.newJoiningYears);
 
     const year = new Date().getFullYear();
-    await initBalancesForYear(db, session.collegeId, targetUid, profile, settings.newJoiningYears, year, resolveLeaveTypes(settings.leaveTypeRuleOverrides));
+    await initBalancesForYear(db, session.collegeId, targetUid, profile, settings.newJoiningYears, year, resolveLeaveTypes(settings.leaveTypeRuleOverrides, await loadGroupLeavePolicy(db)));
 
     return NextResponse.json({ profile, effectiveCategory, newJoiningYears: settings.newJoiningYears });
   } catch (err) {
@@ -92,7 +93,7 @@ export async function PUT(request: Request) {
     const profile = { id: updatedSnap.id, ...updatedSnap.data() } as EmployeeLeaveProfile;
     const settings = await loadCollegeSettings(db, session.collegeId);
     const year = new Date().getFullYear();
-    await initBalancesForYear(db, session.collegeId, body.uid, profile, settings.newJoiningYears, year, resolveLeaveTypes(settings.leaveTypeRuleOverrides));
+    await initBalancesForYear(db, session.collegeId, body.uid, profile, settings.newJoiningYears, year, resolveLeaveTypes(settings.leaveTypeRuleOverrides, await loadGroupLeavePolicy(db)));
 
     return NextResponse.json({ ok: true, profile });
   } catch (err) {
