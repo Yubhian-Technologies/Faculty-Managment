@@ -163,6 +163,9 @@ export default function PrincipalTimetablePage() {
   const filtersChanged = appliedKey !== null && appliedKey !== draftKey;
   // The sections the list and the downloads cover: exactly what the last Load read.
   const shownSections = bulkSections;
+  // The College Admin / Principal may edit any section's timetable (Edit Timetable); not the VP, Exam Cell or Academics.
+  const canEditTimetables = user?.role === "PRINCIPAL" || user?.realRole === "COLLEGE_ADMIN" || user?.realRole === "PRINCIPAL";
+  const courseIdOfSection = useMemo(() => new Map(allSections.map((x) => [x.id, x.courseId])), [allSections]);
 
   async function handleLoadTimetables() {
     const ids = (fSection ? filterSections.filter((x) => x.id === fSection) : filterSections).map((x) => x.id);
@@ -413,9 +416,9 @@ export default function PrincipalTimetablePage() {
                           </span>
                         )}
                         {/* The College Admin / Principal edits any section's timetable (not the VP, Exam Cell or Academics, who share this page). */}
-                        {user?.role === "PRINCIPAL" && entry.courseId && (
+                        {canEditTimetables && (entry.courseId || courseIdOfSection.get(entry.sectionId)) && (
                           <Button asChild size="sm" variant="outline" className="ml-auto h-7">
-                            <Link href={`/principal/timetable/${entry.courseId}/${entry.year}/${entry.sectionId}`}>Edit Timetable</Link>
+                            <Link href={`/principal/timetable/${entry.courseId || courseIdOfSection.get(entry.sectionId)}/${entry.year}/${entry.sectionId}`}>Edit Timetable</Link>
                           </Button>
                         )}
                       </div>

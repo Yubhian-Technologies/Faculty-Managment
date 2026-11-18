@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { sectionMatchesPick } from "@/lib/departments/sectionDepartmentPick";
 import { AlertTriangle, Eye, Pencil, RefreshCw, Search, Users, CheckCircle2, Clock, BarChart3 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import Link from "next/link";
+import { useAuthStore } from "@/store/authStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +37,7 @@ function ordinalYear(year: number | undefined) {
 }
 
 export default function PrincipalInternalMarksPage() {
+  const isCollegeAdmin = useAuthStore((st) => st.user?.realRole === "COLLEGE_ADMIN");
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   // ONLY the batches the last Load asked for (with their entries) - never the whole college.
@@ -485,9 +488,15 @@ export default function PrincipalInternalMarksPage() {
         title="Internal Marks"
         description="Internal assessment management for the institution."
         actions={
+          <div className="flex gap-2">
+          {/* The College Admin enters a stalled section's marks for its faculty (lib/exams/onBehalf.ts). */}
+          {isCollegeAdmin && (
+            <Button asChild size="sm"><Link href="/college-admin/internal-marks/enter"><Pencil className="h-3.5 w-3.5" /> Enter on Behalf</Link></Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => { void loadData(); setApplied((a) => (a ? { ...a } : a)); }} disabled={isLoadingData || isLoadingBatches}>
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
           </Button>
+          </div>
         }
       />
 

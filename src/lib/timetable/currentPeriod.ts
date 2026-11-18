@@ -6,6 +6,7 @@ import { substituteDay } from "@/lib/leave/substituteTeaching";
 import { istDateFromParts } from "@/lib/attendance/istTime";
 import { getTimetableDay } from "@/lib/studentAttendance/classDay";
 import { activeSlotsOn } from "@/lib/timetable/slotScope";
+import { addMinutesCapped, postingExtraMinutes } from "@/lib/attendance/attendancePosting";
 import { classAdjustmentLegsOn } from "@/lib/classAdjustments/inForce";
 import { applyAdjustments, type AdjustedFrom } from "@/lib/classAdjustments/rules";
 
@@ -116,9 +117,11 @@ async function resolvePeriodWindow(
   const period = periods.find((p) => p.period === slot.periodNumber);
   if (!period) return unavailable("NO_PERIOD");
   // Attendance for a period stays postable until the course-year's college end
-  // time (never earlier than the period's own end). endTime itself is unchanged:
+  // time (never earlier than the period's own end) + the college's extra posting time. endTime itself is unchanged:
   // on-time/late and not-posted reporting still measure against the period end.
-  const closeTime = timing.collegeEndTime && toMinutes(timing.collegeEndTime) > toMinutes(period.endTime) ? timing.collegeEndTime : period.endTime;
+  const baseClose = timing.collegeEndTime && toMinutes(timing.collegeEndTime) > toMinutes(period.endTime) ? timing.collegeEndTime : period.endTime;
+  // Plus the college's extra posting time after college hours (College Admin setting, lib/attendance/attendancePosting.ts).
+  const closeTime = addMinutesCapped(baseClose, await postingExtraMinutes(collegeRef.firestore, collegeRef.id));
   return {
     startTime: period.startTime, endTime: period.endTime, closeTime,
     ...(otherSemester ? { unavailableReason: "OTHER_SEMESTER" as const } : {}),

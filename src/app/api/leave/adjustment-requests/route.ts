@@ -31,6 +31,7 @@ export async function GET() {
       "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const db = getAdminDb();
+    const isAdmin = session.realRole === "COLLEGE_ADMIN";
     // PENDING_ACCEPTANCE was once the only status that could hold a PENDING
     // entry, but PROPOSE_COVERAGE (a HOD/Principal naming a substitute from
     // the approval queue, or adjusting an already-approved leave) adds them
@@ -49,10 +50,12 @@ export async function GET() {
       .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest)
       .flatMap((r) =>
         (r.adjustmentRequests ?? [])
-          .filter((a) => a.assigneeUid === session.uid && a.status === "PENDING")
+          // A College Admin sees every pending one - it may answer on the named person's behalf (a stalled leave).
+          .filter((a) => (a.assigneeUid === session.uid || isAdmin) && a.status === "PENDING" && r.uid !== session.uid)
           .map((a) => ({
             requestId: r.id,
             kind: a.kind,
+            ...(isAdmin && a.assigneeUid !== session.uid ? { onBehalfOf: { uid: a.assigneeUid, name: a.assigneeName ?? "" } } : {}),
             employeeName: r.employeeName,
             department: r.department ?? null,
             fromDate: r.fromDate,

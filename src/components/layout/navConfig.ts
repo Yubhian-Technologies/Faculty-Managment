@@ -930,7 +930,9 @@ export function getCollegeAdminNavItems(): NavItem[] {
       roles: ["PRINCIPAL" as UserRole],
       section: idx === 0 ? "Research & Development" : undefined,
     }));
-  return [...principal, ...office, ...rnd];
+  // Leave cover waiting on a named substitute: the College Admin answers it on their behalf (a stalled leave).
+  const cover: NavItem[] = [{ label: "Leave Cover Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PRINCIPAL" as UserRole] }];
+  return [...principal, ...office, ...cover, ...rnd];
 }
 
 // A College Admin's menu: the same items under its own /college-admin URLs (the Principal's and the R&D

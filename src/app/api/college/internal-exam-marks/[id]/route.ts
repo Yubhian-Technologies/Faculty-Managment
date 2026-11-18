@@ -1,5 +1,8 @@
 export const dynamic = "force-dynamic";
 
+import { isCollegeAdminSession, onBehalfState } from "@/lib/exams/onBehalf";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
+import { notify } from "@/lib/notify";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { midEntryFor } from "@/lib/exams/midMarksEntryServer";
@@ -76,11 +79,14 @@ export async function PATCH(
     //    submitted. HOD is never in PRINCIPAL_TIER_ROLES and has no path here
     //    at all — their access (see GET above) is read-only by construction,
     //    not by a check that could be bypassed.
-    if (isPrincipalTier) {
+    // The College Admin entering a faculty member's DRAFT marks on their behalf (a stalled section,
+    // lib/exams/onBehalf.ts): the faculty's own path - save, submit - recorded as on behalf.
+    const onBehalf = isPrincipalTier && isCollegeAdminSession(session) && existing.status === "DRAFT";
+    if (isPrincipalTier && !onBehalf) {
       if (existing.status !== "SUBMITTED") {
         return NextResponse.json({ error: "Only already-submitted marks can be corrected here" }, { status: 409 });
       }
-    } else {
+    } else if (!onBehalf) {
       if (existing.facultyId !== session.uid) {
         return NextResponse.json({ error: "You do not have access to this action." }, { status: 403 });
       }
@@ -115,10 +121,10 @@ export async function PATCH(
     // A Mid's marks: the faculty enter them question by question, only while it's theirs to enter (FACULTY mode and
     // the Exam Cell has finalized the paper or set the questions); never as a typed total. The Exam Cell's uploads
     // go through mid-marks-upload, not here. Principal-tier corrections of submitted marks are unchanged.
-    if (!isPrincipalTier) {
+    if (!isPrincipalTier || onBehalf) {
       for (const e of body.entries ?? []) {
         for (const cid of new Set([...Object.keys(e.componentMarks ?? {}), ...Object.keys(e.questionMarks ?? {}), ...Object.keys(e.absent ?? {})])) {
-          const state = midEntry[cid];
+          const state = midEntry[cid] && onBehalf ? onBehalfState(midEntry[cid], !!sheets[cid]) : midEntry[cid];
           if (!state) continue;
           if (!state.facultyCanEdit) {
             const name = componentsById.get(cid)?.name ?? "This Mid";
@@ -180,7 +186,7 @@ export async function PATCH(
         const merged: Record<string, number | null> = { ...e.componentMarks };
         for (const [componentId, marks] of Object.entries(update)) {
           if (!componentsById.has(componentId)) continue;
-          if (isPrincipalTier && (e.componentMarks[componentId] ?? null) !== marks) {
+          if (isPrincipalTier && !onBehalf && (e.componentMarks[componentId] ?? null) !== marks) {
             changes.push({
               studentId: e.studentId,
               studentName: e.name,
@@ -215,12 +221,16 @@ export async function PATCH(
     const update: Record<string, unknown> = { entries, enteredCount, updatedAt: now };
 
     let actorName = "";
-    if (isPrincipalTier && changes.length > 0) {
+    if (onBehalf) {
+      actorName = await resolveUserName(db, session.collegeId, session.uid);
+      update.enteredOnBehalf = { byUid: session.uid, byName: actorName, at: now };
+    }
+    if (isPrincipalTier && !onBehalf && changes.length > 0) {
       actorName = await resolveUserName(db, session.collegeId, session.uid);
       update.lastModifiedBy = session.uid;
       update.lastModifiedByName = actorName;
       update.lastModifiedAt = now;
-    } else if (!isPrincipalTier && body.submit) {
+    } else if ((!isPrincipalTier || onBehalf) && body.submit) {
       if (enteredCount < existing.totalStudents || existing.totalStudents === 0) {
         return NextResponse.json(
           { error: "Enter marks for all students before submitting" },
@@ -237,7 +247,17 @@ export async function PATCH(
     // existing auditLogs collection (see e.g. budget-requests, faculty
     // routes) rather than a new mechanism. One entry per save, carrying the
     // full before/after diff so a silent overwrite is never possible to miss.
-    if (isPrincipalTier && changes.length > 0) {
+    if (onBehalf) {
+      await writeAuditLogSafe(db, session.collegeId, {
+        action: body.submit ? "INTERNAL_MARKS_SUBMITTED_ON_BEHALF" : "INTERNAL_MARKS_ENTERED_ON_BEHALF", performedBy: session.uid, performedByName: actorName, targetId: id,
+        details: { subjectName: existing.subjectName, sectionName: existing.sectionName, facultyName: existing.facultyName },
+      });
+      if (body.submit) {
+        await notify(db, session.collegeId, existing.facultyId, "INTERNAL_MARKS_ON_BEHALF", "Internal marks submitted for you",
+          `${actorName} (College Admin) entered and submitted the internal marks of ${existing.subjectName}, section ${existing.sectionName}.`, "/panel/internal-exam");
+      }
+    }
+    if (isPrincipalTier && !onBehalf && changes.length > 0) {
       await collegeRef.collection("auditLogs").add({
         collegeId: session.collegeId,
         action: "INTERNAL_EXAM_MARKS_CORRECTED",

@@ -35,14 +35,25 @@ export function useWorkContext(): { items: NavItem[]; contexts: WorkContext[]; a
   // all, so the switcher is not drawn). The menu is always the admin's own (no HOD department, no seat
   // context), so every page it manages is in that one place.
   const collegeAdmin = isCollegeAdminRole(user?.realRole);
-  const active = user ? (collegeAdmin ? "ME" as WorkContextKey : resolveWorkContext(user.role, roles, chosen, pathname, hodDepartments)) : null;
+  // A College Admin always holds every department's HOD seat and the office roles (lib/roles/collegeAdminPowers.ts):
+  // the "Working as" switcher offers "College Admin" (its own menu) plus each of them.
+  const takenOver = collegeAdmin && user ? roles.filter((r) => r !== user.role && r !== "COLLEGE_OFFICE" && r !== "PRINCIPAL") : [];
+  const switchable = !collegeAdmin || takenOver.length > 0;
+  const active = user ? (!switchable ? "ME" as WorkContextKey : resolveWorkContext(user.role, collegeAdmin ? takenOver : roles, chosen, pathname, hodDepartments)) : null;
 
   useEffect(() => {
     if (uid) syncActiveHodCookie(uid, active);
   }, [uid, active]);
 
   if (!user) return { items: [], contexts: [], active: null };
-  if (collegeAdmin) return { items: getCollegeAdminNavItems(), contexts: [], active };
+  if (collegeAdmin && !switchable) return { items: getCollegeAdminNavItems(), contexts: [], active };
+  if (collegeAdmin) {
+    return {
+      items: active === "ME" ? getCollegeAdminNavItems() : getNavItemsForContext(user.role, takenOver, active ?? "ME"),
+      contexts: getWorkContexts(user.role, takenOver, hodDepartments).map((c) => (c.key === "ME" ? { ...c, label: "College Admin" } : c)),
+      active,
+    };
+  }
   return {
     items: getNavItemsForContext(user.role, roles, active ?? "ME"),
     contexts: getWorkContexts(user.role, roles, hodDepartments),

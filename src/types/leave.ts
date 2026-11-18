@@ -440,6 +440,8 @@ export interface AdjustmentRequest {
   kind: AdjustmentKind;
   assigneeUid: string;
   assigneeName: string;
+  /** The College Admin answered this on the assignee's behalf (a stalled leave) - their login uid. */
+  respondedOnBehalfBy?: string;
   // SUBSTITUTE only - the FacultyMember doc id this entry's assigneeUid
   // resolved from, so a decline can be traced back to which
   // PeriodSubstitution entries (keyed by substituteFacultyId, not uid) need

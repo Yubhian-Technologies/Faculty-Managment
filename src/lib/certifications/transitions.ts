@@ -4,7 +4,7 @@ import type {
 } from "@/types";
 import { getCertificateTypeDef } from "./certificateTypes";
 import { resolveRecipientUids, type RecipientContext } from "./configStore";
-import { allBranchesAccepted, canDecide } from "./decisionRules";
+import { allBranchesAccepted, canAct } from "./decisionRules";
 import { CertificationError } from "./types";
 import type { ActingUser } from "./types";
 
@@ -99,7 +99,7 @@ export async function decideSequentialStep(
     }
 
     const resolvedUids = await resolveStepPendingUids(db, collegeId, step, recipientContext(req));
-    if (!canDecide(actor.uid, req.requesterUid, resolvedUids)) throw new CertificationError("FORBIDDEN", "You can't decide this step", 403);
+    if (!canAct(actor, req.requesterUid, resolvedUids)) throw new CertificationError("FORBIDDEN", "You can't decide this step", 403);
     if (action === "REJECT" && !remarks) throw new CertificationError("REMARKS_REQUIRED", "Remarks are required to reject", 400);
 
     const decidedStep: StepRuntimeState = {
@@ -162,7 +162,7 @@ export async function decideParallelBranch(
     if (branchState.status !== "PENDING") throw new CertificateStateConflictError("This clearance was already decided.");
 
     const resolvedUids = await resolveRecipientUids(db, collegeId, branchDef.recipient, recipientContext(req));
-    if (!canDecide(actor.uid, req.requesterUid, resolvedUids)) throw new CertificationError("FORBIDDEN", "You can't decide this clearance", 403);
+    if (!canAct(actor, req.requesterUid, resolvedUids)) throw new CertificationError("FORBIDDEN", "You can't decide this clearance", 403);
     if (action === "REJECT" && !remarks) throw new CertificationError("REMARKS_REQUIRED", "Remarks are required to reject", 400);
     // A dues check is cleared (No dues / Not applicable) or marked Dues pending - never rejected.
     const check = branchDef.check ?? "APPROVAL";
@@ -230,7 +230,7 @@ export async function issueCertificate(
     if (!snap.exists) throw new CertificationError("NOT_FOUND", "Request not found", 404);
     const req = { id: snap.id, ...snap.data() } as CertificateRequest;
     if (req.status !== "PENDING_ISSUANCE") throw new CertificateStateConflictError("This request isn't ready for issuance.");
-    if (!canDecide(actor.uid, req.requesterUid, req.pendingRecipientUids)) throw new CertificationError("FORBIDDEN", "You can't issue this certificate", 403);
+    if (!canAct(actor, req.requesterUid, req.pendingRecipientUids)) throw new CertificationError("FORBIDDEN", "You can't issue this certificate", 403);
 
     const historyEntry: CertificateHistoryEntry = { action: "ISSUED", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now };
     const history = [...req.history, historyEntry];
@@ -262,7 +262,7 @@ export async function rejectAtIssuance(db: Firestore, collegeId: string, id: str
     if (!snap.exists) throw new CertificationError("NOT_FOUND", "Request not found", 404);
     const req = { id: snap.id, ...snap.data() } as CertificateRequest;
     if (req.status !== "PENDING_ISSUANCE") throw new CertificateStateConflictError("This request isn't awaiting issuance.");
-    if (!canDecide(actor.uid, req.requesterUid, req.pendingRecipientUids)) throw new CertificationError("FORBIDDEN", "You can't decide this", 403);
+    if (!canAct(actor, req.requesterUid, req.pendingRecipientUids)) throw new CertificationError("FORBIDDEN", "You can't decide this", 403);
     if (!remarks) throw new CertificationError("REMARKS_REQUIRED", "Remarks are required to reject", 400);
 
     const historyEntry: CertificateHistoryEntry = { action: "REJECTED_AT_ISSUANCE", byUid: actor.uid, byName: actor.name, byRole: actor.role, at: now, remarks };
@@ -365,14 +365,14 @@ export async function returnToStudent(
     if (step.type === "SEQUENTIAL") {
       if (current.type !== "SEQUENTIAL" || current.status !== "PENDING") throw new CertificateStateConflictError();
       const uids = await resolveStepPendingUids(db, collegeId, step, recipientContext(req));
-      if (!canDecide(actor.uid, req.requesterUid, uids)) throw new CertificationError("FORBIDDEN", "You can't decide this step", 403);
+      if (!canAct(actor, req.requesterUid, uids)) throw new CertificationError("FORBIDDEN", "You can't decide this step", 403);
     } else {
       const branch = step.branches.find((b) => b.key === branchKey);
       const state = current.type === "PARALLEL" ? current.branches.find((b) => b.branchKey === branchKey) : undefined;
       if (!branch || !state) throw new CertificationError("NOT_FOUND", "No such approval on this request", 404);
       if (state.status !== "PENDING") throw new CertificateStateConflictError("This approval was already decided.");
       const uids = await resolveRecipientUids(db, collegeId, branch.recipient, recipientContext(req));
-      if (!canDecide(actor.uid, req.requesterUid, uids)) throw new CertificationError("FORBIDDEN", "You can't decide this approval", 403);
+      if (!canAct(actor, req.requesterUid, uids)) throw new CertificationError("FORBIDDEN", "You can't decide this approval", 403);
       label = branch.label;
     }
 
@@ -457,7 +457,7 @@ export async function markDuesPending(
     if ((branchDef.check ?? "APPROVAL") !== "DUES") throw new CertificationError("INVALID", "This line is not a dues check", 400);
     if (state.status !== "PENDING") throw new CertificateStateConflictError("This clearance was already decided.");
     const uids = await resolveRecipientUids(db, collegeId, branchDef.recipient, recipientContext(req));
-    if (!canDecide(actor.uid, req.requesterUid, uids)) throw new CertificationError("FORBIDDEN", "You can't decide this clearance", 403);
+    if (!canAct(actor, req.requesterUid, uids)) throw new CertificationError("FORBIDDEN", "You can't decide this clearance", 403);
 
     const duesPending = { amount: Math.round(amount * 100) / 100, reason: reason.trim().slice(0, 200), byName: actor.name, at: now };
     const branches = current.branches.map((b) => (b.branchKey === branchKey ? { ...b, duesPending } : b));

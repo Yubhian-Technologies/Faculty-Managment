@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -34,6 +35,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       response?: "ACCEPT" | "DECLINE" | "PARTIAL";
       declinedPeriods?: { date: string; timetableSlotId: string }[];
       declineReason?: string;
+      /** College Admin only: answer the named person's pending request on their behalf. */
+      assigneeUid?: string;
     };
     if (body.response !== "ACCEPT" && body.response !== "DECLINE" && body.response !== "PARTIAL") {
       return NextResponse.json({ error: "response must be ACCEPT, DECLINE or PARTIAL" }, { status: 400 });
@@ -54,7 +57,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "This request is no longer awaiting acceptance" }, { status: 400 });
     }
     const list = req.adjustmentRequests ?? [];
-    const idx = list.findIndex((a) => a.assigneeUid === session.uid && a.status === "PENDING");
+    // The College Admin may answer for the named person (a stalled leave): recorded as on behalf, and they are told.
+    const onBehalf = session.realRole === "COLLEGE_ADMIN" && typeof body.assigneeUid === "string" && body.assigneeUid !== session.uid;
+    if (onBehalf && req.uid === session.uid) return NextResponse.json({ error: "You can't answer for your own leave." }, { status: 400 });
+    const answeringFor = onBehalf ? (body.assigneeUid as string) : session.uid;
+    const idx = list.findIndex((a) => a.assigneeUid === answeringFor && a.status === "PENDING");
     if (idx === -1) {
       return NextResponse.json({ error: "You have no pending adjustment request on this leave" }, { status: 404 });
     }
@@ -80,6 +87,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
       updated[idx] = {
         ...entry, periods, status: deriveSubstituteStatus(periods), respondedAt: nowTs,
+        ...(onBehalf ? { respondedOnBehalfBy: session.uid } : {}),
         ...(declinedCount > 0 && body.declineReason?.trim() ? { declineReason: body.declineReason.trim() } : {}),
       };
     } else {
@@ -88,6 +96,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         ...entry,
         status: body.response === "ACCEPT" ? "ACCEPTED" : "DECLINED",
         respondedAt: nowTs,
+        ...(onBehalf ? { respondedOnBehalfBy: session.uid } : {}),
         ...(body.response === "DECLINE" && body.declineReason?.trim() ? { declineReason: body.declineReason.trim() } : {}),
       };
     }
@@ -177,6 +186,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       );
     }
 
+    if (onBehalf) {
+      const adminName = ((await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get()).data() as { name?: string } | undefined)?.name ?? "College Admin";
+      const what = body.response === "ACCEPT" ? "accepted" : body.response === "DECLINE" ? "declined" : "answered (some periods declined)";
+      await writeAuditLogSafe(db, session.collegeId, {
+        action: "LEAVE_ADJUSTMENT_ANSWERED_ON_BEHALF", performedBy: session.uid, performedByName: adminName, targetId: id,
+        details: { assignee: entry.assigneeName, kind: entry.kind, response: body.response, applicant: req.employeeName },
+      });
+      await notify(db, session.collegeId, answeringFor, "LEAVE_ADJUSTMENT_ON_BEHALF", "Leave cover answered for you",
+        `${adminName} (College Admin) ${what} the ${entry.kind === "SUBSTITUTE" ? "class cover" : "handover"} asked of you for ${req.employeeName}'s leave.`, "/leave/adjustments");
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     const badBody = badBodyResponse(err);

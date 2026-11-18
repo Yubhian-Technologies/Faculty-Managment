@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 export default function PrincipalTimetableEditPage() {
   const { courseId, year, sectionId } = useParams<{ courseId: string; year: string; sectionId: string }>();
   const { user } = useAuth();
-  if (user && user.role !== "PRINCIPAL") {
+  if (user && user.role !== "PRINCIPAL" && user.realRole !== "COLLEGE_ADMIN") {
     return <EmptyState title="Only the Principal or College Admin can edit timetables here." />;
   }
   return <TimetableGridEditor courseId={courseId} year={year} sectionId={sectionId} backHref="/principal/timetable" asAdmin />;

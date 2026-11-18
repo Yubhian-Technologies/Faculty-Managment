@@ -10,6 +10,14 @@ export function canDecide(actorUid: string, requesterUid: string, resolvedRecipi
   return actorUid !== requesterUid && resolvedRecipientUids.includes(actorUid);
 }
 
+/**
+ * canDecide, plus the College Admin acting on the approver's behalf (ActingUser.onBehalfAll) - any pending step,
+ * even one with nobody to resolve to (a student with no mentor) - never on their own request.
+ */
+export function canAct(actor: { uid: string; onBehalfAll?: boolean }, requesterUid: string, resolvedRecipientUids: string[]): boolean {
+  return canDecide(actor.uid, requesterUid, resolvedRecipientUids) || (!!actor.onBehalfAll && actor.uid !== requesterUid);
+}
+
 export function allBranchesAccepted(branches: CertificateClearance[]): boolean {
   return branches.length > 0 && branches.every((b) => b.status === "ACCEPTED");
 }

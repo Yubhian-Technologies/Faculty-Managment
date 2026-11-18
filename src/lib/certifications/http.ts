@@ -12,7 +12,9 @@ import { CertificateStateConflictError } from "./transitions";
 export async function actingUser(db: Firestore, session: SessionPayload & { collegeId: string }): Promise<ActingUser> {
   const snap = await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get();
   const name = (snap.data() as { name?: string } | undefined)?.name || session.email || session.uid;
-  return { uid: session.uid, name, collegeId: session.collegeId, role: session.role };
+  // A College Admin acts on any pending step on the approver's behalf - recorded with "(College Admin)".
+  const admin = session.realRole === "COLLEGE_ADMIN";
+  return { uid: session.uid, name: admin ? `${name} (College Admin)` : name, collegeId: session.collegeId, role: session.role, ...(admin ? { onBehalfAll: true } : {}) };
 }
 
 export async function authenticate(...roles: string[]) {
