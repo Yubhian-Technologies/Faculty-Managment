@@ -397,9 +397,10 @@ export function InternalMarksEntry({ onBehalf = false }: { onBehalf?: boolean } 
           : "Select the details and assign marks to students. Once submitted, marks cannot be edited."}
       />
 
-      {isLoadingAssignments ? (
+      {/* On behalf: the department picker comes first, so its pickers always show (assignments load per department). */}
+      {!onBehalf && isLoadingAssignments ? (
         <div className="h-40 rounded-lg border bg-muted/30 animate-pulse" />
-      ) : assignments.length === 0 ? (
+      ) : !onBehalf && assignments.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             You have no teaching assignments yet. Ask your HOD to assign you to a section and subject
@@ -408,6 +409,9 @@ export function InternalMarksEntry({ onBehalf = false }: { onBehalf?: boolean } 
         </Card>
       ) : (
         <>
+          {onBehalf && branch && !isLoadingAssignments && assignments.length === 0 && (
+            <p className="text-sm text-muted-foreground">No sections with subjects in {branch} yet.</p>
+          )}
           <Card>
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:items-end">
