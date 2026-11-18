@@ -9,7 +9,7 @@ import { buildStudentResults, type StudentResultsView } from "@/lib/examResults/
 import { loadPublishedSittings } from "@/lib/examResults/studentSittings";
 import { buildInitialStep, CERTIFICATE_REQUESTS_COL, CertificateStateConflictError, recipientContext } from "./transitions";
 import { resolveRecipientUids } from "./configStore";
-import { canDecide } from "./decisionRules";
+import { canAct } from "./decisionRules";
 import { buildCertificateValues, displayDate } from "./documentValues";
 import { findCurrentSectionDoc } from "@/lib/students/findCurrentSectionDoc";
 import { resolveSectionCurrentSemester } from "@/lib/college/semester";
@@ -237,7 +237,7 @@ async function loadIssuable(db: Firestore, user: ActingUser, id: string): Promis
   const req = rowOf(snap);
   if (!req.certificateTypeId) throw new CertificationError("INVALID", "Issue this No Due request from the College Office's No Due page", 400);
   if (req.status !== "PENDING_ISSUANCE") throw new CertificateStateConflictError("This request isn't ready to issue.");
-  if (!canDecide(user.uid, req.requesterUid, req.pendingRecipientUids)) throw new CertificationError("FORBIDDEN", "You can't issue this certificate", 403);
+  if (!canAct(user, req.requesterUid, req.pendingRecipientUids)) throw new CertificationError("FORBIDDEN", "You can't issue this certificate", 403);
   return req;
 }
 
@@ -322,7 +322,7 @@ export async function issueConfigured(db: Firestore, user: ActingUser, id: strin
     const snap = await tx.get(reqRef);
     const current = rowOf(snap);
     if (current.status !== "PENDING_ISSUANCE" || current.reservedNumber !== number) throw new CertificateStateConflictError("This request was just changed - refresh and try again.");
-    if (!canDecide(user.uid, current.requesterUid, current.pendingRecipientUids)) throw new CertificationError("FORBIDDEN", "You can't issue this certificate", 403);
+    if (!canAct(user, current.requesterUid, current.pendingRecipientUids)) throw new CertificationError("FORBIDDEN", "You can't issue this certificate", 403);
 
     const issued: Omit<IssuedCertificate, "id"> = {
       requestId: req.id, certificateNumber: number, verificationCode: code, typeId: req.certificateTypeId!, typeName: req.certificateTypeLabel,

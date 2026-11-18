@@ -1,5 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
-import type { LeaveTypeCode, LeaveTypeFull, LeaveTypeRuleOverride, LeaveReasonOption } from "@/types/leave";
+import { LEAVE_RULE_FIELD_LABELS } from "@/types/leave";
+import type { GroupLeavePolicy, LeaveRuleField, LeaveTypeCode, LeaveTypeFull, LeaveTypeRuleOverride, LeaveReasonOption } from "@/types/leave";
+import { loadGroupLeavePolicy } from "./groupLeavePolicy";
 import type { FacultyNorms } from "@/types/core";
 import { LEAVE_TYPE_SEED } from "./seedData";
 import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
@@ -22,36 +24,41 @@ export function normalizeReasonOptions(raw: unknown): LeaveReasonOption[] {
   }).filter((r) => r.label.trim().length > 0);
 }
 
-// Merges the college's own Settings > Leave Policy overrides on top of the
-// built-in seed - a field left unset in the override keeps the seed's value,
-// so a college that never touches this setting behaves exactly as before.
-// Structural fields (isActive, eligibleCategories, unlimited, label, color,
-// sortOrder) are deliberately NOT overridable - see the "customize rules
-// only" scope decision - only rules.* fields ever change per college.
-export function resolveLeaveTypes(overrides: Overrides): LeaveTypeFull[] {
-  if (!overrides) return LEAVE_TYPE_SEED;
-  return LEAVE_TYPE_SEED.map((lt) => {
-    const o = overrides[lt.code];
-    if (!o) return lt;
-    const rules = { ...lt.rules, ...o };
-    if (rules.reasonOptions) rules.reasonOptions = normalizeReasonOptions(rules.reasonOptions);
-    return { ...lt, rules };
-  });
+/** The college-override keys a group lock covers ("reasons" = the reason dropdown + "Other"). */
+export function overrideKeysOf(field: LeaveRuleField): (keyof LeaveTypeRuleOverride)[] {
+  return field === "reasons" ? ["reasonOptions", "allowCustomReason"] : [field];
 }
 
-export function resolveLeaveType(overrides: Overrides, code: LeaveTypeCode): LeaveTypeFull | undefined {
-  const base = LEAVE_TYPE_SEED.find((lt) => lt.code === code);
-  if (!base) return undefined;
-  const o = overrides?.[code];
-  if (!o) return base;
-  const rules = { ...base.rules, ...o };
+/**
+ * A leave type's rules, in order: the built-in seed -> the Super Admin's group values (systemSettings/leavePolicy)
+ * -> the college's own Settings > Leave Policy override, except for fields the group LOCKED (the college's value is
+ * ignored there, so the group value - or the built-in default when the group gives none - stands).
+ * Structural fields (isActive, eligibleCategories, unlimited, label, color, sortOrder) never change.
+ */
+function mergeType(base: LeaveTypeFull, college: LeaveTypeRuleOverride | undefined, group: GroupLeavePolicy | null | undefined): LeaveTypeFull {
+  const g = group?.rules?.[base.code];
+  const lockedKeys = new Set((group?.locked?.[base.code] ?? []).flatMap(overrideKeysOf));
+  const c: LeaveTypeRuleOverride = { ...(college ?? {}) };
+  for (const k of lockedKeys) delete c[k];
+  if (!g && !college) return base;
+  const rules = { ...base.rules, ...(g ?? {}), ...c };
   if (rules.reasonOptions) rules.reasonOptions = normalizeReasonOptions(rules.reasonOptions);
   return { ...base, rules };
 }
 
+export function resolveLeaveTypes(overrides: Overrides, group?: GroupLeavePolicy | null): LeaveTypeFull[] {
+  if (!overrides && !group) return LEAVE_TYPE_SEED;
+  return LEAVE_TYPE_SEED.map((lt) => mergeType(lt, overrides?.[lt.code], group));
+}
+
+export function resolveLeaveType(overrides: Overrides, code: LeaveTypeCode, group?: GroupLeavePolicy | null): LeaveTypeFull | undefined {
+  const base = LEAVE_TYPE_SEED.find((lt) => lt.code === code);
+  return base ? mergeType(base, overrides?.[code], group) : undefined;
+}
+
 export async function loadResolvedLeaveTypes(db: Firestore, collegeId: string): Promise<LeaveTypeFull[]> {
-  const settings = await loadCollegeSettings(db, collegeId);
-  return resolveLeaveTypes(settings.leaveTypeRuleOverrides);
+  const [settings, group] = await Promise.all([loadCollegeSettings(db, collegeId), loadGroupLeavePolicy(db)]);
+  return resolveLeaveTypes(settings.leaveTypeRuleOverrides, group);
 }
 
 export function sanitizeLeaveTypeRuleOverride(input: unknown): { ok: true; rule: LeaveTypeRuleOverride } | { ok: false; error: string } {
@@ -191,4 +198,34 @@ export function sanitizeLeaveBlackoutWindows(
     windows.push({ id, fromDate: w.fromDate, toDate: w.toDate, reason: w.reason.trim(), ...(appliesToTypes ? { appliesToTypes } : {}) });
   }
   return { ok: true, windows };
+}
+
+/** A college override that changes a field the Super Admin locked, as a message - or null. */
+export function lockedOverrideConflict(overrides: Overrides, group: GroupLeavePolicy | null | undefined): string | null {
+  if (!overrides || !group) return null;
+  for (const [code, o] of Object.entries(overrides) as [LeaveTypeCode, LeaveTypeRuleOverride][]) {
+    for (const field of group.locked?.[code] ?? []) {
+      for (const key of overrideKeysOf(field)) {
+        if (o[key] === undefined) continue;
+        const groupValue = group.rules?.[code]?.[key];
+        if (JSON.stringify(o[key]) !== JSON.stringify(groupValue)) {
+          const label = LEAVE_TYPE_SEED.find((t) => t.code === code)?.label ?? code;
+          return `${label}: "${LEAVE_RULE_FIELD_LABELS[field]}" is set by the Super Admin for all colleges and can't be changed here.`;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** The college's overrides without the locked fields (they never apply). */
+export function withoutLockedFields(overrides: Overrides, group: GroupLeavePolicy | null | undefined): Overrides {
+  if (!overrides || !group) return overrides;
+  const out: NonNullable<Overrides> = {};
+  for (const [code, o] of Object.entries(overrides) as [LeaveTypeCode, LeaveTypeRuleOverride][]) {
+    const copy = { ...o };
+    for (const field of group.locked?.[code] ?? []) for (const key of overrideKeysOf(field)) delete copy[key];
+    out[code] = copy;
+  }
+  return out;
 }

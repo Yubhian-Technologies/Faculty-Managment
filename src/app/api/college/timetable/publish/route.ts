@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { stampTimetableAdminUpdate } from "@/lib/timetable/adminStamp";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -139,6 +140,7 @@ export async function POST(request: Request) {
       },
     });
 
+    await stampTimetableAdminUpdate(db, session.collegeId, sectionId, session);
     return NextResponse.json({
       ok: true,
       published: outcome.published,

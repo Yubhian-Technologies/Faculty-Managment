@@ -30,14 +30,15 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // this collection - see student-attendance/[id]/route.ts). HOD acts here
 // directly; DEPARTMENT_OFFICE reaches the same authorization because it's
 // normalized to role "HOD" in the session (see UserRole's own doc-comment in
-// src/types/core.ts) - no separate role branch needed. Principal/VP are
-// deliberately excluded: only the department's own HOD/office may post or correct.
+// src/types/core.ts) - no separate role branch needed. The College Admin / Principal (role PRINCIPAL) may also
+// post or correct, for every department; their saves are stamped `adminUpdated` ("Updated by <name> (Admin)").
+// The Vice Principal is not included.
 // Reuses this collection's existing two-step shape (POST loads/creates a
 // DRAFT + roster, PATCH at .../office-correction/[id] edits and submits) -
 // matching the faculty-facing student-attendance route this mirrors.
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL");
     const body = (await readJsonBody(request)) as {
       facultyId?: string;
       assignmentId?: string;

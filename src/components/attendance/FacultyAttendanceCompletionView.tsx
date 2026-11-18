@@ -45,6 +45,7 @@ interface PeriodRow {
   submittedAtDisplay: string | null;
   /** Marked on the phone with no internet and sent later - the phone's time at Submit (ISO). */
   markedOfflineAt?: string | null;
+  adminUpdated?: { byName: string; at: string | null } | null;
 }
 
 // Back-to-back periods of one class (same assignment, next period number) are one card.
@@ -337,6 +338,9 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
                           ? badge(first.status, STATUS_LABELS[first.status])
                           : group.map((p) => <span key={p.periodNumber}>{badge(p.status, `P${p.periodNumber}: ${STATUS_LABELS[p.status]}`)}</span>)}
                       </div>
+                      {group.find((p) => p.adminUpdated)?.adminUpdated && (
+                        <p className="text-xs text-violet-700">Updated by {group.find((p) => p.adminUpdated)!.adminUpdated!.byName || "Admin"} (Admin)</p>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
@@ -384,6 +388,11 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
                           <span className="ml-2 inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800"
                             title="Marked on the faculty's phone with no internet and sent when the connection came back. The time is the phone's own clock.">
                             Marked offline {new Date(p.markedOfflineAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}
+                          </span>
+                        )}
+                        {p.adminUpdated && (
+                          <span className="ml-2 inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-800">
+                            Updated by {p.adminUpdated.byName || "Admin"} (Admin){p.adminUpdated.at ? ` on ${new Date(p.adminUpdated.at).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" })}` : ""}
                           </span>
                         )}
                       </td>

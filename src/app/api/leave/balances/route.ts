@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { loadGroupLeavePolicy } from "@/lib/leave/groupLeavePolicy";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -49,7 +50,7 @@ export async function GET(request: Request) {
     // to run first. This is also where Earned Leave's carry-forward from last
     // year gets computed and persisted, the one time this year's doc is
     // first created - see initBalancesForYear.
-    const resolvedTypes = resolveLeaveTypes(settings.leaveTypeRuleOverrides);
+    const resolvedTypes = resolveLeaveTypes(settings.leaveTypeRuleOverrides, await loadGroupLeavePolicy(db));
     await initBalancesForYear(db, session.collegeId, targetUid, profile, settings.newJoiningYears, year, resolvedTypes);
 
     const balances = await loadBalances(db, session.collegeId, targetUid, year);

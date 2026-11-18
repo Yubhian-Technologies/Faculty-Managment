@@ -11,7 +11,7 @@ describe("College Admin menu", () => {
   it("starts at /college-admin and holds only the admin's own pages and the College Office's", () => {
     expect(hrefs[0]).toBe("/college-admin");
     // ...plus the shared certificate workspace, which has one URL for every role.
-    expect(hrefs.every((h) => h.startsWith("/college-admin") || h.startsWith("/college-office") || h === "/certificates")).toBe(true);
+    expect(hrefs.every((h) => h.startsWith("/college-admin") || h.startsWith("/college-office") || h === "/certificates" || h === "/leave/adjustments")).toBe(true);
     expect(hrefs.filter((h) => h === "/certificates")).toHaveLength(1);
     expect(hrefs.some((h) => h.startsWith("/principal"))).toBe(false);
   });

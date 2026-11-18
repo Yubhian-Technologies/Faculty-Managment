@@ -24,6 +24,8 @@ interface PeriodItem {
 }
 interface AdjustmentItem {
   requestId: string;
+  /** College Admin: the named person this pending request belongs to (answered on their behalf). */
+  onBehalfOf?: { uid: string; name: string };
   kind: AdjustmentKind;
   employeeName: string;
   department: string | null;
@@ -42,6 +44,9 @@ interface AdjustmentItem {
 // proxy.ts). A substitute covering several periods can decline just some of
 // them (check the ones they can't cover) and accept the rest in one submit -
 // no need to reject the whole bundle over a single clash.
+// One card per request + person (a College Admin sees several people's pending requests on one leave).
+const ik = (item: { requestId: string; onBehalfOf?: { uid: string } }) => `${item.requestId}|${item.onBehalfOf?.uid ?? ""}`;
+
 export default function LeaveAdjustmentsPage() {
   // Faculty (and HODs) also adjust / swap a class with a colleague here - no leave involved.
   const role = useAuthStore((s) => s.user?.role);
@@ -72,8 +77,8 @@ export default function LeaveAdjustmentsPage() {
   }
 
   async function submitSubstitute(item: AdjustmentItem) {
-    const declined = declinedKeys[item.requestId] ?? new Set<string>();
-    setBusyId(item.requestId);
+    const declined = declinedKeys[ik(item)] ?? new Set<string>();
+    setBusyId(ik(item));
     try {
       const res = await fetch(`/api/leave/applications/${item.requestId}/adjustment-response`, {
         method: "POST",
@@ -84,7 +89,8 @@ export default function LeaveAdjustmentsPage() {
             const [date, timetableSlotId] = key.split("|");
             return { date, timetableSlotId };
           }),
-          declineReason: reasonByRequest[item.requestId],
+          declineReason: reasonByRequest[ik(item)],
+          ...(item.onBehalfOf ? { assigneeUid: item.onBehalfOf.uid } : {}),
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -98,13 +104,13 @@ export default function LeaveAdjustmentsPage() {
     }
   }
 
-  async function respondHandover(requestId: string, response: "ACCEPT" | "DECLINE") {
-    setBusyId(requestId);
+  async function respondHandover(item: AdjustmentItem, response: "ACCEPT" | "DECLINE") {
+    setBusyId(ik(item));
     try {
-      const res = await fetch(`/api/leave/applications/${requestId}/adjustment-response`, {
+      const res = await fetch(`/api/leave/applications/${item.requestId}/adjustment-response`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ response, declineReason: reasonByRequest[requestId] }),
+        body: JSON.stringify({ response, declineReason: reasonByRequest[ik(item)], ...(item.onBehalfOf ? { assigneeUid: item.onBehalfOf.uid } : {}) }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Unable to respond");
@@ -134,7 +140,7 @@ export default function LeaveAdjustmentsPage() {
       ) : (
         <div className="space-y-3">
           {items.map((item) => (
-            <Card key={`${item.requestId}-${item.kind}`}>
+            <Card key={`${ik(item)}-${item.kind}`}>
               <CardContent className="p-4 space-y-3">
                 <div>
                   <p className="text-sm font-medium flex items-center gap-1.5">
@@ -142,6 +148,11 @@ export default function LeaveAdjustmentsPage() {
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
                       {item.kind === "SUBSTITUTE" ? "Substitute" : "Handover"}
                     </Badge>
+                    {item.onBehalfOf && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-violet-300 text-violet-800">
+                        Waiting on {item.onBehalfOf.name || "a colleague"} - answer on their behalf
+                      </Badge>
+                    )}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {formatDate(item.fromDate)} - {formatDate(item.toDate)} · {item.totalDays} day(s)
@@ -159,10 +170,10 @@ export default function LeaveAdjustmentsPage() {
                     <div className="space-y-1.5 rounded-lg border p-3">
                       {(item.periods ?? []).map((p) => {
                         const key = `${p.date}|${p.timetableSlotId}`;
-                        const isDeclined = declinedKeys[item.requestId]?.has(key) ?? false;
+                        const isDeclined = declinedKeys[ik(item)]?.has(key) ?? false;
                         return (
                           <label key={key} className="flex items-center gap-2 text-sm">
-                            <Checkbox checked={!isDeclined} onCheckedChange={() => toggleDeclined(item.requestId, key)} />
+                            <Checkbox checked={!isDeclined} onCheckedChange={() => toggleDeclined(ik(item), key)} />
                             <span>
                               {p.subjectName}{p.sectionName ? ` · ${p.sectionName}` : ""} · {formatDate(new Date(p.date))} P{p.periodNumber}
                             </span>
@@ -170,31 +181,31 @@ export default function LeaveAdjustmentsPage() {
                         );
                       })}
                     </div>
-                    {(declinedKeys[item.requestId]?.size ?? 0) > 0 && (
+                    {(declinedKeys[ik(item)]?.size ?? 0) > 0 && (
                       <Textarea
-                        value={reasonByRequest[item.requestId] ?? ""}
-                        onChange={(e) => setReasonByRequest((prev) => ({ ...prev, [item.requestId]: e.target.value }))}
+                        value={reasonByRequest[ik(item)] ?? ""}
+                        onChange={(e) => setReasonByRequest((prev) => ({ ...prev, [ik(item)]: e.target.value }))}
                         placeholder="Reason for the declined period(s) (optional)"
                         rows={2}
                       />
                     )}
                     <div className="flex justify-end">
-                      <Button size="sm" loading={busyId === item.requestId} onClick={() => void submitSubstitute(item)}>
-                        {(declinedKeys[item.requestId]?.size ?? 0) === 0 ? "Accept All" : "Submit Response"}
+                      <Button size="sm" loading={busyId === ik(item)} onClick={() => void submitSubstitute(item)}>
+                        {(declinedKeys[ik(item)]?.size ?? 0) === 0 ? "Accept All" : "Submit Response"}
                       </Button>
                     </div>
                   </>
                 ) : (
                   <>
                     <Textarea
-                      value={reasonByRequest[item.requestId] ?? ""}
-                      onChange={(e) => setReasonByRequest((prev) => ({ ...prev, [item.requestId]: e.target.value }))}
+                      value={reasonByRequest[ik(item)] ?? ""}
+                      onChange={(e) => setReasonByRequest((prev) => ({ ...prev, [ik(item)]: e.target.value }))}
                       placeholder="Reason if declining (optional)"
                       rows={2}
                     />
                     <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm" loading={busyId === item.requestId} onClick={() => void respondHandover(item.requestId, "DECLINE")}>Decline</Button>
-                      <Button size="sm" loading={busyId === item.requestId} onClick={() => void respondHandover(item.requestId, "ACCEPT")}>Accept</Button>
+                      <Button variant="outline" size="sm" loading={busyId === ik(item)} onClick={() => void respondHandover(item, "DECLINE")}>Decline</Button>
+                      <Button size="sm" loading={busyId === ik(item)} onClick={() => void respondHandover(item, "ACCEPT")}>Accept</Button>
                     </div>
                   </>
                 )}

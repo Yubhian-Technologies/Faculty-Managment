@@ -101,6 +101,8 @@ export interface StudentAttendanceSession {
   correctedByUid?: string;
   correctedByName?: string;
   correctionReason?: string; // required by the office-correction route - why the faculty didn't post it themselves
+  /** Last corrected by the College Admin / Principal (office correction, any department) - "Updated by <name> (Admin)". */
+  adminUpdated?: { byUid: string; byName: string; at: unknown };
   // Set only on a session created by the College Office's past-attendance import (student-attendance/
   // past-import): the whole day's P/A applied to this period. Lets one import be found again.
   importRunId?: string;

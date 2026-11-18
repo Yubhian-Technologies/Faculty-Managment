@@ -92,6 +92,33 @@ export interface LeaveTypeRules {
   maxLopDaysBeforeEscalation?: number; // beyond this many projected Loss-of-Pay days, likewise escalate past HOD
 }
 
+// The rules the Super Admin can set for every college (Super Admin > Settings > Leave Policy) - each one either a
+// group default (a college may change it) or LOCKED (the same for every college). See lib/leave/groupLeavePolicy.ts.
+// "reasons" covers reasonOptions + allowCustomReason together.
+export type LeaveRuleField =
+  | "entitlementByCategory" | "carryForward" | "halfDayAllowed" | "maxConsecutiveDays" | "minAdvanceNoticeDays"
+  | "maxRequestsPerMonth" | "escalateAfterDays" | "maxLopDaysBeforeEscalation" | "eligibleGenders" | "reasons";
+export const LEAVE_RULE_FIELDS: LeaveRuleField[] = [
+  "entitlementByCategory", "carryForward", "halfDayAllowed", "maxConsecutiveDays", "minAdvanceNoticeDays",
+  "maxRequestsPerMonth", "escalateAfterDays", "maxLopDaysBeforeEscalation", "eligibleGenders", "reasons",
+];
+export const LEAVE_RULE_FIELD_LABELS: Record<LeaveRuleField, string> = {
+  entitlementByCategory: "Days per year", carryForward: "Carry forward", halfDayAllowed: "Half day",
+  maxConsecutiveDays: "Max consecutive days", minAdvanceNoticeDays: "Min advance notice", maxRequestsPerMonth: "Max requests / month",
+  escalateAfterDays: "Escalate after (days)", maxLopDaysBeforeEscalation: "Escalate on Loss-of-Pay", eligibleGenders: "Eligible gender",
+  reasons: "Reason dropdown",
+};
+
+/** systemSettings/leavePolicy - the Super Admin's leave rules for every college. */
+export interface GroupLeavePolicy {
+  /** Group values per leave type (a field missing = the built-in default). */
+  rules: Partial<Record<LeaveTypeCode, LeaveTypeRuleOverride>>;
+  /** Fields of each type locked for every college (a college's own value is ignored and can't be saved). */
+  locked: Partial<Record<LeaveTypeCode, LeaveRuleField[]>>;
+  updatedAt?: unknown;
+  updatedByName?: string;
+}
+
 // A Principal-editable subset of LeaveTypeRules stored per college (see
 // FacultyNorms.leaveTypeRuleOverrides in types/core.ts). eligibleCategories is
 // the one LeaveTypeRules field never set here - see resolveLeaveTypes.ts.
@@ -413,6 +440,8 @@ export interface AdjustmentRequest {
   kind: AdjustmentKind;
   assigneeUid: string;
   assigneeName: string;
+  /** The College Admin answered this on the assignee's behalf (a stalled leave) - their login uid. */
+  respondedOnBehalfBy?: string;
   // SUBSTITUTE only - the FacultyMember doc id this entry's assigneeUid
   // resolved from, so a decline can be traced back to which
   // PeriodSubstitution entries (keyed by substituteFacultyId, not uid) need

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { stampTimetableAdminUpdate } from "@/lib/timetable/adminStamp";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -301,6 +302,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: pinned.error }, { status: 409 });
     }
 
+    await stampTimetableAdminUpdate(db, session.collegeId, assignment.sectionId, session);
     return NextResponse.json({ id: pinned.id }, { status: 201 });
   } catch (err) {
     const badBody = badBodyResponse(err);

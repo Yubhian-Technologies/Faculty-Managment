@@ -320,9 +320,12 @@ export async function listDepartmentRequests(db: Firestore, user: ActingUser): P
 }
 
 export async function listInbox(db: Firestore, user: ActingUser): Promise<(CertificateRequest & { myBranchKeys?: string[] })[]> {
-  const snap = await CERTIFICATE_REQUESTS_COL(db, user.collegeId)
-    .where("pendingRecipientUids", "array-contains", user.uid).where("status", "==", "IN_PROGRESS").get();
-  const requests = snap.docs.map(row).sort(byCreatedDesc);
+  // A College Admin sees every pending request (it may act on any approver's behalf - ActingUser.onBehalfAll).
+  const snap = user.onBehalfAll
+    ? await CERTIFICATE_REQUESTS_COL(db, user.collegeId).where("status", "==", "IN_PROGRESS").get()
+    : await CERTIFICATE_REQUESTS_COL(db, user.collegeId)
+      .where("pendingRecipientUids", "array-contains", user.uid).where("status", "==", "IN_PROGRESS").get();
+  const requests = snap.docs.map(row).filter((r) => r.requesterUid !== user.uid).sort(byCreatedDesc);
   // A parallel step: which of its departments are THIS person's to clear (a role's answer is the same for every
   // request, so it is worked out once; HOD / mentor / class in-charge depend on the student).
   const memo = new Map<string, Promise<string[]>>();
@@ -339,7 +342,7 @@ export async function listInbox(db: Firestore, user: ActingUser): Promise<(Certi
     const mine: string[] = [];
     for (const b of step.branches) {
       if (state.branches.find((x) => x.branchKey === b.key)?.status !== "PENDING") continue;
-      if ((await resolve(r, b)).includes(user.uid)) mine.push(b.key);
+      if (user.onBehalfAll || (await resolve(r, b)).includes(user.uid)) mine.push(b.key);
     }
     return { ...r, myBranchKeys: mine };
   }));

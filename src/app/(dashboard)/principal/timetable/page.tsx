@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { toast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
@@ -31,6 +32,9 @@ import { yearSemesterLabelIn } from "@/lib/academic/format";
 // per section, for the filtered view and downloads below.
 interface BulkSectionEntry {
   sectionId: string;
+  courseId?: string;
+  /** Last changed by the College Admin / Principal. */
+  timetableAdminUpdate?: { byName: string; at: string | null };
   sectionName: string;
   departmentName: string;
   courseName: string;
@@ -159,6 +163,9 @@ export default function PrincipalTimetablePage() {
   const filtersChanged = appliedKey !== null && appliedKey !== draftKey;
   // The sections the list and the downloads cover: exactly what the last Load read.
   const shownSections = bulkSections;
+  // The College Admin / Principal may edit any section's timetable (Edit Timetable); not the VP, Exam Cell or Academics.
+  const canEditTimetables = user?.role === "PRINCIPAL" || user?.realRole === "COLLEGE_ADMIN" || user?.realRole === "PRINCIPAL";
+  const courseIdOfSection = useMemo(() => new Map(allSections.map((x) => [x.id, x.courseId])), [allSections]);
 
   async function handleLoadTimetables() {
     const ids = (fSection ? filterSections.filter((x) => x.id === fSection) : filterSections).map((x) => x.id);
@@ -398,9 +405,23 @@ export default function PrincipalTimetablePage() {
                   const inYear = (entry.timing.semesters ?? []).map((x) => x.semester);
                   return (
                     <div key={entry.sectionId} className="space-y-2">
-                      <h4 className="text-sm font-semibold">
-                        {entry.courseName} · {entry.departmentName} · {ordinalYear(entry.year)} · Section {entry.sectionName}
-                      </h4>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-sm font-semibold">
+                          {entry.courseName} · {entry.departmentName} · {ordinalYear(entry.year)} · Section {entry.sectionName}
+                        </h4>
+                        {entry.timetableAdminUpdate && (
+                          <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-800">
+                            Updated by {entry.timetableAdminUpdate.byName || "Admin"} (Admin)
+                            {entry.timetableAdminUpdate.at ? ` on ${new Date(entry.timetableAdminUpdate.at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}` : ""}
+                          </span>
+                        )}
+                        {/* The College Admin / Principal edits any section's timetable (not the VP, Exam Cell or Academics, who share this page). */}
+                        {canEditTimetables && (entry.courseId || courseIdOfSection.get(entry.sectionId)) && (
+                          <Button asChild size="sm" variant="outline" className="ml-auto h-7">
+                            <Link href={`/principal/timetable/${entry.courseId || courseIdOfSection.get(entry.sectionId)}/${entry.year}/${entry.sectionId}`}>Edit Timetable</Link>
+                          </Button>
+                        )}
+                      </div>
                       <InstitutionalTimetableTable
                         section={{ name: entry.sectionName, department: entry.departmentName, year: entry.year, courseName: entry.courseName, classroomNumber: entry.classroomNumber, facultyInchargeName: entry.facultyInchargeName, facultyInchargeUid: entry.facultyInchargeUid } as unknown as Section}
                         timing={entry.timing}

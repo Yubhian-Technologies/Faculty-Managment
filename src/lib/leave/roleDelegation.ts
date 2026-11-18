@@ -1,3 +1,4 @@
+import { collegeAdminPowers } from "@/lib/roles/collegeAdminPowers";
 import type { Firestore } from "firebase-admin/firestore";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { isSeatRole, normalizeStoredRole } from "@/lib/roles/seatRoles";
@@ -33,6 +34,10 @@ export async function activeDelegatedRoles(
     for (const role of r.roleHandoverRoles ?? []) roles.add(role);
     for (const dept of r.roleHandoverDepartments ?? []) departments.add(dept);
   }
+  // A College Admin login always holds every department's HOD seat and the office roles (lib/roles/collegeAdminPowers.ts).
+  const admin = await collegeAdminPowers(db, collegeId, uid);
+  for (const r of admin.roles) roles.add(r);
+  for (const d of admin.departments) departments.add(d);
   return { roles: Array.from(roles), departments: Array.from(departments) };
 }
 

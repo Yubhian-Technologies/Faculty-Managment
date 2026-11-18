@@ -105,6 +105,8 @@ export async function GET(request: Request) {
 
     const result: {
       sectionId: string;
+      courseId?: string;
+      timetableAdminUpdate?: { byName: string; at: string | null };
       sectionName: string;
       departmentName: string;
       courseName: string;
@@ -140,6 +142,13 @@ export async function GET(request: Request) {
         classroomNumber: section.classroomNumber || undefined,
         facultyInchargeName: section.facultyInchargeName || undefined,
         facultyInchargeUid: section.facultyInchargeUid || undefined,
+        courseId: section.courseId,
+        ...(section.timetableAdminUpdate ? {
+          timetableAdminUpdate: {
+            byName: section.timetableAdminUpdate.byName,
+            at: (section.timetableAdminUpdate.at as { toDate?: () => Date })?.toDate?.()?.toISOString() ?? null,
+          },
+        } : {}),
         currentSemester,
         timing,
         slots,

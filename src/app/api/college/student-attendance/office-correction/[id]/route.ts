@@ -38,7 +38,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const session = await requireCollegeMember("HOD");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL");
     const body = (await readJsonBody(request)) as {
       entries?: { studentId: string; status: StudentAttendanceMark | null }[];
       classNotes?: string;
@@ -164,6 +164,8 @@ export async function PATCH(
         update.correctedByUid = session.uid;
         update.correctedByName = markerName;
         update.correctionReason = reason;
+        // College Admin / Principal correcting (any department): shown as "Updated by <name> (Admin)".
+        if (session.role === "PRINCIPAL") update.adminUpdated = { byUid: session.uid, byName: markerName, at: now };
 
         const before = new Map(fresh.entries.map((e) => [e.studentId, e.status]));
         const changes = entries

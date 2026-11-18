@@ -98,6 +98,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Staff Profile Completion Statistics", href: "/super-admin/faculty-profile-completion", iconName: "ClipboardCheck", roles: ["SUPER_ADMIN"], section: "Reports" },
   { label: "Audit Logs", href: "/super-admin/audit-logs", iconName: "ScrollText", roles: ["SUPER_ADMIN"], section: "System" },
   { label: "Settings", href: "/super-admin/settings", iconName: "Settings2", roles: ["SUPER_ADMIN"] },
+  { label: "Leave Policy", href: "/super-admin/leave-policy", iconName: "CalendarClock", roles: ["SUPER_ADMIN"] },
 
   // Administration
   { label: "Dashboard", href: "/administration", iconName: "LayoutDashboard", roles: ["ADMINISTRATION"] },
@@ -929,7 +930,9 @@ export function getCollegeAdminNavItems(): NavItem[] {
       roles: ["PRINCIPAL" as UserRole],
       section: idx === 0 ? "Research & Development" : undefined,
     }));
-  return [...principal, ...office, ...rnd];
+  // Leave cover waiting on a named substitute: the College Admin answers it on their behalf (a stalled leave).
+  const cover: NavItem[] = [{ label: "Leave Cover Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["PRINCIPAL" as UserRole] }];
+  return [...principal, ...office, ...cover, ...rnd];
 }
 
 // A College Admin's menu: the same items under its own /college-admin URLs (the Principal's and the R&D
