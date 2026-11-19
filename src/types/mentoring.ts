@@ -43,6 +43,8 @@ export interface MentorOption {
   isSelf?: boolean;
   /** Only when a section was asked for: has a teaching assignment on that class. */
   teaches?: boolean;
+  /** Of another department, offered because they teach these students (may mentor only those sections). */
+  otherDepartment?: boolean;
 }
 
 // ─── Mentoring Record (the college's "Student Mentoring Record" booklet) ──────
