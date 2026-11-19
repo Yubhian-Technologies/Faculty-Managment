@@ -197,32 +197,51 @@ const CELL: Record<ClassCell["status"], { cls: string; mark: string; label: stri
 };
 
 function ClassGrid({ data }: { data: TodayData["classes"] }) {
-  const multiDept = new Set(data.sections.map((s) => s.department)).size > 1;
+  // With many sections the grid scrolls inside the card (period row and section names stay in view), and the
+  // HOD can narrow it to the sections with a period not posted yet.
+  const [onlyOverdue, setOnlyOverdue] = useState(false);
   if (data.total === 0) return <p className="py-6 text-center text-sm text-muted-foreground">No classes on the timetable today.</p>;
+  const overdueIds = new Set(data.sections.filter((s) => data.periods.some((p) => data.cells[`${s.id}|${p}`]?.status === "OVERDUE")).map((s) => s.id));
+  const rows = onlyOverdue ? data.sections.filter((s) => overdueIds.has(s.id)) : data.sections;
+  const many = data.sections.length > 5;
   return (
     <>
-      <div className="overflow-x-auto">
+      {many && (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>{rows.length} of {data.sections.length} sections</span>
+          <div className="inline-flex rounded-lg border bg-muted/40 p-0.5" role="tablist" aria-label="Which sections">
+            {([[false, "All Sections"], [true, `Only Not Posted (${overdueIds.size})`]] as const).map(([v, label]) => (
+              <button key={label} type="button" role="tab" aria-selected={onlyOverdue === v} onClick={() => setOnlyOverdue(v)}
+                className={cn("rounded-md px-2.5 py-1 font-medium", onlyOverdue === v ? "bg-background text-foreground shadow-sm" : "hover:text-foreground")}>{label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Every section has posted all its periods so far.</p>
+      ) : (
+      <div className={cn("overflow-auto", many && "max-h-[340px] rounded-lg")}>
         <table className="w-full border-separate border-spacing-1 text-xs">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-card">
             <tr>
-              <th />
-              {data.periods.map((p) => <th key={p} className="font-medium text-muted-foreground">P{p}</th>)}
+              <th className="sticky left-0 z-10 bg-card" />
+              {data.periods.map((p) => <th key={p} className="py-1 font-medium text-muted-foreground">P{p}</th>)}
             </tr>
           </thead>
           <tbody>
-            {data.sections.map((s) => (
+            {rows.map((s) => (
               <tr key={s.id}>
-                <th scope="row" className="whitespace-nowrap pr-2 text-left font-semibold text-foreground/80">
-                  {s.label}{multiDept && <span className="ml-1 font-normal text-muted-foreground">{s.department.split(/\s+/).map((w) => w[0]).join("").slice(0, 4)}</span>}
+                <th scope="row" className="sticky left-0 z-[1] whitespace-nowrap bg-card pr-2 text-left font-semibold text-foreground/80">
+                  {s.label}
                 </th>
                 {data.periods.map((p) => {
                   const c = data.cells[`${s.id}|${p}`];
-                  if (!c) return <td key={p} className="h-8 min-w-10 text-center text-muted-foreground/60">–</td>;
+                  if (!c) return <td key={p} className="h-7 min-w-10 text-center text-muted-foreground/60">–</td>;
                   const look = CELL[c.status];
                   const covered = c.covered && c.status !== "OVERDUE";
                   return (
                     <td key={p} title={`${s.label} · P${p}${c.start ? ` (${hhmm12(c.start)})` : ""} · ${c.subject} · ${c.faculty} · ${covered ? "Substitute / adjusted · " : ""}${look.label}`}
-                      className={cn("h-8 min-w-10 rounded-md text-center font-semibold", covered ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : look.cls)}>
+                      className={cn("h-7 min-w-10 rounded-md text-center font-semibold", covered ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : look.cls)}>
                       {covered ? "⇄" : look.mark}
                     </td>
                   );
@@ -232,6 +251,7 @@ function ClassGrid({ data }: { data: TodayData["classes"] }) {
           </tbody>
         </table>
       </div>
+      )}
       <Legend items={[
         { color: GOOD, label: "Posted ✓" }, { color: "hsl(var(--primary))", label: "Running now ●" },
         { color: CRIT, label: "Not posted !" }, { color: WARN, label: "Substitute / adjusted ⇄" }, { color: "hsl(var(--muted-foreground) / 0.3)", label: "Later today" },
