@@ -21,6 +21,7 @@ import {
 } from "@/lib/studentAttendance/heldDenominator";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { reportCountsAllSubjects, withSessionSubjects } from "@/lib/studentAttendance/reportSubjects";
+import { buildDayRegister, daysInRange, MAX_REGISTER_DAYS, studentPeriodMarks } from "@/lib/studentAttendance/dayRegister";
 import type { Section, StudentAttendanceMark, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -427,6 +428,38 @@ export async function GET(request: Request) {
         ? allSessions
         : allSessions.filter((r) => r.date >= fromParam! && r.date <= toParam!);
 
+      // Date-wise register (`detail=days`): per student, per date, periods held / attended (dayRegister.ts). A whole
+      // section is limited to MAX_REGISTER_DAYS; one student (`studentId`, the report's student panel) also gets every
+      // period's mark and may cover the report's whole range.
+      if (searchParams.get("detail") === "days") {
+        const oneStudent = searchParams.get("studentId")?.trim() || null;
+        if (!oneStudent && (tillNow || daysInRange(fromParam!, toParam!) > MAX_REGISTER_DAYS)) {
+          return NextResponse.json({ error: `Pick a date range of up to ${MAX_REGISTER_DAYS} days for the date-wise register.` }, { status: 400 });
+        }
+        let regRoster = await fetchSectionStudents(collegeRef, {
+          department: section.department, sectionName: section.name, year: section.year, courseId: section.courseId,
+        });
+        regRoster = filterByHosteller(regRoster as unknown as { hosteller?: boolean }[]) as typeof regRoster;
+        if (oneStudent) regRoster = regRoster.filter((stu) => stu.id === oneStudent);
+        if (oneStudent && regRoster.length === 0) {
+          return NextResponse.json({ error: "Student not found in this section. It may have been moved." }, { status: 404 });
+        }
+        const indexed = indexSessions(rangeSessions);
+        const dates = Array.from(new Set(rangeSessions.map((r) => r.date))).sort();
+        const students = regRoster
+          .map((stu) => {
+            const joinedOn = effectiveJoiningDate(stu);
+            return {
+              studentId: stu.id, rollNumber: stu.rollNumber, name: stu.name, labBatch: stu.labBatch ?? "",
+              days: buildDayRegister(indexed, stu.id, joinedOn),
+              ...(oneStudent ? { periods: studentPeriodMarks(indexed, stu.id, joinedOn) } : {}),
+            };
+          })
+          .sort((a, b) =>
+            compareStudentsForList({ id: a.studentId, rollNumber: a.rollNumber, name: a.name }, { id: b.studentId, rollNumber: b.rollNumber, name: b.name }));
+        return NextResponse.json({ dates, students });
+      }
+
       const currentSubjects = await currentSectionSubjects(collegeRef, sectionId, requestedSemester);
       // ATTENDANCE_REPORT_ALL_SUBJECTS=1: also count subjects that have sessions but no current assignment (as the student's own view does).
       const subjects = reportCountsAllSubjects() ? withSessionSubjects(currentSubjects, rangeSessions) : currentSubjects;
@@ -530,8 +563,14 @@ export async function GET(request: Request) {
         overallPercentage: calcPercent(totalPresentMarks, totalPossibleMarks) ?? 0,
       };
 
+      // Letterhead for the report's exports (name, address, phone, logo) - one document read.
+      const collegeDoc = (await collegeRef.get()).data() as { name?: string; logoUrl?: string; address?: string; contactPhone?: string } | undefined;
       return NextResponse.json({
         subjects, students, summary,
+        college: {
+          name: collegeDoc?.name ?? "", address: collegeDoc?.address ?? "", phone: collegeDoc?.contactPhone ?? "",
+          logoUrl: collegeDoc?.logoUrl?.trim() || "/vishnulogo.png",
+        },
         meta: {
           academicYear: rangeIsUnbounded ? (academicWindow?.label ?? "all") : undefined,
           denominator,
