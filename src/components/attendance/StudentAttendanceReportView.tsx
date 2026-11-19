@@ -1,6 +1,6 @@
 "use client";
 import { fetchDepartments } from "@/lib/client/departmentsFetch";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,15 @@ import { buildDepartmentPickOptions, departmentPickValue, dropEmptyFeederGroups,
 import type { Course, Department, SectionListItem } from "@/types";
 import { semesterLabel, semestersInYear, yearOfSemester } from "@/lib/college/courseYears";
 import { useCourseSemesterPlan } from "@/hooks/useCourseSemesterPlan";
+import { useAuth } from "@/hooks/useAuth";
+import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
+import { ExportMenu, RegisterDialog, StudentDetailDialog, type ExportKind } from "@/components/attendance/StudentReportExtras";
+import type { DayCell, PeriodMark } from "@/lib/studentAttendance/dayRegister";
+import {
+  buildDetailedWorkbook, buildRegisterWorkbook, buildShortageWorkbook, buildSubjectWorkbook, classesNeeded, detailedFlatTable,
+  detailedPrintHtml, fileSafe, logoSrcOf, printHtml, registerPrintHtml, saveWorkbook, shortagePrintHtml, subjectLabel, subjectStats,
+  type ExportCollege, type ExportMeta, type ExportSection, type RegisterSection,
+} from "@/lib/studentAttendance/sectionReportExport";
 
 const ALL = "__all__";
 // Below this a student is in shortage; colours the percentages in the tables.
@@ -56,6 +65,24 @@ interface RangeChoice { mode: RangeMode; date: string; from: string; to: string;
 const TILL_NOW: RangeChoice = { mode: "tillNow", date: "", from: "", to: "", month: "" };
 const RANGE_LABELS: Record<RangeMode, string> = { daily: "Daily", period: "Period", monthly: "Monthly", tillNow: "Till now (overall)" };
 interface SectionReport { section: SectionListItem; subjects: SubjectCol[]; students: ReportStudent[] }
+type ReportView = "subjects" | "summary";
+const NO_COLLEGE: ExportCollege = { name: "", address: "", phone: "", logoUrl: "" };
+
+/** The query string for a report range (shared by the report, the register and the student panel). */
+function rangeParams(params: URLSearchParams, r: RangeChoice) {
+  if (r.mode === "daily") { params.set("from", r.date); params.set("to", r.date); }
+  else if (r.mode === "period") { params.set("from", r.from); params.set("to", r.to); }
+  else if (r.mode === "monthly") { params.set("from", `${r.month}-01`); params.set("to", `${r.month}-31`); }
+  else params.set("tillNow", "true");
+}
+
+/** The last day of a "YYYY-MM" month. */
+const monthEnd = (month: string) => {
+  const [y, m] = month.split("-").map(Number);
+  return `${month}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
+};
+/** Today in India as "YYYY-MM-DD". */
+const todayIst = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
 
 // Student attendance report: Course -> Department -> Semester -> Section,
 // every one mandatory ("All sections" is an explicit choice, never a blank),
@@ -109,6 +136,12 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
   const [minDays, setMinDays] = useState("");
   const [hostellers, setHostellers] = useState(false);
   const [dayScholars, setDayScholars] = useState(false);
+  const { user } = useAuth();
+  const [view, setView] = useState<ReportView>("subjects");
+  const [college, setCollege] = useState<ExportCollege>(NO_COLLEGE);
+  const [exporting, setExporting] = useState(false);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [detail, setDetail] = useState<{ sectionId: string; studentId: string } | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -301,14 +334,12 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
     const targets = sectionId === ALL ? sectionOptions : sectionOptions.filter((x) => x.id === sectionId);
     return Promise.all(targets.map(async (section): Promise<SectionReport> => {
       const params = new URLSearchParams({ sectionId: section.id, semester: semesterKey });
-      if (r.mode === "daily") { params.set("from", r.date); params.set("to", r.date); }
-      else if (r.mode === "period") { params.set("from", r.from); params.set("to", r.to); }
-      else if (r.mode === "monthly") { params.set("from", `${r.month}-01`); params.set("to", `${r.month}-31`); }
-      else params.set("tillNow", "true");
+      rangeParams(params, r);
       if (hosteller) params.set("hosteller", hosteller);
       const res = await fetch(`/api/college/section-attendance-report?${params.toString()}`);
-      const json = (await res.json()) as { subjects?: SubjectCol[]; students?: ReportStudent[]; error?: string };
+      const json = (await res.json()) as { subjects?: SubjectCol[]; students?: ReportStudent[]; college?: ExportCollege; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Unable to load report");
+      if (json.college) setCollege(json.college);
       return { section, subjects: json.subjects ?? [], students: json.students ?? [] };
     }));
   }
@@ -417,41 +448,128 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
     return parts;
   }, [applied, subjectOptions, rangeText]);
 
-  function handleExport() {
-    if (!reports) return;
-    const rows: Record<string, string>[] = [];
-    for (const r of shownReports) {
-      for (const s of groupByBatch(r.rows, applied.filters.batches).flatMap((g) => g.rows)) {
-        const row: Record<string, string> = { section: r.section.name, batch: s.labBatch || "Not assigned", rollNumber: s.rollNumber, name: s.name };
-        row.percent = formatPercent(s.shown.percentage);
-        rows.push(row);
-      }
-    }
-    if (!rows.length) { toast({ variant: "destructive", title: "No data to export" }); return; }
-    // The sheet says what it is: which class, which dates and which filters produced these numbers.
-    const columns = [
-      { key: "section", header: "Section" },
-      ...(applied.filters.batches ? [{ key: "batch", header: "Batch" }] : []),
-      { key: "rollNumber", header: "Registration No." },
-      { key: "name", header: "Name" },
-      { key: "percent", header: "Overall %" },
-    ];
-    const semesterText = semesterOptions.find((o) => o.key === semesterKey)?.label ?? semesterKey;
-    const csv = toCSV([
+  const semesterText = semesterOptions.find((o) => o.key === semesterKey)?.label ?? semesterKey;
+  const withBatch = !!applied.filters.batches;
+
+  // What every export is built from: exactly the rows and columns on screen.
+  const exportSections = useMemo<ExportSection[]>(
+    () => shownReports.map((r) => ({
+      name: r.section.name,
+      batch: r.section.batch,
+      subjects: r.columns,
+      rows: groupByBatch(r.rows, applied.filters.batches).flatMap((g) => g.rows),
+    })),
+    [shownReports, applied.filters.batches]
+  );
+
+  const exportMeta = useCallback((): ExportMeta => ({
+    college,
+    course,
+    department: coreDepartment ? `${department} (${coreDepartment})` : department,
+    semester: semesterText,
+    period: rangeText,
+    filters: appliedChips.filter((c) => c !== rangeText),
+    generatedBy: user?.name ?? "",
+    generatedAt: new Date(),
+    threshold: SHORTAGE_PERCENT,
+  }), [college, course, department, coreDepartment, semesterText, rangeText, appliedChips, user?.name]);
+
+  const baseName = () => fileSafe(`Attendance_${course}_${semesterText}_${exportSections.map((s) => s.name).join("-")}`);
+
+  function exportCsv() {
+    const blocks: (string | number)[][] = [
       ["Student Attendance Report"],
       ["Course", course],
       ["Department", department],
       ["Semester", semesterText],
-      ["Section", shownReports.map((r) => r.section.name).join(", ")],
+      ["Section", exportSections.map((r) => r.name).join(", ")],
       ["Period", rangeText],
       ["Filters applied", appliedChips.filter((c) => c !== rangeText).join("; ") || "None"],
       ["Generated", new Date().toLocaleString("en-IN")],
-      [],
-      columns.map((c) => c.header),
-      ...rows.map((r) => columns.map((c) => r[c.key] ?? "")),
-    ]);
-    downloadCSV(csv, `student-attendance-${Date.now()}.csv`);
+    ];
+    for (const sec of exportSections) {
+      const t = detailedFlatTable(sec, SHORTAGE_PERCENT, withBatch);
+      blocks.push([], t.headers, ...t.rows);
+    }
+    downloadCSV(toCSV(blocks.map((r) => r.map(String))), `${baseName()}.csv`);
   }
+
+  async function handleExport(kind: ExportKind) {
+    if (!reports) return;
+    if (kind === "register") { setRegisterOpen(true); return; }
+    if (exportSections.every((s) => s.rows.length === 0)) { toast({ variant: "destructive", title: "No students to export." }); return; }
+    const meta = exportMeta();
+    setExporting(true);
+    try {
+      if (kind === "csv") exportCsv();
+      else if (kind === "detailed-xlsx") await saveWorkbook((X) => buildDetailedWorkbook(X, meta, exportSections, withBatch), `${baseName()}.xlsx`);
+      else if (kind === "shortage-xlsx") await saveWorkbook((X) => buildShortageWorkbook(X, meta, exportSections), `${baseName()}_Shortage.xlsx`);
+      else if (kind === "subjects-xlsx") await saveWorkbook((X) => buildSubjectWorkbook(X, meta, exportSections), `${baseName()}_Subjects.xlsx`);
+      else {
+        const html = kind === "detailed-print"
+          ? detailedPrintHtml(meta, exportSections, withBatch, logoSrcOf(college))
+          : shortagePrintHtml(meta, exportSections, logoSrcOf(college));
+        if (!printHtml(html)) toast({ variant: "destructive", title: "Unable to open the print window. Allow pop-ups for this site and try again." });
+      }
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error ? `Unable to export: ${e.message}` : "Unable to export the report." });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // The register's default range: the report's own dates, else this month up to today.
+  const registerDefaults = useMemo(() => {
+    const r = applied.range;
+    if (r.mode === "daily") return { from: r.date, to: r.date };
+    if (r.mode === "period") return { from: r.from, to: r.to };
+    if (r.mode === "monthly") return { from: `${r.month}-01`, to: monthEnd(r.month) };
+    const today = todayIst();
+    return { from: `${today.slice(0, 7)}-01`, to: today };
+  }, [applied.range]);
+
+  async function runRegister(from: string, to: string, format: "xlsx" | "print") {
+    setExporting(true);
+    try {
+      const sections: RegisterSection[] = await Promise.all(shownReports.map(async (r) => {
+        const params = new URLSearchParams({ sectionId: r.section.id, semester: semesterKey, from, to, detail: "days" });
+        if (applied.hosteller) params.set("hosteller", applied.hosteller);
+        const res = await fetch(`/api/college/section-attendance-report?${params.toString()}`);
+        const json = (await res.json()) as { dates?: string[]; students?: RegisterSection["students"]; error?: string };
+        if (!res.ok) throw new Error(json.error ?? "Unable to load the register");
+        // The same students the report shows (its filters apply), in the same order.
+        const order = new Map(groupByBatch(r.rows, applied.filters.batches).flatMap((g) => g.rows).map((x, i) => [x.studentId, i]));
+        const students = (json.students ?? []).filter((x) => order.has(x.studentId)).sort((a, b) => order.get(a.studentId)! - order.get(b.studentId)!);
+        return { name: r.section.name, dates: json.dates ?? [], students };
+      }));
+      const meta = { ...exportMeta(), period: from === to ? `Day ${from}` : `${from} to ${to}` };
+      if (format === "xlsx") await saveWorkbook((X) => buildRegisterWorkbook(X, meta, sections), `${baseName()}_Register_${from}_${to}.xlsx`);
+      else if (!printHtml(registerPrintHtml(meta, sections, logoSrcOf(college)))) {
+        toast({ variant: "destructive", title: "Unable to open the print window. Allow pop-ups for this site and try again." });
+      }
+      setRegisterOpen(false);
+    } catch (e) {
+      toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to prepare the register." });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // The student panel's day-by-day list, over the report's own range.
+  const detailSection = detail ? shownReports.find((r) => r.section.id === detail.sectionId) : undefined;
+  const detailStudent = detailSection?.rows.find((x) => x.studentId === detail?.studentId);
+  const loadPeriods = useCallback(async (studentId: string): Promise<PeriodMark[]> => {
+    if (!detail) return [];
+    const params = new URLSearchParams({ sectionId: detail.sectionId, semester: semesterKey, detail: "days", studentId });
+    rangeParams(params, applied.range);
+    const res = await fetch(`/api/college/section-attendance-report?${params.toString()}`);
+    const json = (await res.json()) as { students?: { periods?: PeriodMark[]; days?: Record<string, DayCell> }[]; error?: string };
+    if (!res.ok) throw new Error(json.error ?? "Unable to load the day-by-day attendance.");
+    const periods = json.students?.[0]?.periods ?? [];
+    // Only the subjects the report shows.
+    const ids = applied.filters.subjectIds;
+    return ids ? periods.filter((p) => ids.includes(p.subjectId)) : periods;
+  }, [detail, semesterKey, applied.range, applied.filters.subjectIds]);
 
   // Back to everyone, till now: clears every draft filter and reloads.
   async function clearFilters() {
@@ -472,7 +590,19 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
         if (pct != null) { withPercent += 1; sum += pct; if (pct < SHORTAGE_PERCENT) low += 1; }
       }
     }
-    return { students, sections: shownReports.length, average: withPercent ? sum / withPercent : null, low };
+    // Classes held (the most any student of a section had, added over sections) and the subjects with the most shortage.
+    const held = shownReports.reduce((n, r) => n + Math.max(0, ...r.rows.map((x) => x.shown.held)), 0);
+    const short = new Map<string, { label: string; below: number }>();
+    for (const r of shownReports) {
+      const st = subjectStats({ name: r.section.name, subjects: r.columns, rows: r.rows }, SHORTAGE_PERCENT);
+      for (const sub of r.columns) {
+        const cur = short.get(sub.subjectId) ?? { label: subjectLabel(sub), below: 0 };
+        cur.below += st[sub.subjectId]?.below ?? 0;
+        short.set(sub.subjectId, cur);
+      }
+    }
+    const worst = Array.from(short.values()).filter((x) => x.below > 0).sort((a, b) => b.below - a.below).slice(0, 3);
+    return { students, sections: shownReports.length, average: withPercent ? sum / withPercent : null, low, held, worst };
   }, [shownReports]);
 
   const filterTile = (id: string, label: string, hint: string, checked: boolean, onChange: (v: boolean) => void, body?: React.ReactNode) => (
@@ -644,24 +774,29 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
             {appliedChips.length === 0
               ? <Badge variant="secondary">Everyone · till now</Badge>
               : appliedChips.map((c) => <Badge key={c} variant="in_progress">{c}</Badge>)}
-            {/* Hard right, directly above the tables it exports - and only
-                rendered alongside a report, so it can never be the dead
-                control it was while sitting next to Load Report. */}
-            <Button className="ml-auto" onClick={handleExport}>
-              Export CSV
-            </Button>
+            {/* View switch and Export, hard right, directly above the tables they act on. */}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <SegmentedTabs
+                value={view}
+                onChange={(k) => setView(k as ReportView)}
+                options={[{ key: "subjects", label: "Subject-wise" }, { key: "summary", label: "Summary" }]}
+              />
+              <ExportMenu onPick={(k) => void handleExport(k)} busy={exporting} threshold={SHORTAGE_PERCENT} />
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
             {[
               { label: "Students", value: String(stats.students) },
               { label: "Sections", value: String(stats.sections) },
-              { label: "Average attendance", value: stats.average == null ? "-" : `${stats.average.toFixed(1)}%` },
+              { label: "Classes Held", value: String(stats.held) },
+              { label: "Average Attendance", value: stats.average == null ? "-" : `${stats.average.toFixed(1)}%` },
               { label: `Below ${SHORTAGE_PERCENT}%`, value: String(stats.low), tone: stats.low > 0 ? "text-red-600" : "" },
+              { label: "Most Shortage In", value: stats.worst.length ? stats.worst.map((w) => `${w.label} (${w.below})`).join(", ") : "-", small: true },
             ].map((t) => (
               <div key={t.label} className="rounded-lg border bg-card px-4 py-3">
                 <p className="text-xs text-muted-foreground">{t.label}</p>
-                <p className={`mt-1 text-2xl font-semibold tabular-nums ${t.tone ?? ""}`}>{t.value}</p>
+                <p className={`mt-1 font-semibold tabular-nums ${t.small ? "text-sm leading-snug" : "text-2xl"} ${t.tone ?? ""}`}>{t.value}</p>
               </div>
             ))}
           </div>
@@ -670,6 +805,15 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
 
       {shownReports.map((r) => {
         let serial = 0;
+        const subjectsView = view === "subjects";
+        const stat = subjectStats({ name: r.section.name, subjects: r.columns, rows: r.rows }, SHORTAGE_PERCENT);
+        const tailCols = subjectsView ? 5 : 6;
+        const colCount = 3 + (subjectsView ? r.columns.length : 0) + tailCols;
+        const th = "px-3 py-2.5 font-medium";
+        // Regd. No and Name stay in view while the subject columns scroll sideways.
+        const stick1 = "sticky left-0 z-[1] w-12 min-w-12 bg-inherit";
+        const stick2 = "sticky left-12 z-[1] w-32 min-w-32 bg-inherit";
+        const stick3 = "sticky left-44 z-[1] min-w-44 bg-inherit shadow-[1px_0_0_0_hsl(var(--border))]";
         return (
         <Card key={r.section.id} className="overflow-hidden">
           <CardHeader className="flex-row items-center justify-between gap-2 space-y-0 border-b bg-muted/30 py-3">
@@ -683,10 +827,18 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="px-4 py-2.5 font-medium">S.No</th>
-                    <th className="px-4 py-2.5 font-medium">Reg. No.</th>
-                    <th className="px-4 py-2.5 font-medium">Name</th>
-                    <th className="whitespace-nowrap px-4 py-2.5 text-center font-medium">Overall</th>
+                    <th className={`${th} ${stick1}`}>S.No</th>
+                    <th className={`${th} ${stick2}`}>Regd. No</th>
+                    <th className={`${th} ${stick3}`}>Name</th>
+                    {subjectsView && r.columns.map((sub) => (
+                      <th key={sub.subjectId} title={sub.subjectName} className={`${th} whitespace-nowrap text-center normal-case`}>{subjectLabel(sub)}</th>
+                    ))}
+                    <th className={`${th} whitespace-nowrap text-center`}>{subjectsView ? "Total" : "Attended / Held"}</th>
+                    {!subjectsView && <th className={`${th} whitespace-nowrap text-center`}>Absent Periods</th>}
+                    <th className={`${th} whitespace-nowrap text-center`}>Days Absent</th>
+                    <th className={`${th} whitespace-nowrap text-center`}>Overall</th>
+                    <th className={`${th} whitespace-nowrap text-center`} title={`Further classes to attend, missing none, to reach ${SHORTAGE_PERCENT}%`}>To {SHORTAGE_PERCENT}%</th>
+                    <th className={`${th} whitespace-nowrap text-center`}>Batch</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -694,29 +846,93 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
                     <Fragment key={g.batch ?? "all"}>
                       {g.batch != null && (
                         <tr className="bg-primary/5">
-                          <th colSpan={4} scope="colgroup" className="px-4 py-2 text-left text-sm font-semibold">
+                          <th colSpan={colCount} scope="colgroup" className="px-4 py-2 text-left text-sm font-semibold">
                             {g.batch || "Not assigned"}
                             <span className="ml-2 text-xs font-normal text-muted-foreground">{g.rows.length} student{g.rows.length === 1 ? "" : "s"}</span>
                           </th>
                         </tr>
                       )}
-                      {g.rows.map((s) => (
-                        <tr key={s.studentId} className="odd:bg-background even:bg-muted/20 hover:bg-muted/40">
-                          <td className="px-4 py-2.5 tabular-nums">{++serial}</td>
-                          <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">{s.rollNumber}</td>
-                          <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                          <td className="px-4 py-2.5 text-center">{pctBadge(s.shown.percentage, true)}</td>
+                      {g.rows.map((st) => {
+                        const low = st.shown.percentage != null && st.shown.percentage < SHORTAGE_PERCENT;
+                        const needed = classesNeeded(st.shown.attended, st.shown.held, SHORTAGE_PERCENT);
+                        return (
+                        <tr key={st.studentId} className="bg-background hover:bg-muted/40">
+                          <td className={`px-3 py-2 tabular-nums ${stick1}`}>{++serial}</td>
+                          <td className={`whitespace-nowrap px-3 py-2 tabular-nums ${stick2}`}>{st.rollNumber}</td>
+                          <td className={`px-3 py-2 ${stick3}`}>
+                            <button type="button" onClick={() => setDetail({ sectionId: r.section.id, studentId: st.studentId })}
+                              className={`text-left font-medium underline-offset-2 hover:underline ${low ? "text-red-600" : ""}`} title="Open this student's day-by-day attendance">
+                              {st.name}
+                            </button>
+                          </td>
+                          {subjectsView && r.columns.map((sub) => {
+                            const v = st.bySubject[sub.subjectId];
+                            return (
+                              <td key={sub.subjectId} className="whitespace-nowrap px-2 py-2 text-center">
+                                {v && v.held > 0 ? (
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    {pctBadge(v.percentage)}
+                                    <span className="text-[11px] tabular-nums text-muted-foreground">{v.attended}/{v.held}</span>
+                                  </div>
+                                ) : <span className="text-muted-foreground">-</span>}
+                              </td>
+                            );
+                          })}
+                          <td className="whitespace-nowrap px-3 py-2 text-center tabular-nums">{st.shown.attended}/{st.shown.held}</td>
+                          {!subjectsView && <td className="px-3 py-2 text-center tabular-nums">{st.shown.held - st.shown.attended}</td>}
+                          <td className="px-3 py-2 text-center tabular-nums">{st.absentDays ?? 0}</td>
+                          <td className="px-3 py-2 text-center">{pctBadge(st.shown.percentage, true)}</td>
+                          <td className={`px-3 py-2 text-center tabular-nums ${needed ? "font-medium text-amber-700" : "text-muted-foreground"}`}>{needed == null ? "-" : needed || "-"}</td>
+                          <td className="whitespace-nowrap px-3 py-2 text-center text-xs text-muted-foreground">{st.labBatch || "-"}</td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </Fragment>
                   ))}
                 </tbody>
+                {subjectsView && r.columns.length > 0 && (
+                  <tfoot className="border-t-2 bg-muted/50 text-xs">
+                    {[
+                      { label: "Classes Held", value: (id: string) => String(stat[id]?.held ?? 0) },
+                      { label: "Class Average", value: (id: string) => (stat[id]?.average == null ? "-" : `${stat[id].average!.toFixed(1)}%`) },
+                      { label: `Below ${SHORTAGE_PERCENT}%`, value: (id: string) => String(stat[id]?.below ?? 0), tone: (id: string) => ((stat[id]?.below ?? 0) > 0 ? "text-red-600" : "") },
+                    ].map((f) => (
+                      <tr key={f.label}>
+                        <th colSpan={3} scope="row" className="sticky left-0 z-[1] bg-muted px-3 py-2 text-right font-medium">{f.label}</th>
+                        {r.columns.map((sub) => (
+                          <td key={sub.subjectId} className={`px-2 py-2 text-center font-medium tabular-nums ${f.tone?.(sub.subjectId) ?? ""}`}>{f.value(sub.subjectId)}</td>
+                        ))}
+                        <td colSpan={tailCols} />
+                      </tr>
+                    ))}
+                  </tfoot>
+                )}
               </table>
             )}
           </CardContent>
         </Card>
         );
       })}
+
+      <RegisterDialog
+        open={registerOpen}
+        onOpenChange={setRegisterOpen}
+        defaultFrom={registerDefaults.from}
+        defaultTo={registerDefaults.to}
+        busy={exporting}
+        onRun={(from, to, format) => void runRegister(from, to, format)}
+      />
+      {detail && detailStudent && detailSection && (
+        <StudentDetailDialog
+          key={`${detail.sectionId}:${detail.studentId}`}
+          student={{ ...detailStudent, section: detailSection.section.name }}
+          subjects={detailSection.columns}
+          threshold={SHORTAGE_PERCENT}
+          rangeText={rangeText}
+          loadPeriods={loadPeriods}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </div>
   );
 }
