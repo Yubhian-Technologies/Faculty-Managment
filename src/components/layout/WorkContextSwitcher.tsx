@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Briefcase } from "lucide-react";
+import { NAV_MUTED } from "./navTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuthStore } from "@/store/authStore";
 import { useWorkContextStore } from "@/store/workContextStore";
@@ -34,7 +35,7 @@ export function WorkContextSwitcher({ compact = false }: { compact?: boolean }) 
     return (
       <div className="px-2 pt-3 shrink-0">
         <Select value={active} onValueChange={onChange}>
-          <SelectTrigger className="h-10 w-full justify-center px-0 [&>svg:last-child]:hidden" title={`Working as: ${label}`} aria-label={`Working as: ${label}`}>
+          <SelectTrigger className="h-10 w-full justify-center px-0 border-white/10 bg-white/[0.07] text-blue-200 hover:bg-white/[0.12] [&>svg:last-child]:hidden" title={`Working as: ${label}`} aria-label={`Working as: ${label}`}>
             <Briefcase className="h-4 w-4" />
             <span className="sr-only"><SelectValue /></span>
           </SelectTrigger>
@@ -47,10 +48,17 @@ export function WorkContextSwitcher({ compact = false }: { compact?: boolean }) 
   }
 
   return (
-    <div className="px-3 pt-3 shrink-0">
-      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-1 pb-1">Working as</p>
+    <div className="px-3 pt-1 shrink-0">
       <Select value={active} onValueChange={onChange}>
-        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-auto py-2 pl-2 pr-2.5 gap-2.5 rounded-xl [&>span:first-child]:flex [&>span:last-of-type]:block border-white/10 bg-white/[0.07] text-white hover:bg-white/[0.11] [&>svg:last-child]:text-[#8fa0cc] [&>svg:last-child]:opacity-100">
+          <span className="h-8 w-8 rounded-lg bg-blue-400/20 text-blue-200 flex items-center justify-center shrink-0">
+            <Briefcase className="h-4 w-4" />
+          </span>
+          <span className="flex-1 min-w-0 text-left">
+            <span className={`block text-[10.5px] leading-tight ${NAV_MUTED}`}>Working As</span>
+            <span className="block truncate text-[13.5px] font-semibold leading-tight"><SelectValue /></span>
+          </span>
+        </SelectTrigger>
         <SelectContent>
           {contexts.map((c) => <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>)}
         </SelectContent>

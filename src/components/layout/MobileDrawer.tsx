@@ -3,10 +3,9 @@
 import { useNavLabels } from "@/hooks/useNavLabels";
 import { groupNavItems } from "./navGroups";
 import { CollegeLogo } from "@/components/shared/CollegeLogo";
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { X, LogOut, ChevronDown } from "lucide-react";
+import { X, LogOut } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
@@ -17,15 +16,18 @@ import { useAssignedCoordinator } from "@/hooks/useAssignedCoordinator";
 import { useIsSubDepartmentHod } from "@/hooks/useIsSubDepartmentHod";
 import { usePrincipalPendingHiring } from "@/hooks/usePrincipalPendingHiring";
 import { INCIDENT_RECORD_HREFS, useIncidentUnread } from "@/hooks/useIncidentUnread";
-import { isNavItemActive, filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
-import { NavIcon } from "./NavIcon";
+import { filterVisibleNavItems, isPathHidden, ROLES_WITH_EMBEDDED_PANEL_ACCESS, type NavItem } from "./navConfig";
+import { NavMenu } from "./NavMenu";
+import { UserCardSubtitle } from "./UserCardSubtitle";
+import { NavFinder } from "./NavFinder";
+import { NAV_MUTED, NAV_SURFACE } from "./navTheme";
+import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { useCustomNav } from "@/hooks/useCustomNav";
 import { WorkContextSwitcher } from "./WorkContextSwitcher";
 import { readOnlyNavItems } from "./readOnlyNav";
 import { LocationDeptSwitcher } from "./LocationDeptSwitcher";
 import { useWorkContext } from "@/hooks/useWorkContext";
 import { ROLE_LABELS } from "@/types";
-import { UserCardSubtitle } from "./UserCardSubtitle";
 
 const INTERVIEW_NAV_ITEM: NavItem = {
   label: "My Interviews",
@@ -54,10 +56,9 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   const { hideSubDepartmentsLink } = useIsSubDepartmentHod();
   const { pendingCount: pendingHiringCount } = usePrincipalPendingHiring();
   const incidentUnread = useIncidentUnread();
-  const { items: contextItems, active: activeContext } = useWorkContext();
+  const { items: contextItems, active: activeContext, contexts } = useWorkContext();
+  const { collegeInfo } = useCollegeInfo();
   const { apply: applyCustomNav } = useCustomNav();
-  // Groups the user folded shut (keyed by section title) - same behaviour as the desktop sidebar.
-  const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -123,12 +124,18 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
 
   // A nav item that starts a `section` opens a new group; the items after it belong to it.
   const groups = groupNavItems(navItems);
-  const toggleGroup = (title: string) =>
-    setClosedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(title)) next.delete(title); else next.add(title);
-      return next;
-    });
+  const workingAs = contexts.find((c) => c.key === activeContext)?.label ?? ROLE_LABELS[user.realRole ?? user.role];
+  const subtitle = [collegeInfo?.code, workingAs].filter(Boolean).join(" · ");
+  const close = () => setSidebarOpen(false);
+  const badge = (item: NavItem) => {
+    if (item.href === PENDING_HIRING_HREF && pendingHiringCount > 0) {
+      return <span className="ml-auto bg-red-500 text-white text-[11px] rounded-full h-5 min-w-5 px-1.5 flex items-center justify-center font-bold">{pendingHiringCount > 99 ? "99+" : pendingHiringCount}</span>;
+    }
+    if (incidentUnread > 0 && INCIDENT_RECORD_HREFS.includes(item.href)) {
+      return <span className="ml-auto h-2.5 w-2.5 rounded-full bg-red-500" role="img" aria-label="New incident records" />;
+    }
+    return null;
+  };
 
   return (
     <>
@@ -147,22 +154,22 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
         // inert (not aria-hidden): a closed drawer also gives up focus, so the browser never hides a focused link.
         inert={!sidebarOpen}
         className={cn(
-          "fixed top-0 left-0 z-50 flex h-dvh w-[85vw] max-w-72 flex-col bg-background border-r shadow-xl transition-transform duration-300 md:hidden",
+          cn("fixed top-0 left-0 z-50 flex h-dvh w-[85vw] max-w-72 flex-col border-r shadow-xl transition-transform duration-300 md:hidden", NAV_SURFACE),
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex items-center justify-between h-16 px-4 border-b shrink-0">
-          <div className="flex items-center gap-3">
-            <CollegeLogo className="h-9 w-9 rounded-md object-contain shrink-0" />
+        <div className="flex items-center justify-between h-16 px-4 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <CollegeLogo className="h-9 w-9 rounded-lg bg-white p-0.5 object-contain shrink-0" />
             <div className="min-w-0">
-              <p className="text-sm font-bold">Vishnu People</p>
-              <p className="text-xs text-muted-foreground">{ROLE_LABELS[user.realRole ?? user.role]}</p>
+              <p className="text-[15px] font-bold text-white truncate">Vishnu People</p>
+              <p className={cn("text-xs truncate", NAV_MUTED)}>{subtitle}</p>
             </div>
           </div>
           <button
-            onClick={() => setSidebarOpen(false)}
+            onClick={close}
             aria-label="Close menu"
-            className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-muted"
+            className="h-9 w-9 flex items-center justify-center rounded-lg text-[#c9d3ee] hover:bg-white/10"
           >
             <X className="h-5 w-5" />
           </button>
@@ -171,64 +178,17 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
         <WorkContextSwitcher />
         <LocationDeptSwitcher />
 
-        <nav className="flex-1 min-h-0 px-3 py-3 overflow-y-auto overscroll-contain">
-          {groups.map((group, gi) => {
-            const hasActive = group.items.some((item) => isNavItemActive(item, pathname, navItems));
-            // Same rule as the desktop sidebar: a folded group still shows the open page.
-            const open = !group.title || !closedGroups.has(group.title) || hasActive;
-            return (
-              <div key={`${group.title ?? "top"}-${gi}`} className={cn(gi > 0 && "mt-3")}>
-                {group.title && (
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.title as string)}
-                    aria-expanded={open}
-                    className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors"
-                  >
-                    <span className="truncate">{group.title}</span>
-                    <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", !open && "-rotate-90")} />
-                  </button>
-                )}
-                <div className={cn("grid transition-[grid-template-rows] duration-200 ease-in-out", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
-                  <div className="overflow-hidden">
-                    <div className="space-y-1 py-0.5">
-                      {group.items.map((item) => {
-                        const isActive = isNavItemActive(item, pathname, navItems);
-                        return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            className={cn(
-                              "flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-200",
-                              isActive
-                                ? "bg-primary text-primary-foreground shadow-sm"
-                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                          >
-                            <NavIcon name={item.iconName} className="h-5 w-5 shrink-0" />
-                            <span className="truncate">{navLabel(item.href, item.label)}</span>
-                            {item.href === PENDING_HIRING_HREF && pendingHiringCount > 0 && (
-                              <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 px-1 flex items-center justify-center font-semibold">
-                                {pendingHiringCount > 99 ? "99+" : pendingHiringCount}
-                              </span>
-                            )}
-                            {incidentUnread > 0 && INCIDENT_RECORD_HREFS.includes(item.href) && (
-                              <span className="ml-auto h-2.5 w-2.5 rounded-full bg-red-500" role="img" aria-label="New incident records" />
-                            )}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div className="pt-2.5 shrink-0">
+          <NavFinder groups={groups} label={navLabel} onNavigate={close} />
+        </div>
+
+        <nav className="flex-1 min-h-0 px-2.5 py-2 overflow-y-auto overscroll-contain">
+          <NavMenu groups={groups} navItems={navItems} pathname={pathname ?? ""} label={navLabel} roomy badge={badge} />
         </nav>
 
-        <div className="border-t px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold shrink-0 overflow-hidden">
+        <div className="border-t border-white/10 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-amber-400 to-rose-500 flex items-center justify-center text-white font-bold shrink-0 overflow-hidden">
               {user.profilePhotoUrl ? (
                 <img src={user.profilePhotoUrl} alt={shownName} className="h-full w-full object-cover" />
               ) : (
@@ -236,17 +196,18 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{shownName}</p>
-              <UserCardSubtitle user={user} />
+              <p className="text-sm font-semibold text-white truncate">{shownName}</p>
+              {user.role === "STUDENT" ? <UserCardSubtitle user={user} className={cn("text-xs truncate", NAV_MUTED)} /> : <p className={cn("text-xs truncate", NAV_MUTED)}>{workingAs}</p>}
             </div>
+            <button
+              onClick={logout}
+              aria-label="Log Out"
+              title="Log Out"
+              className={cn("h-10 w-10 flex items-center justify-center rounded-lg hover:bg-white/10 hover:text-white", NAV_MUTED)}
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            onClick={logout}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full px-2 py-2 rounded-lg hover:bg-muted"
-          >
-            <LogOut className="h-4 w-4" />
-            Log out
-          </button>
         </div>
       </div>
     </>
