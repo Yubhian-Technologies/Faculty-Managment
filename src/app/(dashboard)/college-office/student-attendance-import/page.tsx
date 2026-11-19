@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
-import { cn } from "@/lib/utils";
+import { cn, dmy } from "@/lib/utils";
 import { parseCSV, parseExcelWorkbook, readFileAsText } from "@/lib/utils/csv";
 import { parsePastAttendanceGrid, type PastAttendanceGrid } from "@/lib/studentAttendance/pastImportGrid";
 import { buildPastAttendanceTemplate } from "@/lib/studentAttendance/pastImportTemplate";
@@ -504,7 +504,7 @@ function SheetResult({ sheet, onToggleJoining }: { sheet: SheetState; onToggleJo
                 {j.status === "SET" && !sheet.applied ? (
                   <label className="flex items-center gap-2">
                     <input type="checkbox" className="h-4 w-4" checked={j.on} onChange={(e) => onToggleJoining(j.roll, e.target.checked)} />
-                    <span><b>{j.roll}</b> - Date of Joining {j.date} <span className="text-xs text-muted-foreground">(blank on {j.blankClassDays} class day{j.blankClassDays === 1 ? "" : "s"} before)</span></span>
+                    <span><b>{j.roll}</b> - Date of Joining {dmy(j.date)} <span className="text-xs text-muted-foreground">(blank on {j.blankClassDays} class day{j.blankClassDays === 1 ? "" : "s"} before)</span></span>
                   </label>
                 ) : (
                   <span>
@@ -537,7 +537,7 @@ function SheetResult({ sheet, onToggleJoining }: { sheet: SheetState; onToggleJo
             <tbody>
               {r.days.map((d) => (
                 <tr key={d.date} className="border-b align-top">
-                  <th scope="row" className="whitespace-nowrap p-2 text-left font-normal tabular-nums">{d.date}</th>
+                  <th scope="row" className="whitespace-nowrap p-2 text-left font-normal tabular-nums">{dmy(d.date)}</th>
                   <td className="p-2">
                     {d.status === "SKIPPED" ? <Badge variant="pending">Skipped</Badge> : d.skippedPeriods.length ? <Badge variant="modified">Partly</Badge> : <Badge variant="approved">OK</Badge>}
                     {d.reason && <span className="ml-2 text-muted-foreground">{d.reason}</span>}

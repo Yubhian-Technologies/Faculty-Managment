@@ -19,6 +19,7 @@ import type { PublicationIndex } from "@/types";
 import { toast } from "@/hooks/useToast";
 import { ROLE_LABELS } from "@/types";
 import type { UserRole } from "@/types";
+import { formatDate } from "@/lib/utils";
 
 // Full view of one Research & Innovation record, for every module.
 //
@@ -139,7 +140,7 @@ export default function ResearchRecordPage({
     : typeof createdAt?._seconds === "number" ? new Date(createdAt._seconds * 1000)
       : null;
   const submittedOn = createdDate
-    ? createdDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+    ? formatDate(createdDate)
     : "";
 
   const ownerLine = record

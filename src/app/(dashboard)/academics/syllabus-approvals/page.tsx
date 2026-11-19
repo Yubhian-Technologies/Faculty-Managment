@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 import { SYLLABUS_STATUS_LABEL } from "@/lib/subjects/syllabus";
 import type { SubjectSyllabusStatus } from "@/types";
 
@@ -24,7 +24,7 @@ const TABS: { key: SubjectSyllabusStatus; label: string }[] = [
   { key: "RETURNED", label: "Returned" },
   { key: "DRAFT", label: "Drafts (HOD)" },
 ];
-const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+const when = (iso?: string | null) => (iso ? formatDateTime(new Date(iso)) : "");
 
 export default function SyllabusApprovalsPage() {
   const [items, setItems] = useState<Item[] | null>(null);

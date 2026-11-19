@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
+import { Input } from "@/components/ui/input";
 
 interface LabFaculty {
   facultyId: string;
@@ -263,9 +264,9 @@ export function SectionLabBatchModes({ sectionId }: { sectionId: string }) {
                                   <div className="flex flex-wrap items-end gap-3">
                                     <div className="space-y-1">
                                       <span className="text-xs text-muted-foreground">Teaches from</span>
-                                      <input
+                                      <Input
                                         type="date"
-                                        className="block h-9 rounded-md border bg-background px-2 text-sm"
+                                        className="block h-9 w-44 rounded-md border bg-background px-2 text-sm"
                                         value={f.window?.from ?? ""}
                                         max={f.window?.to || undefined}
                                         onChange={(e) => draftFacultyWindow(f.facultyId, { from: e.target.value })}
@@ -273,9 +274,9 @@ export function SectionLabBatchModes({ sectionId }: { sectionId: string }) {
                                     </div>
                                     <div className="space-y-1">
                                       <span className="text-xs text-muted-foreground">To</span>
-                                      <input
+                                      <Input
                                         type="date"
-                                        className="block h-9 rounded-md border bg-background px-2 text-sm"
+                                        className="block h-9 w-44 rounded-md border bg-background px-2 text-sm"
                                         value={f.window?.to ?? ""}
                                         min={f.window?.from || undefined}
                                         onChange={(e) => draftFacultyWindow(f.facultyId, { to: e.target.value })}

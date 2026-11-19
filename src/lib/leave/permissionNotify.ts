@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { notify, notifyRole } from "@/lib/notify";
 import type { PermissionRequestStatus } from "@/types/permission";
+import { dmy } from "@/lib/utils";
 
 /** Only the fields these notifiers read. Deliberately not PermissionRequest:
  *  that carries Firestore Timestamps, while a just-written server object
@@ -22,7 +23,7 @@ interface NotifiablePermission {
 // from client components (the same split odProof / odProofNotify use).
 
 function describe(r: NotifiablePermission): string {
-  return `${r.date}, ${r.fromTime}-${r.toTime}`;
+  return `${dmy(r.date)}, ${r.fromTime}-${r.toTime}`;
 }
 
 /** Tells whoever the request was routed to that it is waiting on them. */

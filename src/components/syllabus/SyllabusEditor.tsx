@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CountInput, MappingChips } from "@/components/midBank/PrepareBank";
 import { toast } from "@/hooks/useToast";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 import { LIMITS } from "@/lib/midBank/constants";
 import { SYLLABUS_STATUS_LABEL } from "@/lib/subjects/syllabus";
 import type { OutcomeMapping, SubjectSyllabus, SubjectSyllabusStatus } from "@/types";
@@ -33,7 +33,7 @@ const blankDraft = (): Draft => ({ units: Array.from({ length: 5 }, () => ({ tit
 const toDraft = (s: SubjectSyllabus | null): Draft => s
   ? { units: s.units.map((u) => ({ title: u.title, syllabus: u.syllabus ?? "" })), cos: s.cos.map((c) => ({ statement: c.statement, unit: c.unit ?? 0 })), mapping: s.mapping ?? {} }
   : blankDraft();
-const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+const when = (iso?: string | null) => (iso ? formatDateTime(new Date(iso)) : "");
 
 const STATUS_CLASS: Record<SubjectSyllabusStatus, string> = {
   DRAFT: "bg-muted text-muted-foreground",

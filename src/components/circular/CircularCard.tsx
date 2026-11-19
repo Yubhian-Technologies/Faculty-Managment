@@ -6,11 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { FileText, CalendarDays, UserCircle } from "lucide-react";
 import type { Circular } from "@/types/circular";
 import { audienceSummary } from "@/lib/circular/audienceSummary";
+import { formatDate } from "@/lib/utils";
 
 function fmtDate(d: unknown): string {
   try {
     const date = (d as { toDate?: () => Date })?.toDate?.() ?? new Date(d as string);
-    return date.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "short", day: "numeric" });
+    return formatDate(date);
   } catch { return ""; }
 }
 

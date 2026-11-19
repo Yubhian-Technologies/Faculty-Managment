@@ -13,7 +13,7 @@ describe("timetable header", () => {
       yearLine: "YEAR-SEM-SECTION : I B.Tech. I-Sem, CSE-A",
       branchLine: "BRANCH : Computer Science",
       inchargeLine: "Class I/C: Dr. N A G K Manikanta Kopuri",
-      wefLine: "W.E.F : 20 July 2026",
+      wefLine: "W.E.F : 20/07/2026",
       roomLine: "ROOM NO : B-304",
     });
   });

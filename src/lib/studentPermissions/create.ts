@@ -17,6 +17,7 @@ import {
   type ActingUser, type PermissionPayload, type PermissionRequest, type PermissionRequesterType, type PermissionStudentRef,
 } from "./types";
 import { ctxOf, engine, store } from "./wiring";
+import { dmy } from "@/lib/utils";
 
 // Use-case: raise a permission request (a student for themselves, or faculty for a
 // group). Validates everything first, then submits one request per approving department.
@@ -94,7 +95,7 @@ async function createRequests(
     const errors = checkLimits(input, limits, { studentCount: g.students.length, typeDisabled: isTypeDisabled(config, department, typeKeys), today: istDateKey() });
     if (errors.length) throw invalid(errors.join(". "));
     const clash = await findClash(db, user.collegeId, department, g.students, calendarDays, input.periods);
-    if (clash) throw invalid(`${clash.name} already has a permission covering ${clash.date}`);
+    if (clash) throw invalid(`${clash.name} already has a permission covering ${dmy(clash.date)}`);
 
     const holds = { isHodOfDepartment: await headsDepartment(db, user, department), isVicePrincipal: user.roles.includes("VICE_PRINCIPAL"), isPrincipal: user.roles.includes("PRINCIPAL") };
     let chain;

@@ -18,6 +18,7 @@ import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER } from "@/types/lea
 import type { EffectiveLeaveCategory, LeaveTypeCode } from "@/types/leave";
 import { ROLE_LABELS } from "@/types";
 import type { Department, UserRole } from "@/types";
+import { formatDate } from "@/lib/utils";
 
 function roleTag(role: string): string | null {
   if (role === "HOD") return "HOD";
@@ -93,7 +94,7 @@ function formatPayrollMonth(year: number, month: number): string {
 function formatJoinDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return Number.isNaN(d.getTime()) ? "" : formatDate(d);
 }
 
 // "Weekly Offs" isn't stored anywhere - it's just how many Sundays fall in

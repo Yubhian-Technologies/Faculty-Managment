@@ -25,6 +25,7 @@ import { examLine, type ExamOf } from "@/lib/pdf/examHeader";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
 import type { MidExamPlan, MidTimetable } from "@/types";
 import type { ExamRoom, ExamSeatingPlan } from "@/types/examSeating";
+import { dmy } from "@/lib/utils";
 
 // Review of an automatic allotment: every room with its roll-number ranges,
 // each student movable to another room (capacity enforced), anyone unplaced
@@ -265,7 +266,7 @@ export default function SeatingPlanPage({ params }: { params: Promise<{ id: stri
             <div className="flex flex-wrap gap-2">
               {rollRangeBySection(room.students).map((g) => (
                 <Badge key={g.sectionLabel} variant="outline" className="font-normal">
-                  {g.sectionLabel}: {g.from} – {g.to} ({g.count})
+                  {g.sectionLabel}: {dmy(g.from)} – {dmy(g.to)} ({g.count})
                 </Badge>
               ))}
             </div>

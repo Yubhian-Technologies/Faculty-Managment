@@ -22,6 +22,7 @@ import {
 } from "@/lib/faculty/facultyTimeline";
 import { FACULTY_STATUS_DATE_FIELD, FACULTY_STATUS_DATE_LABELS, DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { FacultyMember, Designation, FacultyStatus } from "@/types";
+import { formatDate } from "@/lib/utils";
 
 type FacultyRow = Record<string, unknown> & FacultyMember;
 
@@ -54,7 +55,7 @@ function fmtDate(val: unknown): string {
           ? new Date(ts.seconds * 1000)
           : null;
     if (!d || isNaN(d.getTime())) return "-";
-    return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    return formatDate(d);
   } catch { return "-"; }
 }
 

@@ -37,6 +37,7 @@ import {
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS,
   AWARD_LEVEL_LABELS,
 } from "@/types";
+import { dmy } from "@/lib/utils";
 
 // Edit-side per-module field components - the editable counterpart to
 // ProfileFieldsView.tsx's per-module read-only exports. Each takes the same
@@ -214,7 +215,7 @@ export function ExperienceFields({ value: rawValue, onChange, includeTeachingAss
               {overlap && (
                 <p className="sm:col-span-2 text-xs text-destructive">
                   Overlaps {overlap.entry.institutionName ? `${overlap.entry.institutionName} - ` : ""}
-                  {tabLabelForEntry(overlap.entry)} ({overlap.fromDate} to {overlap.toDate}) - adjust the dates so
+                  {tabLabelForEntry(overlap.entry)} ({dmy(overlap.fromDate)} to {dmy(overlap.toDate)}) - adjust the dates so
                   experience periods don&rsquo;t overlap.
                 </p>
               )}

@@ -10,6 +10,7 @@ import { toast } from "@/hooks/useToast";
 import { useAppliedFilters } from "@/hooks/useAppliedFilters";
 import { LoadButton } from "@/components/shared/LoadButton";
 import type { LeaveRequest as LocationLeaveRequest } from "@/types/locationStaff";
+import { dmy, formatDate } from "@/lib/utils";
 
 const LEAVE_TYPE_LABELS: Record<string, string> = { CL: "Casual", EL: "Earned", SL: "Sick", PL: "Privileged", OTHER: "Other" };
 const STATUS_COLORS: Record<string, string> = { PENDING: "bg-amber-500/10 text-amber-600 border-amber-500/20", APPROVED: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", REJECTED: "bg-red-500/10 text-red-600 border-red-500/20" };
@@ -127,11 +128,11 @@ export default function LeavePage() {
           columns={[
             { key: "staffName", header: "Staff Member" },
             { key: "leaveType", header: "Type", render: (r) => LEAVE_TYPE_LABELS[r.leaveType] ?? r.leaveType },
-            { key: "startDate", header: "From", render: (r) => r.startDate },
-            { key: "endDate", header: "To", render: (r) => r.endDate },
+            { key: "startDate", header: "From", render: (r) => dmy(r.startDate) },
+            { key: "endDate", header: "To", render: (r) => dmy(r.endDate) },
             { key: "reason", header: "Reason", render: (r) => r.reason },
             { key: "status", header: "Status", render: (r) => <Badge className={`text-[10px] border ${STATUS_COLORS[r.status]}`}>{r.status}</Badge> },
-            { key: "createdAt", header: "Applied", render: (r) => (r.createdAt as { toDate?: () => Date }).toDate?.().toLocaleDateString() ?? String(r.createdAt) },
+            { key: "createdAt", header: "Applied", render: (r) => formatDate(r.createdAt as Parameters<typeof formatDate>[0]) },
             {
               key: "actions", header: "Actions", render: (r) => {
                 if (r.status !== "PENDING") return null;

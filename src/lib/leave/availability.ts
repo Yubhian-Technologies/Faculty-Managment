@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import type { LeaveRequest, PeriodSubstitution, StaffAdjustment } from "@/types/leave";
+import { dmy } from "@/lib/utils";
 
 // Everything that makes someone unavailable on a given date, beyond their own
 // timetable - shared by every "who can I name as a substitute / handover /
@@ -104,7 +105,7 @@ export function describeSubstituteConflict(c: SubstituteConflict): string {
   const where = c.subjectName ? `${c.subjectName} on ${c.date}` : c.date;
   return c.reason === "DUPLICATE_IN_SUBMISSION"
     ? `${who} is picked twice for period ${c.periodNumber} on ${c.date} - one person can't cover two classes in the same period. Pick someone else for ${where}.`
-    : `${who} was just assigned to cover period ${c.periodNumber} on ${c.date} by another request. Pick someone else for ${where}.`;
+    : `${who} was just assigned to cover period ${c.periodNumber} on ${dmy(c.date)} by another request. Pick someone else for ${where}.`;
 }
 
 export async function loadUnavailability(

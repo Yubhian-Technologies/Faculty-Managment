@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 
 // Read-only "everything the submitter entered" view for a Research & Innovation
 // record, shared by every module's record page (/r-and-d/record/[module]/[id]).
@@ -64,7 +65,7 @@ function asDate(v: unknown): string | null {
   const d = typeof t?.toDate === "function" ? t.toDate()
     : typeof t?._seconds === "number" ? new Date(t._seconds * 1000)
       : null;
-  return d ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null;
+  return d ? formatDate(d) : null;
 }
 
 function isEmpty(v: unknown): boolean {

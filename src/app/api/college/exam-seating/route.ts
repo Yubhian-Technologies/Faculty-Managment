@@ -10,6 +10,7 @@ import { loadSectionStudents } from "@/lib/exams/seatingStudents";
 import { roomBenches, roomPerBench, roomColumns } from "@/lib/exams/roomLayout";
 import type { Section } from "@/types";
 import type { ExamRoom, ExamSeatingPlan, SeatingRoomAllocation, SeatingSectionRef } from "@/types/examSeating";
+import { formatDate } from "@/lib/utils";
 
 const ROLES = ["EXAM_CELL", "PRINCIPAL", "VICE_PRINCIPAL"];
 
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
       mode?: "QUICK" | "LAYERED";
     };
     // No exam name is asked for - a plan without one is named by its date.
-    const name = body.name?.trim() || `Exam Seating · ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}`;
+    const name = body.name?.trim() || `Exam Seating · ${formatDate(new Date())}`;
     const layered = body.mode === "LAYERED";
     if (!layered && !body.sectionIds?.length) return NextResponse.json({ error: "Pick at least one section" }, { status: 400 });
     if (!body.roomIds?.length) return NextResponse.json({ error: "Pick at least one room" }, { status: 400 });

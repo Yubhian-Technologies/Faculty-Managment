@@ -1,6 +1,7 @@
 import type { PayrollLine, PayrollRun } from "@/types/payroll";
 import { downloadCSV, toCSV } from "@/lib/utils/csv";
 import { monthLabel } from "./payrollClient";
+import { dmy } from "@/lib/utils";
 
 // Exports of a month, built in the browser from the run + lines:
 //  - the salary register in the College Office sheet's layout (Teaching, then Non-Teaching, each with a
@@ -45,8 +46,8 @@ export async function downloadRegister(run: PayrollRun, lines: PayrollLine[], co
     ws.addRow([heading]).font = { bold: true };
     items.forEach((t, i) => ws.addRow([i + 1, t]));
   };
-  note("Joined this month (DOJ)", lines.filter((l) => l.joiningDate?.startsWith(run.month)).map((l) => `${l.name} (${l.department}) - ${l.joiningDate}`));
-  note("Relieved / retired this month (DOR)", lines.filter((l) => l.lastWorkingDate?.startsWith(run.month)).map((l) => `${l.name} (${l.department}) - ${l.lastWorkingDate}`));
+  note("Joined this month (DOJ)", lines.filter((l) => l.joiningDate?.startsWith(run.month)).map((l) => `${l.name} (${l.department}) - ${dmy(l.joiningDate)}`));
+  note("Relieved / retired this month (DOR)", lines.filter((l) => l.lastWorkingDate?.startsWith(run.month)).map((l) => `${l.name} (${l.department}) - ${dmy(l.lastWorkingDate)}`));
   note("Salary is not credited", lines.filter((l) => l.notCredited).map((l) => `${l.name} (${l.department}) - ${l.notCredited!.reason}`));
   note("Salary on hold (not in the bank file)", lines.filter((l) => l.hold).map((l) => `${l.name} (${l.department}) - ${l.hold!.reason}`));
   const adv = run.settings.deductions.find((d) => d.kind === "ADVANCE");

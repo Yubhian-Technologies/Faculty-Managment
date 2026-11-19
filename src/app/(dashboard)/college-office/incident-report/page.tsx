@@ -20,6 +20,7 @@ import { selectableYears } from "@/lib/college/courseYears";
 import type {
   AcademicYear, Course, Department, IncidentAffectedType, IncidentFaculty, IncidentReport, IncidentStudent,
 } from "@/types";
+import { formatDate, formatDateTime, dmy } from "@/lib/utils";
 
 const TYPE_LABELS: Record<IncidentAffectedType, string> = { STUDENT: "Student", FACULTY: "Faculty", BOTH: "Both" };
 const MAX_TITLE = 200;
@@ -35,13 +36,13 @@ function todayInputValue(): string {
 function formatIncidentDate(value: string): string {
   const [y, m, d] = value.split("-").map(Number);
   if (!y || !m || !d) return value || "-";
-  return new Date(y, m - 1, d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(new Date(y, m - 1, d));
 }
 
 function formatSubmitted(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatDateTime(d);
 }
 
 function ordinalYear(year: number | null) {
@@ -211,7 +212,7 @@ export default function IncidentReportPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="incident-date">Incident Date <span className="text-destructive">*</span></Label>
                   <Input id="incident-date" type="date" value={incidentDate} max={today} onChange={(e) => setIncidentDate(e.target.value)} />
-                  {errors.date && <p className="text-xs text-destructive" role="alert">{errors.date}</p>}
+                  {errors.date && <p className="text-xs text-destructive" role="alert">{dmy(errors.date)}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="incident-title">Incident Title <span className="text-destructive">*</span></Label>

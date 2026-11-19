@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
-import { cn, toDate } from "@/lib/utils";
+import { cn, toDate, formatDate } from "@/lib/utils";
 import type { CertificateRequest, CertificateSectionOverviewRow } from "@/types";
 import { getDepartmentOverview } from "./api";
 import { StatusBadge } from "./StatusBadge";
@@ -19,7 +19,7 @@ function ordinalYear(year: number) {
 
 const when = (ts: unknown) => {
   const d = toDate(ts as never);
-  return d ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
+  return d ? formatDate(d) : "";
 };
 
 const OPEN = ["IN_PROGRESS", "PENDING_ISSUANCE", "RETURNED"];

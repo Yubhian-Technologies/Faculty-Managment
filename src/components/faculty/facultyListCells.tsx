@@ -3,6 +3,7 @@ import { allPreviousExperienceEntries, formatDurationList, totalYearsOfExperienc
 import { researchAreaList } from "@/lib/faculty/researchAreas";
 import { DESIGNATION_LABELS, FACULTY_STATUS_LABELS } from "@/types";
 import type { Designation, FacultyMember, FacultyStatus } from "@/types";
+import { formatDate } from "@/lib/utils";
 
 // Row renderers for the Faculty Register tables. The HOD list
 // (hod/faculty/page.tsx) and the Principal/College Admin department list
@@ -38,7 +39,7 @@ export function fmtDate(val: unknown): string {
           ? new Date(ts.seconds * 1000)
           : null;
     if (!d || isNaN(d.getTime())) return "-";
-    return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    return formatDate(d);
   } catch { return "-"; }
 }
 

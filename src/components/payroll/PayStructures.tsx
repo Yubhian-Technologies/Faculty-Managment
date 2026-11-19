@@ -14,6 +14,7 @@ import { exemptableDeductions } from "@/lib/payroll/pay";
 import type { PayRevision, PayrollSettings } from "@/types/payroll";
 import { PayImportDialog } from "./PayImportDialog";
 import { collegeQs, monthLabel, payrollFetch, rupees, selectClass, thisMonth } from "./payrollClient";
+import { formatDate } from "@/lib/utils";
 
 // Pay structures: every faculty / staff member with the pay in force for a month - each part's fixed
 // monthly amount, Gross_Actual (their sum) and the deductions that don't apply to them. Accounts edit
@@ -194,7 +195,7 @@ function PayEditDialog({ collegeId, row, settings, canEdit, onClose, onSaved }: 
                   <td className="py-1 pr-2">{settings.earnings.filter((e) => r.amounts[e.id]).map((e) => `${e.label} ${rupees(r.amounts[e.id])}`).join(" · ")}{r.note ? <div className="text-muted-foreground">{r.note}</div> : null}</td>
                   <td className="py-1 pr-2 text-right tabular-nums">{rupees(Object.values(r.amounts).reduce((a, v) => a + v, 0))}</td>
                   <td className="py-1 pr-2">{r.exempt.map((id) => dedLabel.get(id) ?? id).join(", ")}</td>
-                  <td className="py-1">{r.byName}<div className="text-muted-foreground">{new Date(r.at).toLocaleDateString("en-IN")}</div></td>
+                  <td className="py-1">{r.byName}<div className="text-muted-foreground">{formatDate(new Date(r.at))}</div></td>
                 </tr>
               ))}</tbody>
             </table></div>

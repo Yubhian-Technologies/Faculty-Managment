@@ -10,7 +10,7 @@ import { PublicationsSection } from "@/components/faculty/PublicationsModuleView
 import { normalizeResourcePersonsDetails, trainingEntryHidesBeneficiaries, trainingEntryUsesWeeks } from "@/components/faculty/TrainingEntryFields";
 import { awardYear } from "@/lib/faculty/awardYear";
 import { totalYearsOfExperience, formatDuration, durationBetween, allPreviousExperienceEntries, sortExperienceLatestFirst } from "@/lib/faculty/experienceCalc";
-import { toDate } from "@/lib/utils";
+import { toDate, formatDate } from "@/lib/utils";
 import {
   TRAINING_ENTRY_TYPE_LABELS, TRAINING_PARTICIPATION_ROLE_LABELS, CERTIFICATION_TYPE_LABELS, PROFESSIONAL_BODY_LABELS, MEMBERSHIP_VALIDITY_LABELS,
   ADMIN_RESPONSIBILITY_CATEGORY_LABELS, AWARD_CATEGORY_LABELS, QUALIFYING_EXAM_LABELS,
@@ -40,7 +40,7 @@ function beneficiarySummary(t: TrainingEntry): string | undefined {
 function formatInstitutionDate(date: string | undefined, year: number | undefined): string | number | undefined {
   if (date) {
     const d = new Date(date);
-    if (!Number.isNaN(d.getTime())) return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    if (!Number.isNaN(d.getTime())) return formatDate(d);
   }
   return year;
 }

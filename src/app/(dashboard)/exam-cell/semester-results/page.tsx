@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import type { ExamResultBatch } from "@/types/examResults";
+import { formatDate } from "@/lib/utils";
 
 // Every results sheet the Exam Cell has imported, newest first. One every-branch upload
 // makes a draft sheet per branch (same uploadId): those can be published or deleted together.
@@ -17,7 +18,7 @@ function when(value: unknown): string {
   const v = value as { _seconds?: number; seconds?: number } | string | null | undefined;
   const secs = typeof v === "object" && v ? v._seconds ?? v.seconds : undefined;
   const d = secs != null ? new Date(secs * 1000) : typeof v === "string" ? new Date(v) : null;
-  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
+  return d && !Number.isNaN(d.getTime()) ? formatDate(d) : "";
 }
 
 export default function SemesterResultsPage() {

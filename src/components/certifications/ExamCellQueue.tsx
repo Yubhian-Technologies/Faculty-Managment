@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { toast } from "@/hooks/useToast";
-import { toDate } from "@/lib/utils";
+import { toDate, formatDate } from "@/lib/utils";
 import type { CertificateRequest } from "@/types";
 import { listRequests, markExamCellIssued } from "./api";
 import { StudentProfileDialog } from "./StudentProfileDialog";
 
 const when = (ts: unknown) => {
   const d = toDate(ts as never);
-  return d ? d.toLocaleDateString("en-IN") : "";
+  return d ? formatDate(d) : "";
 };
 
 /** Requests whose PC/CMM task is pending - decoupled from the main

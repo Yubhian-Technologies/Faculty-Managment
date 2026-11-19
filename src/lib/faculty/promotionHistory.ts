@@ -1,4 +1,5 @@
 import { designationKey } from "@/lib/designations/config";
+import { dmy } from "@/lib/utils";
 
 // Promotion History = the faculty member's designation history in THIS college: a
 // chronological, gap-free, overlap-free chain of designations, each held once.
@@ -148,7 +149,7 @@ export function validatePromotionHistory(rows: PromotionRow[], ctx: PromotionCon
   if (ctx.joiningDate && isRealDate(ctx.joiningDate) && sorted[0].row.fromDate !== ctx.joiningDate) {
     issues.push({
       row: sorted[0].idx, field: "fromDate",
-      message: `The first designation must start on the Date of Joining (${ctx.joiningDate}).`,
+      message: `The first designation must start on the Date of Joining (${dmy(ctx.joiningDate)}).`,
     });
   }
 

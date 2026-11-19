@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn, stripLeadingZeros } from "@/lib/utils";
+import { DateField } from "./date-field";
 
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
@@ -53,6 +54,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             onChange(e);
           }
         : onChange;
+
+    // Dates show and are typed as DD/MM/YYYY on every page (the browser's own date box follows the laptop's region,
+    // often MM/DD/YYYY). The value handed back stays "YYYY-MM-DD" - see DateField.
+    if (type === "date") {
+      return <DateField ref={ref} className={className} onChange={onChange} onFocus={onFocus} onWheel={onWheel} {...props} />;
+    }
 
     return (
       <input

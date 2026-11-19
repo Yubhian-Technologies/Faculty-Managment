@@ -8,6 +8,7 @@ import { dayLabel, timeLabel } from "@/lib/midTimetable/rules";
 import { AVAILABILITY_LABELS, type Availability } from "@/lib/invigilation/eligibility";
 import { ACTIVE_DUTY_STATUSES, DUTY_CATEGORIES, DUTY_CATEGORY_LABELS } from "@/types/invigilation";
 import { designationLabel, type CandidateRow, type Overview } from "./model";
+import { dmy } from "@/lib/utils";
 
 // Exam Cell > Invigilation > Dashboard: places needed vs filled, workload
 // spread, designation / category counts, repeated rooms and every override.
@@ -144,7 +145,7 @@ export function DashboardPanel({ overview, onOpenSlot }: { overview: Overview; o
           <CardHeader className="pb-2"><CardTitle className="text-base">Overrides approved ({overrides.length})</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             {overrides.length === 0 ? <p className="text-muted-foreground">None.</p> : overrides.map(({ d, o }, i) => (
-              <div key={i} className="rounded border p-2"><p><b>{d.facultyName}</b> · {d.room ?? DUTY_CATEGORY_LABELS[d.category]} · {d.date}</p><p className="text-xs text-amber-700 dark:text-amber-400">{o.message}</p><p className="text-xs">&ldquo;{o.reason}&rdquo; - {o.byName}</p></div>
+              <div key={i} className="rounded border p-2"><p><b>{d.facultyName}</b> · {d.room ?? DUTY_CATEGORY_LABELS[d.category]} · {dmy(d.date)}</p><p className="text-xs text-amber-700 dark:text-amber-400">{o.message}</p><p className="text-xs">&ldquo;{o.reason}&rdquo; - {o.byName}</p></div>
             ))}
           </CardContent>
         </Card>

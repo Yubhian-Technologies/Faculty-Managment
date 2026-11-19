@@ -1,5 +1,6 @@
 import { ACTIVE_DUTY_STATUSES, DUTY_CATEGORY_LABELS, type DutyCategory, type DutyRef, type DutySlot, type InvigilationRules, type RuleMode } from "@/types/invigilation";
 import { limitFor, minutes } from "./rules";
+import { dmy } from "@/lib/utils";
 
 // Can this faculty member take this duty? (pure). The server re-runs this in
 // the save transaction; the assignment screen runs it for every candidate.
@@ -115,7 +116,7 @@ export function evaluate(
     const total = counted.length + 1;
     if (limit.perSchedule != null && total > limit.perSchedule) add("LIMIT_SCHEDULE", lvl, `Would have ${total} duties - limit ${limit.perSchedule} for the schedule`);
     const onDay = counted.filter((d) => d.date === slot.date).length + 1;
-    if (limit.perDay != null && onDay > limit.perDay) add("LIMIT_DAY", lvl, `Would have ${onDay} duties on ${slot.date} - limit ${limit.perDay} a day`);
+    if (limit.perDay != null && onDay > limit.perDay) add("LIMIT_DAY", lvl, `Would have ${onDay} duties on ${dmy(slot.date)} - limit ${limit.perDay} a day`);
     const cap = limit.byCategory?.[slot.category];
     const inCat = duties.filter((d) => d.category === slot.category).length + 1;
     if (cap != null && inCat > cap) add("LIMIT_CATEGORY", lvl, `Would have ${inCat} ${DUTY_CATEGORY_LABELS[slot.category].toLowerCase()} duties - limit ${cap}`);

@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { BadgeCheck, ShieldAlert, ShieldX } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 
 // Public: the page a certificate's QR code opens. It says whether the certificate is genuine and shows only what
 // is printed on it (number, certificate, student, Regd. No, college, date) - or that it was revoked / not found.
@@ -18,7 +19,7 @@ export default function VerifyCertificatePage({ params }: { params: Promise<{ co
   }, [code]);
 
   const c = result?.certificate;
-  const day = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+  const day = (iso: string) => formatDate(new Date(iso));
   return (
     <main className="min-h-screen bg-muted/30 px-4 py-10">
       <div className="mx-auto max-w-lg rounded-xl border bg-background p-6 shadow-sm">

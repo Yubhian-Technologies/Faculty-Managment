@@ -5,6 +5,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { emitWorkflowNotification } from "@/lib/notifications/workflowNotifications";
 import { evaluateODProof } from "@/lib/leave/odProof";
 import type { LeaveRequest } from "@/types/leave";
+import { formatDate } from "@/lib/utils";
 
 // Not a user-facing route - hit on a schedule (see functions/src/index.ts)
 // with a shared secret, same convention as cron/attendance-not-posted.
@@ -21,9 +22,6 @@ function isAuthorized(request: Request): boolean {
 
 const REMINDER_DELAY_MS = 24 * 60 * 60 * 1000;
 
-function formatDate(d: Date): string {
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
 
 // For one college: every approved, proof-required On Duty request whose
 // period ended at least 24h ago with nothing uploaded yet (AWAITING_UPLOAD -

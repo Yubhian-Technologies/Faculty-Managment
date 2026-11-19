@@ -26,6 +26,7 @@ import { buildDepartmentPickOptions, DEPARTMENT_PICK_ALL, dropEmptyFeederGroups,
 import { sectionIsOfCore, sectionMatchesPick } from "@/lib/departments/sectionDepartmentPick";
 import { departmentsOfferingCourse } from "@/components/students/RosterFieldInputs";
 import { yearSemesterLabelIn } from "@/lib/academic/format";
+import { formatDate } from "@/lib/utils";
 
 // One section's current-semester timetable, as GET /api/college/timetable-slots/export-all
 // returns it - everything buildSectionTimetablePdfHtml/buildSectionTimetableXlsxBuffer need,
@@ -412,7 +413,7 @@ export default function PrincipalTimetablePage() {
                         {entry.timetableAdminUpdate && (
                           <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-800">
                             Updated by {entry.timetableAdminUpdate.byName || "Admin"} (Admin)
-                            {entry.timetableAdminUpdate.at ? ` on ${new Date(entry.timetableAdminUpdate.at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}` : ""}
+                            {entry.timetableAdminUpdate.at ? ` on ${formatDate(new Date(entry.timetableAdminUpdate.at))}` : ""}
                           </span>
                         )}
                         {/* The College Admin / Principal edits any section's timetable (not the VP, Exam Cell or Academics, who share this page). */}

@@ -10,6 +10,7 @@ import { getDepartmentHeadUids, notify } from "@/lib/notify";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { invalidateClassAdjustmentCache } from "./inForce";
 import { clashWith, dateProblem, MAX_REASON, periodLabel, slotLockId } from "./rules";
+import { dmy } from "@/lib/utils";
 
 // "Adjust / Swap a Class" - server side (types/classAdjustment.ts). The colleague who takes a period teaches their
 // OWN subject in it, so they must hold a current teaching assignment on that section. Every check is re-run on
@@ -340,7 +341,7 @@ function summaryOf(l: ClassAdjustmentLeg) {
 }
 
 export function describe(a: Pick<ClassAdjustment, "date" | "legs">): string {
-  return `${a.date} - ${a.legs.map((l) => `${l.sectionName} ${periodLabel(l)} to ${l.toFacultyName} (${l.toSubjectName})`).join("; ")}`;
+  return `${dmy(a.date)} - ${a.legs.map((l) => `${l.sectionName} ${periodLabel(l)} to ${l.toFacultyName} (${l.toSubjectName})`).join("; ")}`;
 }
 
 async function notifyFaculty(db: Firestore, c: string, facultyId: string, type: string, title: string, message: string) {

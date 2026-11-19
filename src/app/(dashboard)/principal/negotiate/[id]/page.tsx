@@ -12,6 +12,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { toast } from "@/hooks/useToast";
 import { ArrowRight, Plus, Save, CheckCircle2 } from "lucide-react";
 import type { HiringBatch, Candidate, CandidateApplication, HiringTermsTemplate } from "@/types";
+import { dmy } from "@/lib/utils";
 
 // Joined view: application (per-hiring-request negotiation state) + candidate
 // (person) fields. `id` is the applicationId (used for PATCHes to
@@ -196,7 +197,7 @@ export default function PrincipalNegotiatePage({ params }: { params: Promise<{ i
                     {terms.negotiatedSalary && terms.dateOfJoining && (
                       <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground mr-2">
                         <span>CTC: <strong className="text-foreground">₹{Number(terms.negotiatedSalary).toLocaleString("en-IN")}/yr</strong></span>
-                        <span>Joining: <strong className="text-foreground">{terms.dateOfJoining}</strong></span>
+                        <span>Joining: <strong className="text-foreground">{dmy(terms.dateOfJoining)}</strong></span>
                       </div>
                     )}
                   </AccordionTrigger>

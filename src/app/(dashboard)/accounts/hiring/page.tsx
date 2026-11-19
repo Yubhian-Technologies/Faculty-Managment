@@ -193,7 +193,7 @@ export default function AccountsHiringPage() {
         collegeName: collegeInfo.name,
         collegeAddress: collegeInfo.address,
         joiningDate,
-        letterDate: new Date().toLocaleDateString("en-IN"),
+        letterDate: formatDate(new Date()),
         termsAndConditions: form.termsAndConditions,
       };
 

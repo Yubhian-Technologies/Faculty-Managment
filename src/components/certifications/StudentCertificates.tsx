@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { toast } from "@/hooks/useToast";
-import { toDate } from "@/lib/utils";
+import { toDate, formatDate } from "@/lib/utils";
 import { CERTIFICATE_CATEGORIES } from "@/lib/certifications/typeConfig";
 import type { CertificateRequest } from "@/types";
 import { cancelRequest } from "./api";
@@ -29,7 +29,7 @@ import { RequestAnswers, StepTimeline } from "./StepTimeline";
 
 const when = (ts: unknown) => {
   const d = toDate(ts as never);
-  return d ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
+  return d ? formatDate(d) : "";
 };
 
 type FormState = { purpose: string; purposeOther: string; values: Record<string, string>; attachments: Record<string, string> };
