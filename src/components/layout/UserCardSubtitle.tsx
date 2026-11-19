@@ -31,9 +31,9 @@ function StudentRoll({ uid }: { uid: string }) {
   return roll ? <>{roll}</> : null;
 }
 
-export function UserCardSubtitle({ user }: { user: Pick<FMSUser, "uid" | "role" | "email"> }) {
+export function UserCardSubtitle({ user, className = "text-xs text-muted-foreground truncate" }: { user: Pick<FMSUser, "uid" | "role" | "email">; className?: string }) {
   return (
-    <p className="text-xs text-muted-foreground truncate">
+    <p className={className}>
       {user.role === "STUDENT" ? <StudentRoll uid={user.uid} /> : user.email}
     </p>
   );

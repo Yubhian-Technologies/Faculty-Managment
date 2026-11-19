@@ -63,6 +63,10 @@ import {
   Sparkles,
   KeyRound,
   CalendarSearch,
+  FileCheck,
+  ShieldCheck,
+  Megaphone,
+  Undo2,
   type LucideProps,
 } from "lucide-react";
 
@@ -131,6 +135,10 @@ const icons: Record<string, React.ComponentType<LucideProps>> = {
   Sparkles,
   KeyRound,
   CalendarSearch,
+  FileCheck,
+  ShieldCheck,
+  Megaphone,
+  Undo2,
 };
 
 /** Every icon name a nav item (built-in or custom) may use. */
