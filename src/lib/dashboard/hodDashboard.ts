@@ -12,6 +12,8 @@ export interface ClassCell {
   covered: boolean;
   subject: string;
   faculty: string;
+  facultyId?: string;
+  facultyDepartment?: string;
   start: string;
   end: string;
 }

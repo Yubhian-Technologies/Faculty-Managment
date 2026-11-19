@@ -32,46 +32,59 @@ const CRITICAL = 65;
 
 interface ScopedSection { id: string; name: string; label: string; department: string; year: number; courseId: string }
 
-async function scopedSections(db: Db, collegeId: string, uid: string) {
-  const scope = await getHodDepartmentScope(db, collegeId, uid);
+/** Whose dashboard: an HOD's department tree, or the whole college (Principal / VP / College Admin). */
+export type DashScope = { kind: "hod"; uid: string } | { kind: "college" };
+
+async function scopedSections(db: Db, collegeId: string, who: DashScope) {
+  const scope = who.kind === "hod" ? await getHodDepartmentScope(db, collegeId, who.uid) : null;
+  const canSee = (department: string) => !scope || canHodEditDepartment(scope, department);
+  const facultyDepts = scope ? facultyManageableDepartmentNames(scope) : null;
   const snap = await db.collection("colleges").doc(collegeId).collection("sections").get();
   const sections: ScopedSection[] = snap.docs
     .map((d) => ({ ...(d.data() as Section), id: d.id }))
-    .filter((s) => s.department && canHodEditDepartment(scope, s.department))
+    .filter((s) => s.department && canSee(s.department))
     .map((s) => ({ id: s.id, name: s.name, label: `${yearRoman(Number(s.year))}-${s.name}`, department: s.department, year: Number(s.year), courseId: s.courseId }))
     .sort((a, b) => a.department.localeCompare(b.department) || a.year - b.year || a.name.localeCompare(b.name));
-  return { scope, sections };
+  return { canSee, facultyDepts, sections };
 }
 
 const chunk = <T,>(list: T[], n: number) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, i * n + n));
 
 // ── Today ───────────────────────────────────────────────────────────────────
 
-// Today's figures are kept 60 seconds per HOD (the page refreshes every 5 minutes; several tabs share one read).
+// Today's figures are kept 60 seconds per viewer (the page refreshes every 5 minutes; several tabs share one read).
 const todayCache = new Map<string, { at: number; value: Awaited<ReturnType<typeof computeToday>> }>();
+const cacheKey = (collegeId: string, who: DashScope) => `${collegeId}:${who.kind === "hod" ? who.uid : "college"}`;
 
-export async function loadHodToday(db: Db, collegeId: string, uid: string) {
-  const key = `${collegeId}:${uid}`;
+export async function loadDashToday(db: Db, collegeId: string, who: DashScope) {
+  const key = cacheKey(collegeId, who);
   const hit = todayCache.get(key);
   if (hit && Date.now() - hit.at < 60_000 && !process.env.FIRESTORE_EMULATOR_HOST) return hit.value;
-  const value = await computeToday(db, collegeId, uid);
+  const value = await computeToday(db, collegeId, who);
   todayCache.set(key, { at: Date.now(), value });
   return value;
 }
+export const loadHodToday = (db: Db, collegeId: string, uid: string) => loadDashToday(db, collegeId, { kind: "hod", uid });
 
-async function computeToday(db: Db, collegeId: string, uid: string) {
+async function computeToday(db: Db, collegeId: string, who: DashScope) {
   const { dateISO: today, timeHHMM: now } = nowInIndia();
   const collegeRef = db.collection("colleges").doc(collegeId);
-  const { scope, sections } = await scopedSections(db, collegeId, uid);
+  const { facultyDepts, sections } = await scopedSections(db, collegeId, who);
   const sectionIds = new Set(sections.map((s) => s.id));
-  const facultyDepts = facultyManageableDepartmentNames(scope);
+  const college = who.kind === "college";
 
-  const [deptFacultySnap, assignmentSnaps, sessionsSnap, leaveSnap] = await Promise.all([
-    facultyDepts.length ? whereIn(collegeRef.collection("facultyMembers"), "department", facultyDepts).get() : Promise.resolve(null),
-    Promise.all(chunk([...sectionIds], 30).map((ids) => collegeRef.collection("teachingAssignments").where("sectionId", "in", ids).select("facultyId", "isPast").get())),
+  const [deptFacultySnap, assignmentSnaps, sessionsSnap, leaveSnap, deptSnap] = await Promise.all([
+    college ? collegeRef.collection("facultyMembers").get()
+      : facultyDepts!.length ? whereIn(collegeRef.collection("facultyMembers"), "department", facultyDepts!).get() : Promise.resolve(null),
+    college ? Promise.resolve([] as FirebaseFirestore.QuerySnapshot[])
+      : Promise.all(chunk([...sectionIds], 30).map((ids) => collegeRef.collection("teachingAssignments").where("sectionId", "in", ids).select("facultyId", "isPast").get())),
     collegeRef.collection("studentAttendance").where("date", "==", today).where("status", "==", "SUBMITTED").get(),
     REQUESTS_COL(collegeId, db).where("status", "==", "APPROVED").get(),
+    college ? collegeRef.collection("departments").select("hodUid", "name", "code").get() : Promise.resolve(null),
   ]);
+  const departmentCodes: Record<string, string> = Object.fromEntries((deptSnap?.docs ?? [])
+    .filter((d) => d.get("name") && d.get("code")).map((d) => [String(d.get("name")), String(d.get("code"))]));
+  const hodUids = new Set((deptSnap?.docs ?? []).map((d) => d.get("hodUid") as string | undefined).filter((x): x is string => !!x));
 
   // Department faculty + whoever teaches the department's sections (another department's faculty teaching here).
   const faculty = new Map<string, FacultyMember & { id: string }>();
@@ -114,6 +127,8 @@ async function computeToday(db: Db, collegeId: string, uid: string) {
           covered: !!p.adjustedFrom || !!p.attendanceOnly,
           subject: p.slot.subjectName || "",
           faculty: facultyDisplayName(f),
+          facultyId: f.id,
+          facultyDepartment: f.department ?? "",
           start: p.startTime, end: p.endTime,
         });
       }
@@ -134,7 +149,8 @@ async function computeToday(db: Db, collegeId: string, uid: string) {
     .filter(([, c]) => c.status === "OVERDUE")
     .map(([k, c]) => {
       const [sid, p] = k.split("|");
-      return { section: sections.find((s) => s.id === sid)?.label ?? "", period: Number(p), subject: c.subject, faculty: c.faculty, end: c.end };
+      const sec = sections.find((s) => s.id === sid);
+      return { section: sec?.label ?? "", sectionDepartment: sec?.department ?? "", period: Number(p), subject: c.subject, faculty: c.faculty, facultyId: c.facultyId ?? "", facultyDepartment: c.facultyDepartment ?? "", end: c.end };
     })
     .sort((a, b) => a.period - b.period || a.section.localeCompare(b.section));
 
@@ -146,11 +162,33 @@ async function computeToday(db: Db, collegeId: string, uid: string) {
   const counted = sectionRows.reduce((n, r) => n + r.counted, 0);
   const present = sectionRows.reduce((n, r) => n + r.present, 0);
 
+  // Per department (the Principal's board): classes and students today.
+  const deptRows = new Map<string, { department: string; total: number; due: number; posted: number; overdue: number; counted: number; present: number; absentAllDay: number }>();
+  const deptRow = (department: string) => {
+    const cur = deptRows.get(department) ?? { department, total: 0, due: 0, posted: 0, overdue: 0, counted: 0, present: 0, absentAllDay: 0 };
+    deptRows.set(department, cur);
+    return cur;
+  };
+  for (const [k, c] of Object.entries(cells)) {
+    const dep = byId.get(k.split("|")[0])?.department;
+    if (!dep) continue;
+    const r = deptRow(dep);
+    r.total += 1;
+    if (c.status !== "UPCOMING") r.due += 1;
+    if (c.status === "POSTED") r.posted += 1;
+    if (c.status === "OVERDUE") r.overdue += 1;
+  }
+  for (const s of sectionRows) {
+    if (!s.department) continue;
+    const r = deptRow(s.department);
+    r.counted += s.counted; r.present += s.present; r.absentAllDay += s.absentAllDay;
+  }
+
   // On leave today, and who covers their periods.
   const facultyByUid = new Map([...faculty.values()].filter((f) => f.userUid).map((f) => [f.userUid!, f]));
   const onLeave = leaveSnap.docs
     .map((d) => ({ ...(d.data() as LeaveRequest), id: d.id }))
-    .filter((r) => r.department && facultyDepts.includes(r.department))
+    .filter((r) => college || (!!r.department && facultyDepts!.includes(r.department)))
     .filter((r) => {
       const from = toDate(r.fromDate), to = toDate(r.toDate);
       return !!from && !!to && istDateKey(from) <= today && istDateKey(to) >= today;
@@ -162,13 +200,16 @@ async function computeToday(db: Db, collegeId: string, uid: string) {
       const coveredPeriods = new Set(subs.map((p) => p.periodNumber));
       return {
         name: r.employeeName,
+        department: r.department ?? "",
+        isHod: hodUids.has(r.uid),
+        handoverTo: r.handoverToName ?? null,
         leaveType: r.leaveTypeCode ?? "OTHER",
         halfDay: r.isHalfDay ? (r.halfDaySession ?? "FN") : null,
         covers: subs.map((p) => ({ period: p.periodNumber, section: p.sectionName ?? "", substitute: p.substituteFacultyName })),
         uncovered: mine.filter((p) => !coveredPeriods.has(p.periodNumber)).length,
       };
     })
-    .sort((a, b) => b.uncovered - a.uncovered || a.name.localeCompare(b.name));
+    .sort((a, b) => Number(b.isHod) - Number(a.isHod) || b.uncovered - a.uncovered || a.name.localeCompare(b.name));
 
   const nowCell = running.sort((a, b) => a.start.localeCompare(b.start))[0];
   return {
@@ -192,6 +233,8 @@ async function computeToday(db: Db, collegeId: string, uid: string) {
     },
     onLeave,
     departments: [...new Set(sections.map((s) => s.department))],
+    departmentCodes,
+    byDepartment: [...deptRows.values()].map((r) => ({ ...r, pct: r.counted ? Math.round((r.present / r.counted) * 1000) / 10 : null })),
   };
 }
 
@@ -200,19 +243,20 @@ async function computeToday(db: Db, collegeId: string, uid: string) {
 const semesterCache = new Map<string, { at: number; value: Awaited<ReturnType<typeof computeSemester>> }>();
 const TEN_MINUTES = 10 * 60_000;
 
-export async function loadHodSemester(db: Db, collegeId: string, uid: string, fresh = false) {
-  const key = `${collegeId}:${uid}`;
+export async function loadDashSemester(db: Db, collegeId: string, who: DashScope, fresh = false) {
+  const key = cacheKey(collegeId, who);
   const hit = semesterCache.get(key);
   if (!fresh && hit && Date.now() - hit.at < TEN_MINUTES && !process.env.FIRESTORE_EMULATOR_HOST) return hit.value;
-  const value = await computeSemester(db, collegeId, uid);
+  const value = await computeSemester(db, collegeId, who);
   semesterCache.set(key, { at: Date.now(), value });
   return value;
 }
+export const loadHodSemester = (db: Db, collegeId: string, uid: string, fresh = false) => loadDashSemester(db, collegeId, { kind: "hod", uid }, fresh);
 
-async function computeSemester(db: Db, collegeId: string, uid: string) {
+async function computeSemester(db: Db, collegeId: string, who: DashScope) {
   const today = nowInIndia().dateISO;
   const collegeRef = db.collection("colleges").doc(collegeId);
-  const { scope, sections } = await scopedSections(db, collegeId, uid);
+  const { canSee, sections } = await scopedSections(db, collegeId, who);
   const cfg = await loadAcademicYearConfig(db, collegeId);
   const window = windowForAcademicYear(cfg.currentLabel, cfg);
 
@@ -228,6 +272,7 @@ async function computeSemester(db: Db, collegeId: string, uid: string) {
   const criticalList: { name: string; rollNumber: string; section: string; pct: number }[] = [];
   const subjectShort = new Map<string, { label: string; name: string; below: number }>();
   let semesterStart: string | null = null;
+  const shortByDept = new Map<string, { students: number; below: number }>();
 
   for (const group of chunk(sections, 6)) {
     await Promise.all(group.map(async (sec) => {
@@ -267,6 +312,10 @@ async function computeSemester(db: Db, collegeId: string, uid: string) {
         if (pct == null) continue;
         students += 1;
         if (pct < SHORT) below += 1;
+        const dep = shortByDept.get(sec.department) ?? { students: 0, below: 0 };
+        dep.students += 1;
+        if (pct < SHORT) dep.below += 1;
+        shortByDept.set(sec.department, dep);
         if (pct < CRITICAL) {
           critical += 1;
           criticalList.push({ name: stu.name, rollNumber: stu.rollNumber, section: sec.label, pct });
@@ -277,7 +326,7 @@ async function computeSemester(db: Db, collegeId: string, uid: string) {
 
   // Latest published Regular results per year of study.
   const batchesSnap = await collegeRef.collection("semesterResultBatches").where("status", "==", "PUBLISHED").where("examType", "==", "REGULAR").get();
-  const batches = batchesSnap.docs.map((d) => ({ ...(d.data() as ExamResultBatch), id: d.id })).filter((b) => b.department && canHodEditDepartment(scope, b.department));
+  const batches = batchesSnap.docs.map((d) => ({ ...(d.data() as ExamResultBatch), id: d.id })).filter((b) => b.department && canSee(b.department));
   const latestByYear = new Map<number, { examHeld: string; semester: number }>();
   for (const b of batches) {
     const cur = latestByYear.get(b.year);
@@ -297,6 +346,7 @@ async function computeSemester(db: Db, collegeId: string, uid: string) {
       students, below, critical,
       criticalList: criticalList.sort((a, b) => a.pct - b.pct).slice(0, 12),
       bySubject: [...subjectShort.values()].filter((x) => x.below > 0).sort((a, b) => b.below - a.below).slice(0, 6),
+      byDepartment: [...shortByDept.entries()].map(([department, v]) => ({ department, ...v, pct: v.students ? Math.round((v.below / v.students) * 1000) / 10 : null })),
     },
     results: results.filter((r) => r.students > 0),
     computedAt: new Date().toISOString(),
