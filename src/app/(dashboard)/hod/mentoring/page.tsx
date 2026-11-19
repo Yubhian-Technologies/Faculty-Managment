@@ -163,7 +163,7 @@ function AssignView({ onChanged }: { onChanged: () => void }) {
   const allTicked = pickable.length > 0 && pickable.every((s) => picked.has(s.id));
   const teachingMentors = mentors.filter((m) => m.teaches);
   const otherMentors = mentors.filter((m) => !m.teaches);
-  const mentorLabel = (m: MentorOption) => `${nameFor("mentoring", { uid: m.uid }, m.name)}${m.isSelf ? " (You)" : ""} · ${m.menteeCount} mentee${m.menteeCount === 1 ? "" : "s"}`;
+  const mentorLabel = (m: MentorOption) => `${nameFor("mentoring", { uid: m.uid }, m.name)}${m.isSelf ? " (You)" : ""}${m.otherDepartment && m.department ? ` (${m.department})` : ""} · ${m.menteeCount} mentee${m.menteeCount === 1 ? "" : "s"}`;
 
   function toggle(id: string) {
     setPicked((prev) => {
@@ -458,7 +458,7 @@ function BrowseView({ mentors }: { mentors: MentorOption[] }) {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Any mentor</SelectItem>
-                  {mentors.map((m) => <SelectItem key={m.uid} value={m.uid}>{`${nameFor("mentoring", { uid: m.uid }, m.name)}${m.isSelf ? " (You)" : ""} · ${m.menteeCount}`}</SelectItem>)}
+                  {mentors.map((m) => <SelectItem key={m.uid} value={m.uid}>{`${nameFor("mentoring", { uid: m.uid }, m.name)}${m.isSelf ? " (You)" : ""}${m.otherDepartment && m.department ? ` (${m.department})` : ""} · ${m.menteeCount}`}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

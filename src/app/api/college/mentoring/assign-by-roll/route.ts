@@ -60,7 +60,7 @@ export async function POST(request: Request) {
         id: found.data.id, name: found.data.name, section: found.data.section, year: found.data.year,
         status: found.data.status, mentorUid: found.data.mentorUid, mentorName: found.data.mentorName,
       };
-      plan.push(classifyRoll(roll, student, mentorUid, manageable));
+      plan.push(classifyRoll(roll, student, mentorUid, manageable, found ? mentor.covers(found.data) : true));
     }
     const counts = { ...summarizeRollPlan(plan), repeatedInList: repeated };
     const ok = counts.problems === 0;

@@ -20,10 +20,10 @@ export function parseRollNumbers(text: string): { rolls: string[]; repeated: num
   return { rolls, repeated };
 }
 
-export type RollStatus = "ASSIGN" | "ALREADY_MENTEE" | "HAS_OTHER_MENTOR" | "NOT_FOUND" | "OUTSIDE_DEPARTMENT" | "GRADUATED";
+export type RollStatus = "ASSIGN" | "ALREADY_MENTEE" | "HAS_OTHER_MENTOR" | "NOT_FOUND" | "OUTSIDE_DEPARTMENT" | "GRADUATED" | "MENTOR_NOT_TEACHING";
 
 /** Only these stop an assignment; ASSIGN and ALREADY_MENTEE are fine. */
-export const ROLL_PROBLEMS: readonly RollStatus[] = ["HAS_OTHER_MENTOR", "NOT_FOUND", "OUTSIDE_DEPARTMENT", "GRADUATED"];
+export const ROLL_PROBLEMS: readonly RollStatus[] = ["HAS_OTHER_MENTOR", "NOT_FOUND", "OUTSIDE_DEPARTMENT", "GRADUATED", "MENTOR_NOT_TEACHING"];
 
 export interface RollPlanItem {
   roll: string;
@@ -46,13 +46,15 @@ export interface RollStudent {
 }
 
 /** What one Regd. No comes to, for the mentor being assigned. `manageable` = the HOD manages this student. */
-export function classifyRoll(roll: string, student: RollStudent | undefined, mentorUid: string, manageable: boolean): RollPlanItem {
+/** `mentorTeaches`: false when the mentor is from another department and doesn't teach this student's section. */
+export function classifyRoll(roll: string, student: RollStudent | undefined, mentorUid: string, manageable: boolean, mentorTeaches = true): RollPlanItem {
   if (!student) return { roll, status: "NOT_FOUND", message: "No student with this Regd. No in the college." };
   const base = { roll, studentId: student.id, name: student.name ?? "", section: student.section ?? "", year: student.year };
   // A student of another department is not named - the HOD only learns that the roll is not theirs.
   if (!manageable) return { roll, status: "OUTSIDE_DEPARTMENT", message: "Not a student of your department." };
   if (student.status === "GRADUATED") return { ...base, status: "GRADUATED", message: "Already graduated." };
   if (student.mentorUid === mentorUid) return { ...base, status: "ALREADY_MENTEE", message: "Already with this mentor - left as it is." };
+  if (!mentorTeaches) return { ...base, status: "MENTOR_NOT_TEACHING", message: "This mentor is from another department and doesn't teach this student's section." };
   if (student.mentorUid) {
     return { ...base, status: "HAS_OTHER_MENTOR", message: `Already mentored by ${student.mentorName || "another faculty member"} - remove that mentor first.` };
   }

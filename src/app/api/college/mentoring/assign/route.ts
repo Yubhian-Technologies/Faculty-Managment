@@ -34,10 +34,12 @@ export async function POST(request: Request) {
     const { scope, canAssign } = await loadHodStudentScope(db, session.collegeId, session.uid);
 
     let mentorName = "";
+    let covers: (st: StudentRecord) => boolean = () => true;
     if (mentorUid) {
       const mentor = await resolveMentorForHod(db, session.collegeId, session.uid, scope, mentorUid);
       if (!mentor.ok) return NextResponse.json({ error: mentor.error }, { status: mentor.status });
       mentorName = mentor.name;
+      covers = mentor.covers;
     }
 
     const snaps = await Promise.all(studentIds.map((id) => collegeRef.collection("students").doc(id).get()));
@@ -52,6 +54,8 @@ export async function POST(request: Request) {
       if (student.status === "GRADUATED") { skipped.push({ id: snap.id, reason: "Graduated" }); continue; }
       if (!(await canAssign(student))) { skipped.push({ id: snap.id, reason: "Outside your department" }); continue; }
       if ((student.mentorUid ?? null) === mentorUid) { assigned.push(snap.id); continue; }
+      // A mentor from another department takes only students of the sections they teach.
+      if (mentorUid && !covers(student)) { skipped.push({ id: snap.id, reason: "This mentor doesn't teach the student's section" }); continue; }
       // A student who already has a mentor is not offered to another one: the mentor is removed
       // first, then the new one assigned. Removing only clears the mentor fields - the record
       // (notes, entries, semester sheets) hangs off the student and stays for the next mentor.

@@ -34,3 +34,22 @@ describe("classifyRoll", () => {
     expect(summarizeRollPlan(plan)).toEqual({ toAssign: 1, alreadyMentee: 1, problems: 1 });
   });
 });
+
+describe("a mentor from another department", () => {
+  it("is refused for a student of a section they don't teach", () => {
+    const st = { id: "s1", name: "A", section: "A", year: 1, status: "ACTIVE" };
+    expect(classifyRoll("R1", st, "m1", true, false).status).toBe("MENTOR_NOT_TEACHING");
+    expect(classifyRoll("R1", st, "m1", true, true).status).toBe("ASSIGN");
+    // Not the HOD's student at all still says so first.
+    expect(classifyRoll("R1", st, "m1", false, false).status).toBe("OUTSIDE_DEPARTMENT");
+  });
+
+  it("covers a student whose section they teach - by department or the branch the student is filed under", async () => {
+    const { studentInSections } = await import("./assignMentor");
+    const taught = new Set(["artificial intelligence and data science|a|1"]);
+    expect(studentInSections(taught, { department: "Artificial Intelligence and Data Science", section: "A", year: 1 })).toBe(true);
+    expect(studentInSections(taught, { department: "Artificial Intelligence and Data Science", section: "B", year: 1 })).toBe(false);
+    expect(studentInSections(taught, { department: "Basic Science", secondaryDepartment: "Artificial Intelligence and Data Science", section: "A", year: 1 })).toBe(true);
+    expect(studentInSections(taught, { department: "Artificial Intelligence and Data Science", section: "A", year: 2 })).toBe(false);
+  });
+});
