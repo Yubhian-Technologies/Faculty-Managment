@@ -181,17 +181,19 @@ export function groupTodayPeriods(periods: TodayPeriod[]): TodayPeriodGroup[] {
   const groups: TodayPeriodGroup[] = [];
 
   for (const p of sorted) {
-    const lastGroup = groups[groups.length - 1];
-    const lastPeriod = lastGroup?.periods[lastGroup.periods.length - 1];
+    // The group this period continues: the same class (assignment, section, lab batch) whose last period is the one
+    // just before it. Searched among ALL groups, not only the row above - another class at the same times (a second
+    // section, another year's timings) sits between a lab's periods in time order and used to split the lab apart.
+    const lastGroup = groups.find((g) => {
+      const last = g.periods[g.periods.length - 1];
+      return last.assignmentId === p.assignmentId
+        && (last.labBatch ?? null) === (p.labBatch ?? null)
+        && last.sectionId === p.sectionId
+        && p.periodNumber === last.periodNumber + 1;
+    });
+    const isContinuous = !!lastGroup;
 
-    const isContinuous =
-      lastPeriod &&
-      lastPeriod.assignmentId === p.assignmentId &&
-      (lastPeriod.labBatch ?? null) === (p.labBatch ?? null) &&
-      lastPeriod.sectionId === p.sectionId &&
-      p.periodNumber === lastPeriod.periodNumber + 1;
-
-    if (isContinuous) {
+    if (isContinuous && lastGroup) {
       lastGroup.periods.push(p);
       lastGroup.periodNumbers.push(p.periodNumber);
       lastGroup.endTime = p.endTime;
