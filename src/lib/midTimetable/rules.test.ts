@@ -63,9 +63,9 @@ describe("mid timetable rules", () => {
     const days = ["2026-11-09"];
     const both = [{ subjectId: "s1", date: "2026-11-09", sessionId: "S1" }, { subjectId: "s2", date: "2026-11-09", sessionId: "S2" }];
     expect(checkSlots(both, [subj(1), subj(2)], days, S).errors).toEqual([]);
-    expect(checkSlots(both, [subj(1), subj(2)], days, S, 1).errors).toEqual(["Mon 9 Nov 2026: 2 exams - at most 1 a day"]);
+    expect(checkSlots(both, [subj(1), subj(2)], days, S, 1).errors).toEqual(["Mon 09/11/2026: 2 exams - at most 1 a day"]);
     const clash = [...S, { id: "S3", label: "Noon", from: "11:00", to: "12:30" }];
-    expect(checkSlots([both[0], { subjectId: "s2", date: "2026-11-09", sessionId: "S3" }], [subj(1), subj(2)], days, clash).errors).toEqual(["Mon 9 Nov 2026: Morning and Noon overlap"]);
+    expect(checkSlots([both[0], { subjectId: "s2", date: "2026-11-09", sessionId: "S3" }], [subj(1), subj(2)], days, clash).errors).toEqual(["Mon 09/11/2026: Morning and Noon overlap"]);
   });
 
   it("a branch's usual session: set, else the one most used, else the first", () => {

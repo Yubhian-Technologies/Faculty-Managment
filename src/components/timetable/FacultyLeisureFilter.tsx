@@ -6,6 +6,7 @@ import { toast } from "@/hooks/useToast";
 import { useCollegeInfo } from "@/hooks/useCollegeInfo";
 import { downloadFreeFacultyPdf, downloadFreeFacultyXlsx } from "@/lib/timetable/freeFacultyExport";
 import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
+import { Input } from "@/components/ui/input";
 interface LeisureFaculty { id: string; employeeId: string; name: string; department: string; freeRanges?: [string, string][] }
 
 // College-wide "who is free at this time" (Principal, Vice Principal, Exam
@@ -129,7 +130,7 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
 
           <label className="space-y-1">
             <span className="text-xs text-muted-foreground">Date</span>
-            <input type="date" aria-label="Date" className={fieldClass} value={date} onChange={(e) => change(setDate)(e.target.value)} />
+            <Input type="date" aria-label="Date" className={fieldClass} value={date} onChange={(e) => change(setDate)(e.target.value)} />
           </label>
 
           <label className="space-y-1">
@@ -218,11 +219,11 @@ export function FacultyLeisureFilter({ scopeLabel = "in the college" }: { scopeL
   );
 }
 
-// "2026-10-05" -> "Mon, 05 Oct 2026". Built from the parts rather than
+// "2026-10-05" -> "Mon, 05/10/2026". Built from the parts rather than
 // new Date(iso) so the day never slips a date either side of UTC midnight.
 function formatDate(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!m) return iso;
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
+  return `${d.toLocaleDateString("en-GB", { weekday: "short" })}, ${m[3]}/${m[2]}/${m[1]}`;
 }

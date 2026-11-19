@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { cn } from "@/lib/utils";
+import { cn, dmy } from "@/lib/utils";
 import type { PayrollLine, PayrollRun, PayrollRunStatus, PayrollTotals } from "@/types/payroll";
 import { PayrollLineDialog } from "./PayrollLineDialog";
 import { MonthlyDeductionsDialog } from "./MonthlyDeductionsDialog";
@@ -93,7 +93,7 @@ export function MonthlyRuns({ collegeId }: { collegeId?: string }) {
             <tbody>{list.runs.map((r) => (
               <tr key={r.month} className="cursor-pointer border-t hover:bg-muted/30" onClick={() => setOpen(r.month)}>
                 <td className="px-3 py-2 font-medium">{monthLabel(r.month)}</td>
-                <td className="px-3 py-2"><StatusPill s={r.status} />{r.status === "RETURNED" && r.returnRemarks && <div className="mt-1 max-w-xs truncate text-xs text-muted-foreground">{r.returnRemarks}</div>}{r.release && <div className="mt-1 text-xs text-muted-foreground">Paid {r.release.paidOn} · {r.release.reference}</div>}</td>
+                <td className="px-3 py-2"><StatusPill s={r.status} />{r.status === "RETURNED" && r.returnRemarks && <div className="mt-1 max-w-xs truncate text-xs text-muted-foreground">{r.returnRemarks}</div>}{r.release && <div className="mt-1 text-xs text-muted-foreground">Paid {dmy(r.release.paidOn)} · {r.release.reference}</div>}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.totals.count}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{rupees(r.totals.gross)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{rupees(r.totals.totalDeductions)}</td>
@@ -189,7 +189,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">Income tax isn&apos;t worked out: Accounts haven&apos;t confirmed this financial year&apos;s tax rules (Payroll &gt; Income tax). After they do, Recalculate.</p>
       )}
       {run.status === "RETURNED" && run.returnRemarks && <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"><span className="font-semibold">Accounts returned it: </span>{run.returnRemarks}</p>}
-      {run.release && <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">Released - paid on {run.release.paidOn}, reference {run.release.reference} ({run.release.byName}). This month is locked; corrections go into a later month as arrears or deductions.</p>}
+      {run.release && <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">Released - paid on {dmy(run.release.paidOn)}, reference {run.release.reference} ({run.release.byName}). This month is locked; corrections go into a later month as arrears or deductions.</p>}
 
       <div className="flex flex-wrap gap-2">
         {editable && <Button variant="outline" onClick={recalc} disabled={busy}><RefreshCw className="mr-1.5 h-4 w-4" />Recalculate</Button>}

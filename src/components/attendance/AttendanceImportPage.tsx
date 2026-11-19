@@ -12,6 +12,7 @@ import { toast } from "@/hooks/useToast";
 import { toCSV, parseCSV, downloadCSV, matchHeaders, parseExcelFile, readFileAsText } from "@/lib/utils/csv";
 import { ATTENDANCE_IMPORT_COLUMNS as COLUMNS, ATTENDANCE_IMPORT_HINTS as HINTS } from "@/lib/attendance/importCsvColumns";
 import { Download, Upload, CheckCircle2, XCircle, FileSpreadsheet, ArrowLeft, AlertTriangle } from "lucide-react";
+import { dmy } from "@/lib/utils";
 
 type ParsedRow = Record<string, string>;
 type ImportResult = {
@@ -320,7 +321,7 @@ export function AttendanceImportPage({ title, description, backHref, backLabel }
                 <div className="rounded-lg border divide-y max-h-48 overflow-y-auto">
                   {result.skipped.map((s, i) => (
                     <div key={i} className="flex items-center justify-between px-3 py-2 text-sm gap-3">
-                      <span className="text-muted-foreground shrink-0">Row {s.row} · {s.employeeId} · {s.date}</span>
+                      <span className="text-muted-foreground shrink-0">Row {s.row} · {s.employeeId} · {dmy(s.date)}</span>
                       <span className="text-amber-600 text-xs text-right">{s.reason}</span>
                     </div>
                   ))}

@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { Check, Clock, Undo2, X } from "lucide-react";
-import { cn, toDate } from "@/lib/utils";
+import { cn, toDate, formatDate } from "@/lib/utils";
 import type { CertificateRequest } from "@/types";
 
 // Every approval of a configured request, in order: who approved / rejected and when, the step waiting now, and
@@ -10,7 +10,7 @@ type State = "done" | "current" | "rejected" | "returned" | "upcoming";
 
 const when = (ts: unknown) => {
   const d = toDate(ts as never);
-  return d ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
+  return d ? formatDate(d) : "";
 };
 
 function Dot({ state }: { state: State }) {

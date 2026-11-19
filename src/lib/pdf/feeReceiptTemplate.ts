@@ -1,5 +1,6 @@
 import { logoSrc } from "@/lib/pdf/logo";
 import type { Payment } from "@/types";
+import { formatDate } from "@/lib/utils";
 
 // Print-ready fee receipt for an online payment, laid out like the college's own printed fee receipts:
 // logo top-left, college name + place centred, "<fee> Receipt", the copy label (STUDENT), No / Dated / Receipt
@@ -35,7 +36,7 @@ export function rupeesInWords(amount: number): string {
 }
 
 const money = (n: number) => n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const dateText = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) : "");
+const dateText = (iso?: string) => (iso ? formatDate(new Date(iso)) : "");
 
 export interface FeeReceiptData {
   payment: Pick<Payment, "id" | "receiptNo" | "amount" | "status" | "purpose" | "studentName" | "studentRollNumber" | "studentYear" | "studentDepartment" | "academicYear" | "trackingId" | "bankRefNo" | "paymentMode" | "cardName" | "settledAt" | "createdAt" | "refundedAmount">;

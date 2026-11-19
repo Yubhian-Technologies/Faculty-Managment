@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { warmFaceModels } from "@/lib/attendance/faceMatch";
 import { PasskeyAttendanceDialog } from "@/components/attendance/PasskeyAttendanceDialog";
+import { formatDate } from "@/lib/utils";
 
 // On every self-attendance page (faculty, HOD, Principal / VP, staff):
 //  - warms the face models up while the page is open, when the college uses the face scan, so tapping Check In
@@ -16,7 +17,7 @@ import { PasskeyAttendanceDialog } from "@/components/attendance/PasskeyAttendan
 interface Phone { id: string; label: string; createdAt: string | null; lastUsedAt: string | null }
 
 function when(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "never";
+  return iso ? formatDate(new Date(iso)) : "never";
 }
 
 function fetchPhones(): Promise<{ method: "FACE" | "PASSKEY" | "EITHER"; passkeys: Phone[] } | null> {

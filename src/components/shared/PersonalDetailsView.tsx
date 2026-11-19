@@ -24,7 +24,7 @@ function formatRatificationDate(date: string | undefined): string {
   if (!date) return "-";
   const d = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+  return formatDate(d);
 }
 
 export interface PersonalDetailsSource {

@@ -13,6 +13,7 @@ import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import type { DayOfWeek, FacultyMember, TimetableSlot, CourseYearTiming } from "@/types";
 import type { LeaveRequest, PeriodSubstitution, StaffAdjustment } from "@/types/leave";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
+import { dmy } from "@/lib/utils";
 
 // Resolves, for a batch of TimetableSlots spanning possibly many course-years,
 // which ones belong to the currently-live semester/session - the same "no
@@ -417,7 +418,7 @@ export async function validatePeriodSubstitutions(params: {
     if (!candidate) {
       return {
         ok: false,
-        error: `No eligible substitute matches your selection for ${period.subjectName} on ${period.date} (period ${period.periodNumber}) - they may already be teaching then or are on leave.`,
+        error: `No eligible substitute matches your selection for ${period.subjectName} on ${dmy(period.date)} (period ${period.periodNumber}) - they may already be teaching then or are on leave.`,
       };
     }
     resolved.push({
@@ -676,7 +677,7 @@ export async function notifySubstitutes(db: Firestore, collegeId: string, req: L
   for (const [facultyId, periods] of byFaculty) {
     const uid = await resolveLoginUidForFacultyMember(db, collegeId, facultyId);
     if (!uid || uid === facultyId) continue; // not provisioned with a login yet - nothing to notify
-    const shown = periods.slice(0, 3).map((p) => `${p.subjectName} (${p.day} P${p.periodNumber}, ${p.date})`).join("; ");
+    const shown = periods.slice(0, 3).map((p) => `${p.subjectName} (${p.day} P${p.periodNumber}, ${dmy(p.date)})`).join("; ");
     const rest = periods.length > 3 ? ` and ${periods.length - 3} more` : "";
     await notify(
       db, collegeId, uid, "SUBSTITUTE_ASSIGNED", "You're covering a class",

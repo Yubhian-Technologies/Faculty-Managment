@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { yearOrdinalLabel } from "@/lib/college/academicYears";
-import { stripLeadingZeros, toDateInputValue } from "@/lib/utils";
+import { stripLeadingZeros, toDateInputValue, dmy } from "@/lib/utils";
 import type { BreakConfig, CourseYearTiming } from "@/types";
 
 type SemesterRangeForm = { semester: number; startDate: string; endDate: string }; // dates are "YYYY-MM-DD"
@@ -237,7 +237,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
         toast({
           variant: "destructive",
           title: `Semester ${outOfBounds.semester} falls outside the ${sessionBounds.label ?? "current"} academic year`,
-          description: `Academic year runs ${sessionBounds.startDate} to ${sessionBounds.endDate}.`,
+          description: `Academic year runs ${dmy(sessionBounds.startDate)} to ${dmy(sessionBounds.endDate)}.`,
         });
         return;
       }
@@ -471,7 +471,7 @@ export function CourseYearTimingForm({ departmentId, courseId, year, courseName,
             <CardContent className="space-y-4">
               {sessionBounds && (
                 <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                  <span className="font-semibold text-foreground">{sessionBounds.label ?? "Academic Session"}:</span> {sessionBounds.startDate} to {sessionBounds.endDate}
+                  <span className="font-semibold text-foreground">{sessionBounds.label ?? "Academic Session"}:</span> {dmy(sessionBounds.startDate)} to {dmy(sessionBounds.endDate)}
                 </div>
               )}
 

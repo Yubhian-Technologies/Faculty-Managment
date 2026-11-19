@@ -5,6 +5,7 @@ import { History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { formatDate } from "@/lib/utils";
 
 // "What changed since this was verified?" - shown to whoever has to verify an
 // edited record again (R&D, the department's R&D Coordinator).
@@ -33,7 +34,7 @@ export function readPendingChanges(record: unknown): { changes: FieldChange[]; c
     changes: raw.changes,
     changedByName: raw.changedByName ?? "The submitter",
     changedOn: date && !Number.isNaN(date.getTime())
-      ? date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+      ? formatDate(date)
       : "",
   };
 }

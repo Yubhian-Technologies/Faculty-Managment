@@ -16,6 +16,7 @@ import { deadlineLabel } from "@/lib/midBank/deadline";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
 import { istDateKey } from "@/lib/attendance/istTime";
 import type { Course, CourseYearTiming, MidBankDeadline } from "@/types";
+import { formatDate, dmy } from "@/lib/utils";
 
 // Exam Cell > Mid Timings & Dates: the question bank deadline, set BEFORE the
 // Mid's timings. Publishing one opens the Question Bank module for every faculty
@@ -213,7 +214,7 @@ export function MidBankDeadlinesCard({ midCount }: { midCount: number }) {
                     <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><History className="h-3.5 w-3.5" />Earlier changes</p>
                     <ul className="space-y-1 text-xs">
                       {[...editing.row.extensions].reverse().map((x) => (
-                        <li key={x.at}>{x.from} &rarr; <span className="font-medium">{x.to}</span> <span className="text-muted-foreground">· {x.byName}, {new Date(x.at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span></li>
+                        <li key={x.at}>{dmy(x.from)} &rarr; <span className="font-medium">{dmy(x.to)}</span> <span className="text-muted-foreground">· {x.byName}, {formatDate(new Date(x.at))}</span></li>
                       ))}
                     </ul>
                   </div>

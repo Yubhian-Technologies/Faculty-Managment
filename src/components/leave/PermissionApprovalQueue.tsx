@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import type { PermissionRequest } from "@/types/permission";
+import { dmy } from "@/lib/utils";
 
 // Late-attendance permissions waiting on THIS approver. A separate queue from
 // the leave one because a permission is a separate record - it carries no
@@ -84,7 +85,7 @@ export function PermissionApprovalQueue() {
               </div>
               <p className="flex items-center gap-1.5 text-sm">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                {r.date} · {r.fromTime}-{r.toTime}
+                {dmy(r.date)} · {r.fromTime}-{r.toTime}
                 <span className="text-muted-foreground">({r.minutes} min)</span>
               </p>
               <p className="text-xs text-muted-foreground">{r.reason}</p>

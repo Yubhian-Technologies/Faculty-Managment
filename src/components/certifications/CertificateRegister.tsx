@@ -15,11 +15,12 @@ import { toast } from "@/hooks/useToast";
 import { downloadCSV, toCSV } from "@/lib/utils/csv";
 import type { IssuedCertificate } from "@/types";
 import { downloadIssued, loadRegister, revokeCertificate } from "./configApi";
+import { formatDate } from "@/lib/utils";
 
 // The Certificate Register: every certificate issued, with its number, the student, who issued it and when, the
 // fee receipt, and whether it was revoked. Searchable, exportable, each copy re-downloadable exactly as issued.
 
-const day = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+const day = (iso: string) => formatDate(new Date(iso));
 
 export function CertificateRegister({ canRevoke }: { canRevoke: boolean }) {
   const [rows, setRows] = useState<IssuedCertificate[] | null>(null);

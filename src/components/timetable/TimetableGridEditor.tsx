@@ -18,7 +18,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
-import { formatDMY } from "@/lib/utils";
+import { formatDMY, formatDate } from "@/lib/utils";
 import { formatTime12h } from "@/lib/timetable/facultyTimetablePdf";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { buildRows, defaultPeriodTimings } from "@/lib/timetable/buildGrid";
@@ -84,7 +84,7 @@ function adminUpdatedOn(at: unknown): string {
   const d = typeof v === "string" ? new Date(v)
     : v && typeof v === "object" && typeof v.toDate === "function" ? v.toDate()
       : v && typeof v === "object" && (v._seconds ?? v.seconds) != null ? new Date(((v._seconds ?? v.seconds) as number) * 1000) : null;
-  return d && !Number.isNaN(d.getTime()) ? ` on ${d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}` : "";
+  return d && !Number.isNaN(d.getTime()) ? ` on ${formatDate(d)}` : "";
 }
 
 export function TimetableGridEditor({ courseId, year, sectionId, backHref, asAdmin = false, semester, publishedWeekTools = false, gridFirst = false, footer }: TimetableGridEditorProps) {

@@ -11,7 +11,6 @@ import { SUBJECT_TYPE_LABELS, type SubjectType, type TeachingAssignment, type Ti
 import { subjectAbbreviation } from "./subjectAbbreviation";
 import { toRoman, type AllocationEntry } from "./gridModel";
 
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /** "Bachelor Of Technology" -> "B.Tech"; anything unrecognised is left as written. */
 export function shortCourse(course: string): string {
@@ -67,14 +66,13 @@ export interface TimetableHeaderLines {
   roomLine: string;
 }
 
-/** "2026-07-20" -> "20 July 2026"; text that isn't an ISO date is shown as written. */
+/** "2026-07-20" -> "20/07/2026"; text that isn't an ISO date is shown as written. */
 export function formatWefDate(effectiveDate?: string): string {
   const eff = effectiveDate?.trim();
   if (!eff) return "";
   const iso = eff.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!iso) return eff;
-  const month = MONTHS[Number(iso[2]) - 1];
-  return month ? `${Number(iso[3])} ${month} ${iso[1]}` : eff;
+  return `${iso[3]}/${iso[2]}/${iso[1]}`;
 }
 
 export function buildTimetableHeaderLines(parts: TimetableHeaderParts): TimetableHeaderLines {

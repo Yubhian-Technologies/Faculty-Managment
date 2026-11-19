@@ -17,6 +17,7 @@ import { AddToHomeScreen } from "@/components/attendance/AddToHomeScreen";
 import { useAuthStore } from "@/store/authStore";
 import { checkedMeaningFor, defaultFillFor, type AttendanceMode } from "@/lib/studentAttendance/markMode";
 import type { StudentAttendanceMark, StudentAttendanceSession } from "@/types";
+import { Input } from "@/components/ui/input";
 
 const PERIOD_POLL_MS = 60_000;
 const BOUNDARY_WINDOW_MS = 5 * 60_000;
@@ -771,10 +772,10 @@ export default function MarkAttendancePage() {
             </ul>
             <div className="flex flex-wrap items-center gap-2">
               <Label htmlFor="alloc-date" className="text-xs">Mark for date</Label>
-              <input
+              <Input
                 id="alloc-date"
                 type="date"
-                className="h-9 rounded-md border bg-background px-2 text-sm"
+                className="h-9 w-44 rounded-md border bg-background px-2 text-sm"
                 value={viewDate ?? ""}
                 max={todayStr()}
                 onChange={(e) => void changeViewDate(e.target.value || null)}

@@ -1,4 +1,5 @@
 import { logoSrc } from "@/lib/pdf/logo";
+import { formatDate } from "@/lib/utils";
 
 // One A4 page, split into two identical halves so the printed sheet can be
 // cut in two: the top half stays with the College Office, the bottom half is
@@ -49,7 +50,7 @@ export interface CertificateTemplateData {
 
 function renderHalf(data: CertificateTemplateData, copyTag: string): string {
   const clearanceRows = data.clearances
-    .map((c) => `<tr><td>${c.branchLabel}</td><td class="status-cleared">Cleared</td><td>${new Date(c.decidedAt).toLocaleDateString("en-IN")}</td></tr>`)
+    .map((c) => `<tr><td>${c.branchLabel}</td><td class="status-cleared">Cleared</td><td>${formatDate(new Date(c.decidedAt))}</td></tr>`)
     .join("");
 
   return `
@@ -60,7 +61,7 @@ function renderHalf(data: CertificateTemplateData, copyTag: string): string {
       <p class="college-name">${data.collegeName}</p>
     </div>
     <div class="title">${data.certificateTypeLabel.toUpperCase()}</div>
-    <div class="meta">Certificate No: ${data.certificateNumber} &nbsp;|&nbsp; Date: ${new Date(data.issuedAt).toLocaleDateString("en-IN")}</div>
+    <div class="meta">Certificate No: ${data.certificateNumber} &nbsp;|&nbsp; Date: ${formatDate(new Date(data.issuedAt))}</div>
 
     <table class="facts">
       <tr><td class="label">Student Name</td><td>${data.studentName}</td></tr>

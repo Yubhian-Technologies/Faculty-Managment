@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/useToast";
 import { CameraCaptureModal } from "@/components/shared/CameraCaptureModal";
 import type { LocationDepartment, LocationShift, LocationStaffMember, LocationConfig } from "@/types/locationStaff";
+import { dmy } from "@/lib/utils";
 
 const COMMON_ROLES = [
   "Security Guard",
@@ -322,7 +323,7 @@ export function LocationStaffForm({
             <Label className="text-xs font-medium">Date of Joining <span className="text-destructive">*</span></Label>
             <Input type="date" value={dateOfJoining} onChange={(e) => { setDateOfJoining(e.target.value); if (errors.dateOfJoining) setErrors((p) => ({ ...p, dateOfJoining: "" })); }}
               className={`h-9 text-xs ${errors.dateOfJoining && touched.dateOfJoining ? "border-destructive focus-visible:ring-destructive" : ""}`} />
-            {errors.dateOfJoining && touched.dateOfJoining && <p className="text-[11px] text-destructive font-medium">{errors.dateOfJoining}</p>}
+            {errors.dateOfJoining && touched.dateOfJoining && <p className="text-[11px] text-destructive font-medium">{dmy(errors.dateOfJoining)}</p>}
           </div>
           <div className="space-y-1">
             <Label className="text-xs font-medium">Report At Gate <span className="text-destructive">*</span></Label>

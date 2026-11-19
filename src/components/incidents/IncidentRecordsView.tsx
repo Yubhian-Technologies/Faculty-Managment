@@ -10,6 +10,7 @@ import {
 import { toast } from "@/hooks/useToast";
 import { INCIDENT_VIEWED_EVENT } from "@/hooks/useIncidentUnread";
 import type { IncidentAffectedType, IncidentReport } from "@/types";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 const TYPE_LABELS: Record<IncidentAffectedType, string> = { STUDENT: "Student", FACULTY: "Faculty", BOTH: "Both" };
 
@@ -18,13 +19,13 @@ const TYPE_LABELS: Record<IncidentAffectedType, string> = { STUDENT: "Student", 
 function formatIncidentDate(value: string): string {
   const [y, m, d] = value.split("-").map(Number);
   if (!y || !m || !d) return value || "-";
-  return new Date(y, m - 1, d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(new Date(y, m - 1, d));
 }
 
 function formatSubmitted(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatDateTime(d);
 }
 
 function ordinalYear(year: number | null) {

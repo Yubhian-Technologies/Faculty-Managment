@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { ordinalYear } from "@/lib/timetable/gridModel";
 import type { LabAttendanceDateRange } from "@/types";
+import { Input } from "@/components/ui/input";
 
 // "Allocate attendance faculty": pick a LAB (PRACTICAL subject), the faculty
 // teaching it (asked only when more than one does), and the date ranges on
@@ -207,11 +208,11 @@ export function LabAttendanceAllocation({ loadAssignments }: { loadAssignments: 
                 <div key={i} className="flex flex-wrap items-end gap-2">
                   <div className="space-y-1">
                     <span className="text-xs text-muted-foreground">From</span>
-                    <input type="date" className="block h-10 rounded-md border bg-background px-2 text-sm" value={r.from} onChange={(e) => setRange(i, { from: e.target.value })} />
+                    <Input type="date" className="block h-10 w-44 rounded-md border bg-background px-2 text-sm" value={r.from} onChange={(e) => setRange(i, { from: e.target.value })} />
                   </div>
                   <div className="space-y-1">
                     <span className="text-xs text-muted-foreground">To</span>
-                    <input type="date" className="block h-10 rounded-md border bg-background px-2 text-sm" min={r.from || undefined} value={r.to} onChange={(e) => setRange(i, { to: e.target.value })} />
+                    <Input type="date" className="block h-10 w-44 rounded-md border bg-background px-2 text-sm" min={r.from || undefined} value={r.to} onChange={(e) => setRange(i, { to: e.target.value })} />
                   </div>
                   {ranges.length > 1 && (
                     <Button type="button" size="icon" variant="ghost" title="Remove this range" onClick={() => setRanges((prev) => prev.filter((_, idx) => idx !== i))}>

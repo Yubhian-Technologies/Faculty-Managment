@@ -20,9 +20,9 @@ const row = (over: Record<string, unknown> = {}) =>
 
 describe("fmtDate / joiningLabel", () => {
   it("formats every timestamp shape the app sees, and '-' for nothing", () => {
-    expect(fmtDate(ts("2026-04-02T06:00:00Z"))).toBe("02 Apr 2026");
-    expect(fmtDate({ seconds: Math.floor(new Date("2025-03-21T06:00:00Z").getTime() / 1000) })).toBe("21 Mar 2025");
-    expect(fmtDate({ toDate: () => new Date("2026-07-01T06:00:00Z") })).toBe("01 Jul 2026");
+    expect(fmtDate(ts("2026-04-02T06:00:00Z"))).toBe("02/04/2026");
+    expect(fmtDate({ seconds: Math.floor(new Date("2025-03-21T06:00:00Z").getTime() / 1000) })).toBe("21/03/2025");
+    expect(fmtDate({ toDate: () => new Date("2026-07-01T06:00:00Z") })).toBe("01/07/2026");
     expect(fmtDate(undefined)).toBe("-");
     expect(fmtDate(null)).toBe("-");
     expect(fmtDate("garbage")).toBe("-");
@@ -37,8 +37,8 @@ describe("fmtDate / joiningLabel", () => {
 
 describe("JoiningLine", () => {
   it("shows 'DOJ' for a joined faculty and 'Expected to join' for Interview Done", () => {
-    expect(html(createElement(JoiningLine, { row: row() }))).toContain("DOJ: 02 Apr 2026");
-    expect(html(createElement(JoiningLine, { row: row({ status: "INTERVIEW_DONE" }) }))).toContain("Expected to join: 02 Apr 2026");
+    expect(html(createElement(JoiningLine, { row: row() }))).toContain("DOJ: 02/04/2026");
+    expect(html(createElement(JoiningLine, { row: row({ status: "INTERVIEW_DONE" }) }))).toContain("Expected to join: 02/04/2026");
   });
   it("shows a dash rather than 'Invalid Date' when there is no joining date", () => {
     const out = html(createElement(JoiningLine, { row: row({ joiningDate: undefined }) }));

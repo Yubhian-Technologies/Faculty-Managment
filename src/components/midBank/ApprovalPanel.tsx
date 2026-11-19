@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { toast } from "@/hooks/useToast";
 import { bankStage, STAGE_CLASS, stageLabel, type ApprovalAction } from "@/lib/midBank/approval";
 import type { MidQuestionBank } from "@/types";
+import { formatDate } from "@/lib/utils";
 
 // The HOD-approval strip on a question bank: its stage and history for
 // everyone (the Exam Cell sees banks before approval too); Submit / Withdraw
@@ -52,7 +53,7 @@ export function ApprovalPanel({ bank, isOwner, isHod, onChanged, editHref }: { b
   if (bank.withdrawn) return (
     <Card><CardContent className="p-4 text-sm">
       <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold">Withdrawn by the HOD</span>
-      <span className="ml-3 text-muted-foreground">{bank.withdrawn.byName} removed {isOwner ? "you" : bank.ownerName} as setter on {new Date(bank.withdrawn.at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" })}. Everything written is kept; it isn&apos;t sent to the Exam Cell.</span>
+      <span className="ml-3 text-muted-foreground">{bank.withdrawn.byName} removed {isOwner ? "you" : bank.ownerName} as setter on {formatDate(new Date(bank.withdrawn.at))}. Everything written is kept; it isn&apos;t sent to the Exam Cell.</span>
     </CardContent></Card>
   );
   const canSubmit = isOwner && (stage === "READY" || (stage === "RETURNED" && bank.status === "COMPLETE"));

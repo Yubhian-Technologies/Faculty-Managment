@@ -6,6 +6,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { Circular, CircularAudience, EmployeeScope } from "@/types/circular";
 import { batchNotify } from "@/lib/notify";
 import { sendMail } from "@/lib/email/mailer";
+import { formatDate } from "@/lib/utils";
 
 function circularsCol(db: Firestore, collegeId: string) {
   return db.collection("colleges").doc(collegeId).collection("circulars");
@@ -217,7 +218,7 @@ export function toPrintableHtml(circular: Circular): string {
   const dateStr = (() => {
     try {
       const d = (circular.date as unknown as { toDate?: () => Date })?.toDate?.() ?? new Date(circular.date as unknown as string);
-      return d.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric", month: "long", day: "numeric" });
+      return formatDate(d);
     } catch {
       return "";
     }

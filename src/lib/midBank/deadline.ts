@@ -1,4 +1,5 @@
 import { istDateKey } from "@/lib/attendance/istTime";
+import { formatDate } from "@/lib/utils";
 
 // The question bank deadline: the last day banks may be written. A bank is
 // locked from the next day (IST) until the Exam Cell extends the deadline.
@@ -8,7 +9,7 @@ export const isDeadlineLocked = (deadline: string, today: string = istDateKey())
 /** "Due 20 Nov 2026" / "Locked since 21 Nov 2026" - for badges. */
 export function deadlineLabel(deadline: string, today: string = istDateKey()): string {
   const d = new Date(`${deadline}T00:00:00Z`);
-  const text = Number.isNaN(d.getTime()) ? deadline : d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const text = Number.isNaN(d.getTime()) ? deadline : formatDate(d);
   return isDeadlineLocked(deadline, today) ? `Deadline ${text} passed` : `Due ${text}`;
 }
 

@@ -12,6 +12,7 @@ import type { PayrollLine, PayrollRun } from "@/types/payroll";
 import { collegeQs, monthLabel, payrollFetch, rupees, selectClass } from "./payrollClient";
 import { downloadPayslip } from "./payslipDownload";
 import type { PayslipData } from "@/lib/payroll/payslip";
+import { dmy } from "@/lib/utils";
 
 // One person's line: how the pay days and money were worked out, and (while the month is open) what the
 // College Office can adjust - LOP days (with a reason), not credited, hold, one-off earnings (arrears),
@@ -95,7 +96,7 @@ export function PayrollLineDialog({ collegeId, run, line, actor, editable, onClo
           <div className="space-y-1 text-sm">
             <p className="font-medium">Pay days</p>
             <Row k="Days in the month" v={line.auto.monthDays} />
-            {line.auto.notEmployedDays > 0 && <Row k={line.joiningDate?.startsWith(run.month) ? `Not yet joined (joined ${line.joiningDate})` : `After last working day (${line.lastWorkingDate})`} v={`- ${line.auto.notEmployedDays}`} />}
+            {line.auto.notEmployedDays > 0 && <Row k={line.joiningDate?.startsWith(run.month) ? `Not yet joined (joined ${dmy(line.joiningDate)})` : `After last working day (${dmy(line.lastWorkingDate)})`} v={`- ${line.auto.notEmployedDays}`} />}
             <Row k="Loss of pay from leave" v={line.auto.leaveLop ? `- ${line.auto.leaveLop}` : "0"} />
             <Row k={`Absent per attendance${line.auto.absentDates.length ? ` (${line.auto.absentDates.map((d) => d.slice(8)).join(", ")})` : ""}`} v={line.auto.attendanceLop ? `- ${line.auto.attendanceLop}` : "0"} />
             {line.lopOverride && <Row k={`LOP set by ${line.lopOverride.byName}: ${line.lopOverride.reason}`} v={`${line.lopOverride.days} (auto ${line.auto.lop})`} />}

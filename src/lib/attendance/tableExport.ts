@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { escapeHtml } from "@/lib/timetable/facultyTimetablePdf";
 import { renderHtmlToPdf } from "@/lib/pdf/htmlToPdf";
+import { dmy } from "@/lib/utils";
 
 // One heading + a header row + body rows, as the Not Posted report shows them.
 // `subtitle` is the filter line (department, date or range, ...) printed under
@@ -12,6 +13,9 @@ export interface TableExport {
   headers: string[];
   rows: (string | number)[][];
 }
+
+/** A stored "YYYY-MM-DD" cell is printed in the site's DD/MM/YYYY. */
+const shown = (v: string | number) => (typeof v === "string" ? dmy(v) : v);
 
 export async function downloadTableXlsx({ title, subtitle, headers, rows }: TableExport, filename: string): Promise<void> {
   const workbook = new ExcelJS.Workbook();
@@ -30,7 +34,7 @@ export async function downloadTableXlsx({ title, subtitle, headers, rows }: Tabl
   const header = sheet.addRow(headers);
   header.font = { bold: true };
   header.eachCell((c) => { c.border = border; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8EEF7" } }; });
-  for (const r of rows) sheet.addRow(r).eachCell({ includeEmpty: true }, (c) => { c.border = border; });
+  for (const r of rows) sheet.addRow(r.map(shown)).eachCell({ includeEmpty: true }, (c) => { c.border = border; });
   headers.forEach((h, i) => {
     const longest = Math.max(h.length, ...rows.map((r) => String(r[i] ?? "").length));
     sheet.getColumn(i + 1).width = Math.min(Math.max(longest + 2, 8), 40);
@@ -54,7 +58,7 @@ export async function downloadTablePdf({ title, subtitle, headers, rows }: Table
       ${subtitle ? `<p style="margin:4px 0 12px;color:#555;font-size:13px">${escapeHtml(subtitle)}</p>` : ""}
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr>${headers.map((h) => `<th style="${cell};background:#e8eef7">${escapeHtml(h)}</th>`).join("")}</tr></thead>
-        <tbody>${rows.map((r) => `<tr>${r.map((v) => `<td style="${cell}">${escapeHtml(String(v ?? ""))}</td>`).join("")}</tr>`).join("")}</tbody>
+        <tbody>${rows.map((r) => `<tr>${r.map((v) => `<td style="${cell}">${escapeHtml(String(shown(v) ?? ""))}</td>`).join("")}</tr>`).join("")}</tbody>
       </table>
     </body></html>`;
   await renderHtmlToPdf(html, filename.endsWith(".pdf") ? filename : `${filename}.pdf`);

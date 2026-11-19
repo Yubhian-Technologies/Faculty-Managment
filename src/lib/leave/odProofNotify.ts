@@ -3,6 +3,7 @@ import { notify, notifyRole } from "@/lib/notify";
 import { emitWorkflowNotification, resolveWorkflowNotifications } from "@/lib/notifications/workflowNotifications";
 import { evaluateODProof } from "./odProof";
 import type { LeaveRequest } from "@/types/leave";
+import { formatDate } from "@/lib/utils";
 
 // Notifications for the On Duty proof cycle. Server-only by design - kept out
 // of odProof.ts, which has to stay importable from a "use client" component.
@@ -14,9 +15,6 @@ import type { LeaveRequest } from "@/types/leave";
 // silently dismiss a proof still waiting to be looked at.
 const OD_PROOF_ENTITY = "leaveOdProof";
 
-function formatDate(d: Date | null): string {
-  return d ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
-}
 
 /**
  * Tells whoever has to verify it that proof has arrived.

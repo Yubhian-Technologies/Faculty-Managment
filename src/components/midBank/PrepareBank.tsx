@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/useToast";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { LIMITS, MAPPING_TARGETS, PROGRAM_OUTCOMES } from "@/lib/midBank/constants";
 import { daysLeft, deadlineLabel } from "@/lib/midBank/deadline";
 import { allowedFormats, bankFormatText } from "@/lib/midBank/validateQuestion";
@@ -355,7 +355,7 @@ export function PrepareBank({ data, step, onStep, onChanged }: {
             <Lock className="h-4 w-4 shrink-0" />
             {noSyllabus
               ? setup.issues.find((i) => i.code === "NO_SYLLABUS")?.message ?? "The syllabus isn't frozen yet."
-              : `From the subject's syllabus, frozen by ${fromSyllabus?.frozenByName || "Academics"}${fromSyllabus?.frozenAt ? ` on ${new Date(fromSyllabus.frozenAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" })}` : ""} - read-only.`}
+              : `From the subject's syllabus, frozen by ${fromSyllabus?.frozenByName || "Academics"}${fromSyllabus?.frozenAt ? ` on ${formatDate(new Date(fromSyllabus.frozenAt))}` : ""} - read-only.`}
             <a href={`/panel/syllabus/${encodeURIComponent(subject.id)}`} className="ml-auto font-medium underline underline-offset-2">View syllabus</a>
           </p>
         )}

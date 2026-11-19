@@ -17,6 +17,7 @@ import type {
 } from "@/types/leave";
 import { EFFECTIVE_CATEGORY_LABELS } from "@/types/leave";
 import type { FacultyNorms } from "@/types/core";
+import { dmy } from "@/lib/utils";
 
 type Overrides = Partial<Record<LeaveTypeCode, LeaveTypeRuleOverride>>;
 
@@ -477,7 +478,7 @@ export function LeaveTypeRulesCard({ mode = "college" }: { mode?: "college" | "g
               {windows.map((w) => (
                 <div key={w.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <span>
-                    <span className="font-medium">{w.fromDate} → {w.toDate}</span>
+                    <span className="font-medium">{dmy(w.fromDate)} → {dmy(w.toDate)}</span>
                     <span className="text-muted-foreground"> · {w.reason}</span>
                     {w.appliesToTypes && (
                       <span className="text-muted-foreground"> · {w.appliesToTypes.join(", ")} only</span>

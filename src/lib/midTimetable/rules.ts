@@ -26,13 +26,14 @@ export function examDaysBetween(from: string, to: string): string[] {
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** "Mon 10 Nov 2026" (built by hand - the same on every machine). */
+/** "Mon 10/11/2026" (built by hand - the same on every machine; the site's DD/MM/YYYY). */
 export function dayLabel(date: string): string {
   const d = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return date;
-  return `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${WEEKDAYS[d.getUTCDay()]} ${dd}/${mm}/${d.getUTCFullYear()}`;
 }
 
 /** "10:00" -> "10:00 AM". */

@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/useToast";
-import { toDate } from "@/lib/utils";
+import { toDate, formatDate } from "@/lib/utils";
 import { renderHtmlToPdfBlob } from "@/lib/pdf/htmlToPdf";
 import { getCertificateHTML } from "@/lib/pdf/certificateTemplate";
 import { fetchCollegeLogoUrl } from "@/lib/pdf/logo";
@@ -20,7 +20,7 @@ import { IssueCard } from "./IssueCard";
 
 const when = (ts: unknown) => {
   const d = toDate(ts as never);
-  return d ? d.toLocaleDateString("en-IN") : "";
+  return d ? formatDate(d) : "";
 };
 
 function certificateNumberFor(request: CertificateRequest): string {

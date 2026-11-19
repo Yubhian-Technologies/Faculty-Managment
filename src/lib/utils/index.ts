@@ -39,46 +39,47 @@ export function toDate(timestamp: Timestamp | Date | FirestoreTimestampLike | st
   return null;
 }
 
-export function formatDate(timestamp: Timestamp | Date | FirestoreTimestampLike | string | null | undefined): string {
-  if (typeof timestamp === "string") {
-    const trimmed = timestamp.trim();
-    const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-    if (iso) {
-      const [, yyyy, mm, dd] = iso;
-      const d = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
-      return d.toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        timeZone: "UTC",
-      });
-    }
-    const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
-    if (dmy) {
-      const [, dd, mm, yyyy] = dmy;
-      const d = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
-      return d.toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        timeZone: "UTC",
-      });
-    }
-  }
-  const date = toDate(timestamp);
-  if (!date) return "-";
-  return date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Kolkata",
-  });
+// THE date style of the whole site: DD/MM/YYYY ("19/11/2026"). Every date with a year that people read - pages,
+// exports, PDFs - goes through formatDate / formatDMY / formatDateTime (or dmy for a plain "YYYY-MM-DD"), never a
+// hand-built toLocaleDateString. Stored values stay "YYYY-MM-DD" / Timestamps; only the display changes.
+
+const IST_PARTS = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" });
+
+/** "YYYY-MM-DD" / "D-M-YYYY" / "D/M/YYYY" string -> "DD/MM/YYYY"; null when the string is not one of those. */
+function dmyFromString(value: string): string | null {
+  const t = value.trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  const dmyMatch = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(t);
+  if (dmyMatch) return `${dmyMatch[1].padStart(2, "0")}/${dmyMatch[2].padStart(2, "0")}/${dmyMatch[3]}`;
+  return null;
 }
 
-// "17-08-2026" (dd-mm-yyyy) - DD-MM-YYYY date style, used for timetable
-// grids, substitutions, and resume exports. Accepts Timestamp, Date,
-// Firestore Timestamp-like, or plain "YYYY-MM-DD" / "DD-MM-YYYY" strings.
-// Safely anchored to Asia/Kolkata to prevent IST midnight day shifts.
+/** A moment -> "DD/MM/YYYY" in India time. */
+function dmyOfDate(date: Date): string {
+  const parts = IST_PARTS.formatToParts(date);
+  const v = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${v("day")}/${v("month")}/${v("year")}`;
+}
+
+/** "2026-11-19" -> "19/11/2026" (any other text is returned as it is; blank -> ""). For plain date strings. */
+export function dmy(value: string | null | undefined): string {
+  if (!value) return "";
+  return dmyFromString(value) ?? value;
+}
+
+/** "19/11/2026"; "-" when there is no date. */
+export function formatDate(timestamp: Timestamp | Date | FirestoreTimestampLike | string | null | undefined): string {
+  if (typeof timestamp === "string") {
+    const fromString = dmyFromString(timestamp);
+    if (fromString) return fromString;
+  }
+  const date = toDate(timestamp);
+  if (!date || Number.isNaN(date.getTime())) return "-";
+  return dmyOfDate(date);
+}
+
+/** "19/11/2026"; "" when there is no date (a year alone, e.g. "2019", is returned as it is). */
 export function formatDMY(
   input: Timestamp | Date | FirestoreTimestampLike | string | null | undefined
 ): string {
@@ -86,32 +87,13 @@ export function formatDMY(
   if (typeof input === "string") {
     const trimmed = input.trim();
     if (!trimmed) return "";
-    const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-    if (iso) {
-      const [, yyyy, mm, dd] = iso;
-      return `${dd}-${mm}-${yyyy}`;
-    }
-    const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
-    if (dmy) {
-      const [, dd, mm, yyyy] = dmy;
-      return `${dd.padStart(2, "0")}-${mm.padStart(2, "0")}-${yyyy}`;
-    }
-    if (/^\d{4}$/.test(trimmed)) {
-      return trimmed;
-    }
+    const fromString = dmyFromString(trimmed);
+    if (fromString) return fromString;
+    if (/^\d{4}$/.test(trimmed)) return trimmed;
   }
   const date = toDate(input as Parameters<typeof toDate>[0]);
   if (!date || Number.isNaN(date.getTime())) return typeof input === "string" ? input : "";
-  const parts = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).formatToParts(date);
-  const dd = parts.find((p) => p.type === "day")?.value.padStart(2, "0") ?? String(date.getDate()).padStart(2, "0");
-  const mm = parts.find((p) => p.type === "month")?.value.padStart(2, "0") ?? String(date.getMonth() + 1).padStart(2, "0");
-  const yyyy = parts.find((p) => p.type === "year")?.value ?? String(date.getFullYear());
-  return `${dd}-${mm}-${yyyy}`;
+  return dmyOfDate(date);
 }
 
 // "09:00" -> "9:00 AM" - display only, stored/submitted values stay 24h "HH:MM".
@@ -136,17 +118,12 @@ export function currentWeekDates(today: Date = new Date()): Date[] {
   return Array.from({ length: 6 }, (_, i) => new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i));
 }
 
+/** "19/11/2026, 02:10 PM" (India time); "-" when there is no date. */
 export function formatDateTime(timestamp: Timestamp | Date | FirestoreTimestampLike | null | undefined): string {
   const date = toDate(timestamp);
-  if (!date) return "-";
-  return date.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Kolkata",
-  });
+  if (!date || Number.isNaN(date.getTime())) return "-";
+  const time = date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).toUpperCase();
+  return `${dmyOfDate(date)}, ${time}`;
 }
 
 // Formats a Firestore Timestamp (or admin-SDK-serialized equivalent, or Date, or YYYY-MM-DD string) as a yyyy-mm-dd
@@ -225,7 +202,8 @@ export function buildCsvText<T extends Record<string, unknown>>(
     columns
       .map((c) => {
         const val = row[c.key];
-        const str = neutraliseFormula(val === null || val === undefined ? "" : String(val));
+        // A stored "YYYY-MM-DD" goes out in the site's DD/MM/YYYY.
+        const str = neutraliseFormula(val === null || val === undefined ? "" : typeof val === "string" ? dmy(val) : String(val));
         return `"${str.replace(/"/g, '""')}"`;
       })
       .join(",")

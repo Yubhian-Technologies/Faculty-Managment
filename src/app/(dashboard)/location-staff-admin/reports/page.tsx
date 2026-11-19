@@ -11,6 +11,7 @@ import { DataTable } from "@/components/shared/DataTable";
 import { toast } from "@/hooks/useToast";
 import { istDateKey } from "@/lib/attendance/istTime";
 import type { LeaveRequest, LocationDepartment, LocationShift, LocationStaffMember } from "@/types/locationStaff";
+import { dmy } from "@/lib/utils";
 
 type Tab = "attendance" | "leave" | "pay";
 
@@ -193,8 +194,8 @@ export default function LocationReportsPage() {
               data={rows as LeaveRow[]} keyExtractor={(r) => r.id} searchKeys={["staffName", "leaveType", "status"]} searchPlaceholder="Search leave..."
               csvFilename={file} emptyTitle="No leave requests" paginate defaultPageSize={10}
               columns={[
-                { key: "staffName", header: "Staff Member" }, { key: "leaveType", header: "Type" }, { key: "startDate", header: "From" },
-                { key: "endDate", header: "To" }, { key: "status", header: "Status" }, { key: "reason", header: "Reason" },
+                { key: "staffName", header: "Staff Member" }, { key: "leaveType", header: "Type" }, { key: "startDate", header: "From", render: (r) => dmy(r.startDate) },
+                { key: "endDate", header: "To", render: (r) => dmy(r.endDate) }, { key: "status", header: "Status" }, { key: "reason", header: "Reason" },
               ]}
             />
           )}

@@ -29,7 +29,7 @@ describe("toDate", () => {
   });
 
   it("converts DD-MM-YYYY and DD/MM/YYYY date strings", () => {
-    const d1 = toDate("15-05-1990");
+    const d1 = toDate("15/05/1990");
     expect(d1).toBeInstanceOf(Date);
     expect(d1?.getUTCFullYear()).toBe(1990);
     expect(d1?.getUTCMonth()).toBe(4);
@@ -53,14 +53,14 @@ describe("formatDate and toDateInputValue consistency", () => {
   it("formats IST midnight timestamp consistently without day shift", () => {
     // Stored at IST midnight: 1990-05-15 00:00:00 IST = 1990-05-14 18:30:00 UTC
     const istMidnight = new Date("1990-05-14T18:30:00.000Z");
-    expect(formatDate(istMidnight)).toBe("15 May 1990");
+    expect(formatDate(istMidnight)).toBe("15/05/1990");
     expect(toDateInputValue(istMidnight)).toBe("1990-05-15");
   });
 
   it("formats UTC midnight timestamp consistently", () => {
     // Stored at UTC midnight: 1990-05-15 00:00:00 UTC = 1990-05-15 05:30:00 IST
     const utcMidnight = new Date("1990-05-15T00:00:00.000Z");
-    expect(formatDate(utcMidnight)).toBe("15 May 1990");
+    expect(formatDate(utcMidnight)).toBe("15/05/1990");
     expect(toDateInputValue(utcMidnight)).toBe("1990-05-15");
   });
 
@@ -70,23 +70,23 @@ describe("formatDate and toDateInputValue consistency", () => {
     const tsAdmin = { _seconds: secs, _nanoseconds: 0 };
     const tsClient = { seconds: secs, nanoseconds: 0 };
 
-    expect(formatDate(tsAdmin)).toBe("15 May 1990");
+    expect(formatDate(tsAdmin)).toBe("15/05/1990");
     expect(toDateInputValue(tsAdmin)).toBe("1990-05-15");
 
-    expect(formatDate(tsClient)).toBe("15 May 1990");
+    expect(formatDate(tsClient)).toBe("15/05/1990");
     expect(toDateInputValue(tsClient)).toBe("1990-05-15");
   });
 
   it("formats plain date-only string YYYY-MM-DD consistently", () => {
-    expect(formatDate("1990-05-15")).toBe("15 May 1990");
+    expect(formatDate("1990-05-15")).toBe("15/05/1990");
     expect(toDateInputValue("1990-05-15")).toBe("1990-05-15");
   });
 
   it("formats plain date-only string DD-MM-YYYY and DD/MM/YYYY consistently", () => {
-    expect(formatDate("15-05-1990")).toBe("15 May 1990");
-    expect(toDateInputValue("15-05-1990")).toBe("1990-05-15");
+    expect(formatDate("15/05/1990")).toBe("15/05/1990");
+    expect(toDateInputValue("15/05/1990")).toBe("1990-05-15");
 
-    expect(formatDate("15/05/1990")).toBe("15 May 1990");
+    expect(formatDate("15/05/1990")).toBe("15/05/1990");
     expect(toDateInputValue("15/05/1990")).toBe("1990-05-15");
   });
 
@@ -98,28 +98,28 @@ describe("formatDate and toDateInputValue consistency", () => {
   });
 });
 
-describe("formatDMY (DD-MM-YYYY)", () => {
+describe("formatDMY (DD/MM/YYYY)", () => {
   it("formats IST midnight timestamp without day rollback", () => {
     const istMidnight = new Date("1990-05-14T18:30:00.000Z");
-    expect(formatDMY(istMidnight)).toBe("15-05-1990");
+    expect(formatDMY(istMidnight)).toBe("15/05/1990");
   });
 
   it("formats UTC midnight timestamp consistently", () => {
     const utcMidnight = new Date("1990-05-15T00:00:00.000Z");
-    expect(formatDMY(utcMidnight)).toBe("15-05-1990");
+    expect(formatDMY(utcMidnight)).toBe("15/05/1990");
   });
 
   it("formats Firestore timestamp-like objects", () => {
     const secs = Math.floor(new Date("1990-05-14T18:30:00.000Z").getTime() / 1000);
-    expect(formatDMY({ _seconds: secs, _nanoseconds: 0 })).toBe("15-05-1990");
-    expect(formatDMY({ seconds: secs, nanoseconds: 0 })).toBe("15-05-1990");
+    expect(formatDMY({ _seconds: secs, _nanoseconds: 0 })).toBe("15/05/1990");
+    expect(formatDMY({ seconds: secs, nanoseconds: 0 })).toBe("15/05/1990");
   });
 
   it("formats plain date strings YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY", () => {
-    expect(formatDMY("1990-05-15")).toBe("15-05-1990");
-    expect(formatDMY("15-05-1990")).toBe("15-05-1990");
-    expect(formatDMY("15/05/1990")).toBe("15-05-1990");
-    expect(formatDMY("5/5/1990")).toBe("05-05-1990");
+    expect(formatDMY("1990-05-15")).toBe("15/05/1990");
+    expect(formatDMY("15/05/1990")).toBe("15/05/1990");
+    expect(formatDMY("15/05/1990")).toBe("15/05/1990");
+    expect(formatDMY("5/5/1990")).toBe("05/05/1990");
   });
 
   it("preserves 4-digit legacy year strings", () => {
@@ -130,5 +130,15 @@ describe("formatDMY (DD-MM-YYYY)", () => {
     expect(formatDMY(null)).toBe("");
     expect(formatDMY(undefined)).toBe("");
     expect(formatDMY("")).toBe("");
+  });
+});
+
+describe("site date style DD/MM/YYYY", () => {
+  it("dmy turns a stored date string into DD/MM/YYYY and leaves other text alone", async () => {
+    const { dmy, formatDateTime } = await import("./index");
+    expect(dmy("2026-11-19")).toBe("19/11/2026");
+    expect(dmy("")).toBe("");
+    expect(dmy("Ongoing")).toBe("Ongoing");
+    expect(formatDateTime(new Date("2026-11-19T08:40:00Z"))).toBe("19/11/2026, 02:10 PM");
   });
 });
