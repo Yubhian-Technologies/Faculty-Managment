@@ -10,7 +10,7 @@ import { toDate } from "@/lib/utils";
 import { loadEffectiveTiming, matchesCurrentSemester, resolveCurrentSemester } from "@/lib/college/semester";
 import { loadAcademicYearConfig, sessionInAcademicYear, windowForAcademicYear } from "@/lib/studentAttendance/academicYearWindow";
 import { fetchSectionStudents } from "@/lib/students/sectionRoster";
-import { indexSessions, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
+import { indexSessions, isOnDutyMark, tallyStudentBySubject } from "@/lib/studentAttendance/counting";
 import { effectiveJoiningDate } from "@/lib/studentAttendance/joiningDate";
 import { calcPercent } from "@/lib/studentAttendance/percentage";
 import { isFacultyAvailable } from "@/types";
@@ -29,6 +29,8 @@ import {
 type Db = Firestore;
 const SHORT = 75;
 const CRITICAL = 65;
+// The longest list a number card's detail window carries (the whole college for the Principal).
+const MAX_DETAIL_ROWS = 3000;
 
 interface ScopedSection { id: string; name: string; label: string; department: string; year: number; courseId: string }
 
@@ -159,6 +161,28 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
   const sectionRows = sectionAttendanceToday(asToday(sessions))
     .map((r) => ({ ...r, label: byId.get(r.sectionId)?.label ?? "", department: byId.get(r.sectionId)?.department ?? "" }))
     .sort((a, b) => (a.pct ?? 101) - (b.pct ?? 101));
+  // Who was marked today and present in no period (the "absent all day" count, by name) - for the card's detail.
+  const absentees: { name: string; rollNumber: string; section: string; department: string; periods: number }[] = [];
+  {
+    const per = new Map<string, { name: string; rollNumber: string; sectionId: string; held: number; present: number }>();
+    for (const s of sessions) {
+      for (const e of s.entries ?? []) {
+        if (isOnDutyMark(e.status)) continue;
+        const k = `${s.sectionId}|${e.studentId}`;
+        const cur = per.get(k) ?? { name: e.name, rollNumber: e.rollNumber, sectionId: s.sectionId ?? "", held: 0, present: 0 };
+        cur.held += 1;
+        if (e.status === "PRESENT") cur.present += 1;
+        per.set(k, cur);
+      }
+    }
+    for (const v of per.values()) {
+      if (v.held > 0 && v.present === 0) {
+        const sec = byId.get(v.sectionId);
+        absentees.push({ name: v.name, rollNumber: v.rollNumber, section: sec?.label ?? "", department: sec?.department ?? "", periods: v.held });
+      }
+    }
+    absentees.sort((a, b) => a.section.localeCompare(b.section) || a.rollNumber.localeCompare(b.rollNumber));
+  }
   const counted = sectionRows.reduce((n, r) => n + r.counted, 0);
   const present = sectionRows.reduce((n, r) => n + r.present, 0);
 
@@ -230,6 +254,7 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
       pct: counted ? Math.round((present / counted) * 1000) / 10 : null,
       absentAllDay: sectionRows.reduce((n, r) => n + r.absentAllDay, 0),
       sections: sectionRows,
+      absentees: absentees.slice(0, MAX_DETAIL_ROWS),
     },
     onLeave,
     departments: [...new Set(sections.map((s) => s.department))],
@@ -270,6 +295,8 @@ async function computeSemester(db: Db, collegeId: string, who: DashScope) {
   const allSessions: StudentAttendanceSession[] = [];
   let students = 0, below = 0, critical = 0;
   const criticalList: { name: string; rollNumber: string; section: string; pct: number }[] = [];
+  // Every student below the line, with the subjects they are short in - the "Below 75%" card's detail.
+  const belowList: { name: string; rollNumber: string; section: string; department: string; pct: number; held: number; attended: number; shortIn: string[] }[] = [];
   const subjectShort = new Map<string, { label: string; name: string; below: number }>();
   let semesterStart: string | null = null;
   const shortByDept = new Map<string, { students: number; below: number }>();
@@ -298,11 +325,13 @@ async function computeSemester(db: Db, collegeId: string, who: DashScope) {
       for (const stu of roster) {
         const tallies = tallyStudentBySubject(indexed, stu.id, effectiveJoiningDate(stu));
         let held = 0, attended = 0;
+        const shortIn: string[] = [];
         for (const [sid, t] of tallies) {
           held += t.held; attended += t.attended;
           const p = calcPercent(t.attended, t.held);
           if (p != null && p < SHORT) {
             const n = names.get(sid);
+            shortIn.push(n?.code || n?.name || "");
             const cur = subjectShort.get(sid) ?? { label: n?.code ?? "", name: n?.name ?? "", below: 0 };
             cur.below += 1;
             subjectShort.set(sid, cur);
@@ -311,7 +340,10 @@ async function computeSemester(db: Db, collegeId: string, who: DashScope) {
         const pct = calcPercent(attended, held);
         if (pct == null) continue;
         students += 1;
-        if (pct < SHORT) below += 1;
+        if (pct < SHORT) {
+          below += 1;
+          belowList.push({ name: stu.name, rollNumber: stu.rollNumber, section: sec.label, department: sec.department, pct, held, attended, shortIn: shortIn.filter(Boolean) });
+        }
         const dep = shortByDept.get(sec.department) ?? { students: 0, below: 0 };
         dep.students += 1;
         if (pct < SHORT) dep.below += 1;
@@ -345,6 +377,7 @@ async function computeSemester(db: Db, collegeId: string, who: DashScope) {
     shortage: {
       students, below, critical,
       criticalList: criticalList.sort((a, b) => a.pct - b.pct).slice(0, 12),
+      belowList: belowList.sort((a, b) => a.pct - b.pct).slice(0, MAX_DETAIL_ROWS),
       bySubject: [...subjectShort.values()].filter((x) => x.below > 0).sort((a, b) => b.below - a.below).slice(0, 6),
       byDepartment: [...shortByDept.entries()].map(([department, v]) => ({ department, ...v, pct: v.students ? Math.round((v.below / v.students) * 1000) / 10 : null })),
     },

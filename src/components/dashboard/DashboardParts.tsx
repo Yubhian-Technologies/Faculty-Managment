@@ -61,8 +61,10 @@ export function Panel({ id, title, sub, href, linkLabel, loading, error, onRetry
   );
 }
 
-export function Kpi({ icon: Icon, label, href, value, unit, sub, meter, loading, error, tone }: {
-  icon: LucideIcon; label: string; href: string; value: ReactNode; unit?: string; sub?: ReactNode;
+export function Kpi({ icon: Icon, label, href, onOpen, value, unit, sub, meter, loading, error, tone }: {
+  icon: LucideIcon; label: string; href?: string; value: ReactNode; unit?: string; sub?: ReactNode;
+  /** Opens the card's detail window instead of following `href`. */
+  onOpen?: () => void;
   meter?: { value: number; color: string }[]; loading?: boolean; error?: boolean; tone?: "crit";
 }) {
   const cls = "group block rounded-2xl border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
@@ -89,6 +91,8 @@ export function Kpi({ icon: Icon, label, href, value, unit, sub, meter, loading,
       )}
     </>
   );
+  if (onOpen) return <button type="button" onClick={onOpen} className={cn(cls, "w-full text-left")}>{body}</button>;
+  if (!href) return <div className={cls}>{body}</div>;
   // "#id" = a card further down this dashboard: scroll to it and flash it, so the detail opens at once.
   if (href.startsWith("#")) {
     return <a href={href} className={cls} onClick={(e) => { e.preventDefault(); jumpTo(href.slice(1)); }}>{body}</a>;
