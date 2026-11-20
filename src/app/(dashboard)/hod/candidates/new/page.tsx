@@ -48,6 +48,8 @@ export default function NewCandidatePage() {
 
   const [vacancies, setVacancies] = useState<VacancyRequest[]>([]);
   const [isLoadingVacancies, setIsLoadingVacancies] = useState(true);
+  // The department's requests still waiting for the Principal - so an empty page can say why.
+  const [pendingVacancies, setPendingVacancies] = useState<VacancyRequest[]>([]);
   const [applications, setApplications] = useState<CandidateApplication[]>([]);
   const [candidateNames, setCandidateNames] = useState<Map<string, string>>(new Map());
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>(prefilledVacancyId);
@@ -81,8 +83,13 @@ export default function NewCandidatePage() {
         .then((r) => r.json() as Promise<{ candidates: { id: string; name: string }[] }>)
         .then((d) => d.candidates ?? [])
         .catch(() => [] as { id: string; name: string }[]),
+      fetch("/api/college/vacancy-requests?status=PENDING")
+        .then((r) => r.json() as Promise<{ vacancyRequests: VacancyRequest[] }>)
+        .then((d) => d.vacancyRequests ?? [])
+        .catch(() => [] as VacancyRequest[]),
     ])
-      .then(([allVacancies, batches, allApplications, allCandidates]) => {
+      .then(([allVacancies, batches, allApplications, allCandidates, pending]) => {
+        setPendingVacancies(pending.filter((v) => myDepartments.length === 0 || myDepartments.includes(v.department)));
         const completedVacancyIds = new Set(
           batches.filter((b) => b.currentPhase === "COMPLETED").map((b) => b.vacancyId)
         );
@@ -250,9 +257,29 @@ export default function NewCandidatePage() {
         <PageHeader title="Add Candidate" description="Add a candidate to the pool. Link them to a hiring request now or later." />
         <Card>
           <CardContent className="py-10 text-center space-y-3">
-            <p className="font-medium">No active hiring request</p>
-            <p className="text-sm text-muted-foreground">Candidates can be added only while your department has an approved hiring request with open posts.</p>
-            <Button variant="outline" onClick={() => router.back()}>Back</Button>
+            {pendingVacancies.length > 0 ? (
+              <>
+                <p className="font-medium">Waiting for the Principal&apos;s Approval</p>
+                <p className="text-sm text-muted-foreground">
+                  Your hiring request{pendingVacancies.length === 1 ? "" : "s"}{" "}
+                  {pendingVacancies.map((v) => `${v.position} (${v.department})`).join(", ")}{" "}
+                  {pendingVacancies.length === 1 ? "is" : "are"} waiting for the Principal. Candidates can be added once it is approved.
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button variant="outline" onClick={() => router.back()}>Back</Button>
+                  <Button onClick={() => router.push("/hod/pipeline")}>Open Hiring Pipeline</Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="font-medium">No active hiring request</p>
+                <p className="text-sm text-muted-foreground">Candidates can be added only while your department has an approved hiring request with open posts. Raise one; once the Principal approves it, add candidates here.</p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button variant="outline" onClick={() => router.back()}>Back</Button>
+                  <Button onClick={() => router.push("/hod/vacancy/new")}>Raise a Hiring Request</Button>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

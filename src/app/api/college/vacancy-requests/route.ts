@@ -36,7 +36,15 @@ export async function GET(request: Request) {
 
     let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    if (session.role === "HOD" || session.role === "VICE_PRINCIPAL") {
+    if (session.role === "HOD") {
+      // Every request of a department the HOD heads (raised by them, or by an earlier HOD of it), plus any they raised.
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
+      const mine = new Set(editableDepartmentNames(scope));
+      requests = requests.filter((r) => {
+        const x = r as { hodUid?: string; department?: string };
+        return x.hodUid === session.uid || (!!x.department && mine.has(x.department));
+      });
+    } else if (session.role === "VICE_PRINCIPAL") {
       requests = requests.filter((r) => (r as { hodUid?: string }).hodUid === session.uid);
     }
     if (status) {
