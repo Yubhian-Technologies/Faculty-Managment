@@ -229,7 +229,7 @@ describe("apply -> approve -> return -> correct -> issue -> verify -> revoke", (
     await expect(issueConfigured(D, office, request.id, { issuerValues: full }, "https://app.test")).rejects.toThrow(/receipt/);
     const done = await issueConfigured(D, office, request.id, { issuerValues: full, feeReceiptNo: "R-77" }, "https://app.test");
     expect(done.feeReceiptNo).toBe("R-77");
-    expect((await readIssuedDocument(D, office, request.id)).html).toContain("31-05-2026");
+    expect((await readIssuedDocument(D, office, request.id)).html).toContain("31/05/2026");
     await expect(submitConfigured(D, STUDENT, { typeId: "tc" })).rejects.toThrow(/only once/);
   });
 

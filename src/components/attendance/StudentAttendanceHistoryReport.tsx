@@ -48,10 +48,10 @@ function PercentCell({ value }: { value: number }) {
   return <span className={value < 75 ? "font-semibold text-red-600" : "text-foreground"}>{value.toFixed(2)}</span>;
 }
 
-/** yyyy-mm-dd -> dd-mm-yyyy */
+/** yyyy-mm-dd -> dd/mm/yyyy */
 function ddmmyyyy(dateStr: string) {
   const [y, m, d] = dateStr.split("-");
-  return `${d}-${m}-${y}`;
+  return `${d}/${m}/${y}`;
 }
 
 // Per-student cumulative attendance history, mirroring the "Held / Attend /

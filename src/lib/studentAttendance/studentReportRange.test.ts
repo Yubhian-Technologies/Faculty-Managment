@@ -40,7 +40,7 @@ describe("resolveReportRange", () => {
 
   it("period is inclusive and labelled dd-mm-yyyy", () => {
     expect(resolveReportRange("period", { from: "2026-10-01", to: "2026-10-01" }, [])).toEqual({
-      ok: true, from: "2026-10-01", to: "2026-10-01", label: "01-10-2026 to 01-10-2026",
+      ok: true, from: "2026-10-01", to: "2026-10-01", label: "01/10/2026 to 01/10/2026",
     });
   });
 

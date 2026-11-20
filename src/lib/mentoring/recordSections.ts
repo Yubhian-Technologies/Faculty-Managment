@@ -418,8 +418,8 @@ export function formatEntryMonth(v: string): string {
   return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(m[2]) - 1]} ${m[1]}`;
 }
 
-/** "2025-03-07" -> "07-03-2025", the format the booklet and the rest of the app print. */
+/** "2025-03-07" -> "07/03/2025", the format the booklet and the rest of the app print. */
 export function formatEntryDate(v: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : v;
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : v;
 }
