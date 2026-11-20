@@ -19,3 +19,15 @@ describe("groupNavItems", () => {
     expect(groups.every((g) => g.items.length > 0)).toBe(true);
   });
 });
+
+describe("sidebarNavGroups", () => {
+  it("leaves the Working-as seat's lead group untitled (no 'Head of Department' over Dashboard)", async () => {
+    const { getNavItemsForContext } = await import("./navConfig");
+    const { sidebarNavGroups } = await import("./navGroups");
+    const items = getNavItemsForContext("PANEL_MEMBER", ["PANEL_MEMBER", "HOD"], "HOD");
+    const groups = sidebarNavGroups(items);
+    expect(groups[0].title).toBeNull();
+    expect(groups[0].items[0].href).toBe("/hod");
+    expect(groups.slice(1).every((g) => g.title)).toBe(true);
+  });
+});

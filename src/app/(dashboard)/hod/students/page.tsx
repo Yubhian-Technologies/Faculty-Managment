@@ -85,7 +85,12 @@ function HodStudentsContent() {
   // it, or when the page was refreshed. Read once, on arrival; the list then
   // mirrors its own state back into the URL (listUrl below).
   const searchParams = useSearchParams();
-  const [restored] = useState(() => parseHodStudentsListState(searchParams));
+  // Opening the page (no saved list in the URL) loads every student of the HOD's departments straight away - the
+  // list is paged on the server, so this reads one page, not the department.
+  const [restored] = useState(() => {
+    const s = parseHodStudentsListState(searchParams);
+    return s.load ? s : { ...s, load: true };
+  });
   const [view, setView] = useState<(typeof HOD_VIEWS)[number]["key"]>("roster");
   // Only the CURRENT PAGE of the roster (or of the read-only incoming list) is
   // ever held here - never the whole department. The list is fetched on Load
