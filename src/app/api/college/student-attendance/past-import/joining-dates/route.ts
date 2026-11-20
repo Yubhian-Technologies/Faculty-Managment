@@ -17,7 +17,8 @@ import type { Section } from "@/types";
 // is never overwritten). Same people and sections as the import itself.
 //   { sectionId, apply, items: [{ roll, date }] } -> { items: [{ roll, date, status, existing? }] }
 //   status: SET (none yet - will be / was set), SAME (already this date), DIFFERENT (another date is entered - left as
-//   it is), NOT_FOUND (no such Regd. No in the section)
+//   it is), NOT_FOUND (no such Regd. No in the section), MOVED (item `earlier: true` and the register's date is before
+//   the entered one: moved back to it)
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_ITEMS = 500;
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("COLLEGE_OFFICE", "HOD");
     const body = (await readJsonBody(request)) as { sectionId?: unknown; apply?: unknown; items?: unknown };
-    const items = Array.isArray(body.items) ? (body.items as { roll?: unknown; date?: unknown }[]) : null;
+    const items = Array.isArray(body.items) ? (body.items as { roll?: unknown; date?: unknown; earlier?: unknown }[]) : null;
     if (typeof body.sectionId !== "string" || !body.sectionId) return NextResponse.json({ error: "Select a section." }, { status: 400 });
     if (!items || items.length > MAX_ITEMS || items.some((x) => typeof x?.roll !== "string" || typeof x?.date !== "string" || !DATE_RE.test(x.date))) {
       return NextResponse.json({ error: "Each entry needs a Regd. No and a date (YYYY-MM-DD)." }, { status: 400 });
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
     const byRoll = new Map(roster.map((s) => [(s.rollNumber ?? "").trim().toUpperCase(), s]));
     const actor = (await collegeRef.collection("users").doc(session.uid).get()).data() as { name?: string } | undefined;
 
-    const out: { roll: string; date: string; status: "SET" | "SAME" | "DIFFERENT" | "NOT_FOUND"; existing?: string }[] = [];
+    const out: { roll: string; date: string; status: "SET" | "SAME" | "DIFFERENT" | "NOT_FOUND" | "MOVED"; existing?: string }[] = [];
     for (const it of items) {
       const roll = (it.roll as string).trim();
       const date = it.date as string;
@@ -55,6 +56,30 @@ export async function POST(request: Request) {
       if (!st) { out.push({ roll, date, status: "NOT_FOUND" }); continue; }
       const existing = effectiveJoiningDate(st);
       if (existing === date) { out.push({ roll, date, status: "SAME" }); continue; }
+      // `earlier`: the register shows the student marked before the entered Date of Joining - the Office / HOD asked
+      // to count from the first marked date, so the Date of Joining moves back to it (never forward).
+      if (existing && it.earlier === true && date < existing) {
+        if (body.apply === true) {
+          const ref = collegeRef.collection("students").doc(st.id);
+          const done = await db.runTransaction(async (tx) => {
+            const fresh = await tx.get(ref);
+            // Only while it still holds the date that was checked (another save in the meantime wins).
+            if (!fresh.exists || effectiveJoiningDate(fresh.data() as { dateOfJoining?: unknown }) !== existing) return false;
+            tx.update(ref, { dateOfJoining: date, updatedAt: new Date() });
+            return true;
+          });
+          if (!done) { out.push({ roll, date, status: "DIFFERENT", existing }); continue; }
+          await writeAuditLogSafe(db, session.collegeId, {
+            action: "STUDENT_DETAILS_UPDATED",
+            performedBy: session.uid,
+            performedByName: actor?.name,
+            targetId: st.id,
+            details: { rollNumber: st.rollNumber, fields: ["dateOfJoining"], dateOfJoining: date, previousDateOfJoining: existing, via: "Student attendance import (marked before the Date of Joining)" },
+          });
+        }
+        out.push({ roll, date, status: "MOVED", existing });
+        continue;
+      }
       if (existing) { out.push({ roll, date, status: "DIFFERENT", existing }); continue; }
       if (body.apply === true) {
         // Set only while still empty (another save in the meantime wins).
