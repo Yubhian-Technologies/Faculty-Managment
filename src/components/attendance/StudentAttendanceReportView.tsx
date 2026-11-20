@@ -50,7 +50,7 @@ function pctBadge(p: number | null, strong = false) {
   return <span className={`inline-block min-w-14 rounded-full px-2 py-0.5 text-xs tabular-nums ${strong ? "font-semibold" : "font-medium"} ${tone}`}>{formatPercent(p)}</span>;
 }
 
-interface SubjectCol { subjectId: string; subjectName: string; subjectCode: string }
+interface SubjectCol { subjectId: string; subjectName: string; subjectCode: string; shortCode?: string }
 interface ReportStudent {
   studentId: string;
   rollNumber: string;
@@ -831,7 +831,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
                     <th className={`${th} ${stick2}`}>Regd. No</th>
                     <th className={`${th} ${stick3}`}>Name</th>
                     {subjectsView && r.columns.map((sub) => (
-                      <th key={sub.subjectId} title={sub.subjectName} className={`${th} whitespace-nowrap text-center normal-case`}>{subjectLabel(sub)}</th>
+                      <th key={sub.subjectId} title={`${sub.subjectName}${sub.subjectCode ? ` (${sub.subjectCode})` : ""}`} className={`${th} whitespace-nowrap text-center normal-case`}>{subjectLabel(sub)}</th>
                     ))}
                     <th className={`${th} whitespace-nowrap text-center`}>{subjectsView ? "Total" : "Attended / Held"}</th>
                     {!subjectsView && <th className={`${th} whitespace-nowrap text-center`}>Absent Periods</th>}

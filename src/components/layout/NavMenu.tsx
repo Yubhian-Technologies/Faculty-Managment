@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { isNavItemActive, type NavItem } from "./navConfig";
 import { NavIcon } from "./NavIcon";
 import type { NavGroup } from "./navGroups";
-import { HUE_DOT, HUE_ICON, NAV_ACTIVE, NAV_IDLE, navHue } from "./navTheme";
+import { HUE_DOT, HUE_GUIDE, HUE_ICON, HUE_TITLE, NAV_ACTIVE, NAV_IDLE, navHue } from "./navTheme";
 
 const FOLDED_KEY = "fms-nav-folded";
 
@@ -74,17 +74,18 @@ export function NavMenu({
                 type="button"
                 onClick={() => toggle(group.title as string)}
                 aria-expanded={open}
-                className="group/sec w-full flex items-center gap-2 px-2.5 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-[#7d8dba] hover:text-white transition-colors"
+                className={cn("group/sec w-full flex items-center gap-2 px-2 pt-3 pb-1.5 text-[11.5px] font-bold uppercase tracking-[0.1em] hover:text-white transition-colors", HUE_TITLE[hue])}
               >
-                <span className={cn("h-2 w-2 rounded-[3px] shrink-0", HUE_DOT[hue])} />
+                <span className={cn("h-2.5 w-2.5 rounded-[3px] shrink-0", HUE_DOT[hue])} />
                 <span className="truncate flex-1 text-left">{group.title}</span>
-                {!open && <span className="rounded-md bg-white/10 px-1.5 text-[10.5px] font-medium text-[#c9d3ee]">{group.items.length}</span>}
+                {!open && <span className="rounded-md bg-white/10 px-1.5 text-[10.5px] font-medium normal-case tracking-normal text-[#c9d3ee]">{group.items.length}</span>}
                 <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-all duration-200", open ? "opacity-0 group-hover/sec:opacity-100" : "-rotate-90")} />
               </button>
             )}
             <div className={cn("grid transition-[grid-template-rows] duration-200 ease-in-out", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
               <div className="overflow-hidden">
-                <div className="space-y-0.5 py-0.5">
+                {/* A titled section's pages sit indented on a thin colored line, under their heading. */}
+                <div className={cn("space-y-0.5 py-0.5", group.title && !collapsed && cn("ml-[13px] border-l pl-1.5", HUE_GUIDE[hue]))}>
                   {group.items.map((item) => {
                     const isActive = isNavItemActive(item, pathname, navItems);
                     const name = label(item.href, item.label);
@@ -97,7 +98,7 @@ export function NavMenu({
                         aria-label={collapsed ? name : undefined}
                         aria-current={isActive ? "page" : undefined}
                         className={cn(
-                          "relative flex items-center rounded-lg text-[13.5px] font-medium transition-colors duration-150",
+                          "relative flex items-center rounded-lg text-[13px] font-medium transition-colors duration-150",
                           collapsed ? "justify-center h-10 w-full" : cn("gap-2.5 px-2.5", roomy ? "h-11" : "h-9"),
                           isActive ? NAV_ACTIVE : NAV_IDLE
                         )}

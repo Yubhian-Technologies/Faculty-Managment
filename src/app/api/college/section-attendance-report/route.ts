@@ -56,6 +56,19 @@ async function currentSectionSubjects(
     .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
 }
 
+// Each subject column's short name (the subject's own "Short Code", e.g. "CHE") for the report's headers; a subject
+// without one keeps its code. Read from the master subjects in one getAll.
+async function withShortCodes<T extends { subjectId: string }>(
+  collegeRef: FirebaseFirestore.DocumentReference,
+  subjects: T[],
+): Promise<(T & { shortCode?: string })[]> {
+  const ids = [...new Set(subjects.map((s) => s.subjectId).filter(Boolean))];
+  if (!ids.length) return subjects;
+  const docs = await collegeRef.firestore.getAll(...ids.map((id) => collegeRef.collection("subjects").doc(id)));
+  const short = new Map(docs.map((d) => [d.id, String((d.data() as { shortCode?: string } | undefined)?.shortCode ?? "").trim()]));
+  return subjects.map((s) => (short.get(s.subjectId) ? { ...s, shortCode: short.get(s.subjectId) } : s));
+}
+
 // "Attendance Reports": Section -> Year -> Month -> Date, aggregated across
 // EVERY subject and faculty assigned to that section - unlike the Faculty
 // Attendance Report (see /api/college/class-work-records), which is scoped
@@ -398,7 +411,7 @@ export async function GET(request: Request) {
       }
 
       return NextResponse.json({
-        subjects, students,
+        subjects: await withShortCodes(collegeRef, subjects), students,
         meta: {
           absentOnly, shortage, threshold, consolidated, subjectFilter, total: students.length,
           academicYear: rangeIsUnbounded ? (academicWindow?.label ?? "all") : undefined,
@@ -566,7 +579,7 @@ export async function GET(request: Request) {
       // Letterhead for the report's exports (name, address, phone, logo) - one document read.
       const collegeDoc = (await collegeRef.get()).data() as { name?: string; logoUrl?: string; address?: string; contactPhone?: string } | undefined;
       return NextResponse.json({
-        subjects, students, summary,
+        subjects: await withShortCodes(collegeRef, subjects), students, summary,
         college: {
           name: collegeDoc?.name ?? "", address: collegeDoc?.address ?? "", phone: collegeDoc?.contactPhone ?? "",
           logoUrl: collegeDoc?.logoUrl?.trim() || "/vishnulogo.png",
@@ -688,7 +701,7 @@ export async function GET(request: Request) {
         }) as typeof students;
       }
 
-      return NextResponse.json({ subjects, weekLabels: weekRanges.map((w) => w.label), students, meta: { absentOnly, shortage, threshold } });
+      return NextResponse.json({ subjects: await withShortCodes(collegeRef, subjects), weekLabels: weekRanges.map((w) => w.label), students, meta: { absentOnly, shortage, threshold } });
     }
 
     if (!dateParam) {
@@ -773,7 +786,7 @@ export async function GET(request: Request) {
     }
     // dailyPercent flag: if requested, client can read bySubjectDaily/overall percent directly
 
-    return NextResponse.json({ subjects, students, classwork, meta: { absentOnly, shortage, threshold, dailyPercent } });
+    return NextResponse.json({ subjects: await withShortCodes(collegeRef, subjects), students, classwork, meta: { absentOnly, shortage, threshold, dailyPercent } });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });

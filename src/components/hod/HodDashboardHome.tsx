@@ -68,10 +68,10 @@ interface MyPeriod { periodNumber: number; startTime: string; endTime: string; s
 // ── Class grid ──────────────────────────────────────────────────────────────
 
 const CELL: Record<ClassCell["status"], { cls: string; mark: string; label: string }> = {
-  POSTED: { cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400", mark: "✓", label: "Posted" },
-  NOW: { cls: "bg-primary/10 text-primary ring-2 ring-inset ring-primary", mark: "●", label: "Running now" },
-  OVERDUE: { cls: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400", mark: "!", label: "Not posted" },
-  UPCOMING: { cls: "bg-muted/60 text-muted-foreground", mark: "", label: "Later today" },
+  POSTED: { cls: "bg-emerald-500 text-white", mark: "✓", label: "Posted" },
+  NOW: { cls: "bg-blue-600 text-white ring-2 ring-inset ring-blue-300", mark: "●", label: "Running now" },
+  OVERDUE: { cls: "bg-red-500 text-white", mark: "!", label: "Not posted" },
+  UPCOMING: { cls: "bg-slate-100 text-slate-400 ring-1 ring-inset ring-slate-200", mark: "", label: "Later today" },
 };
 
 function ClassGrid({ data }: { data: TodayData["classes"] }) {
@@ -119,7 +119,7 @@ function ClassGrid({ data }: { data: TodayData["classes"] }) {
                   const covered = c.covered && c.status !== "OVERDUE";
                   return (
                     <td key={p} title={`${s.label} · P${p}${c.start ? ` (${hhmm12(c.start)})` : ""} · ${c.subject} · ${c.faculty} · ${covered ? "Substitute / adjusted · " : ""}${look.label}`}
-                      className={cn("h-7 min-w-10 rounded-md text-center font-semibold", covered ? "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : look.cls)}>
+                      className={cn("h-7 min-w-10 rounded-md text-center font-semibold", covered ? "bg-amber-400 text-amber-950" : look.cls)}>
                       {covered ? "⇄" : look.mark}
                     </td>
                   );
@@ -131,12 +131,12 @@ function ClassGrid({ data }: { data: TodayData["classes"] }) {
       </div>
       )}
       <Legend items={[
-        { color: GOOD, label: "Posted ✓" }, { color: "hsl(var(--primary))", label: "Running now ●" },
-        { color: CRIT, label: "Not posted !" }, { color: WARN, label: "Substitute / adjusted ⇄" }, { color: "hsl(var(--muted-foreground) / 0.3)", label: "Later today" },
+        { color: "#10b981", label: "Posted ✓" }, { color: "#2563eb", label: "Running now ●" },
+        { color: "#ef4444", label: "Not posted !" }, { color: "#fbbf24", label: "Substitute / adjusted ⇄" }, { color: "#cbd5e1", label: "Later today" },
       ]} />
       {data.overdue.length > 0 && (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50/60 p-2.5 dark:border-red-900 dark:bg-red-950/20">
-          <p className="mb-1.5 text-xs font-semibold text-red-700 dark:text-red-400">Not posted yet</p>
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5">
+          <p className="mb-1.5 text-xs font-semibold text-red-700">Not posted yet</p>
           <ul className="grid gap-1 text-xs sm:grid-cols-2">
             {data.overdue.slice(0, 8).map((o, i) => (
               <li key={i} className="truncate"><span className="font-medium">P{o.period} · {o.section}</span> <span className="text-muted-foreground">{o.subject} · {o.faculty}</span></li>
@@ -250,7 +250,7 @@ export function HodDashboardHome() {
   return (
     <div className="mx-auto max-w-[1320px] space-y-5 pb-10">
       {/* Banner */}
-      <section className="relative overflow-hidden rounded-[20px] bg-gradient-to-r from-[#1c5cab] to-[#2a78d6] px-5 pb-10 pt-6 text-white sm:px-7 dark:from-[#13325c] dark:to-[#1c5cab]">
+      <section className="relative overflow-hidden rounded-[20px] bg-gradient-to-r from-[#1c5cab] to-[#2a78d6] px-5 pb-10 pt-6 text-white sm:px-7">
         <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/[0.07]" />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -313,7 +313,7 @@ export function HodDashboardHome() {
             {(activeWaiting.length ? activeWaiting : waiting).map((w) => (
               <Link key={w.key} href={w.href} className="flex items-center gap-3 rounded-2xl border bg-card p-3.5 shadow-sm transition hover:border-primary">
                 <span className={cn("grid h-10 min-w-10 place-items-center rounded-xl px-2 text-base font-bold tabular-nums",
-                  w.hot && (w.count ?? 0) > 0 ? "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400" : "bg-primary/10 text-primary")}>
+                  w.hot && (w.count ?? 0) > 0 ? "bg-red-50 text-red-600" : "bg-primary/10 text-primary")}>
                   {w.count === undefined ? <span className="h-4 w-4 animate-pulse rounded bg-current/20" /> : w.count}
                 </span>
                 <span className="min-w-0">
@@ -384,7 +384,7 @@ export function HodDashboardHome() {
               </>
             )}
           </Panel>
-          <Panel title="On Leave Today" sub="And who is covering their classes" href="/hod/leave-history" linkLabel="Leave Register"
+          <Panel title="On Leave Today" sub="And who is handling their classes" href="/hod/leave-history" linkLabel="Leave Register"
             loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
             {day.data && (day.data.onLeave.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Nobody in your department is on leave today.</p>

@@ -67,7 +67,7 @@ export function Kpi({ icon: Icon, label, href, value, unit, sub, meter, loading,
     <Link href={href} className="group block rounded-2xl border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
       <div className="flex items-start justify-between gap-2 text-xs font-medium text-muted-foreground">
         <span className="leading-snug">{label}</span>
-        <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", tone === "crit" ? "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400" : "bg-primary/10 text-primary")}>
+        <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", tone === "crit" ? "bg-red-50 text-red-600" : "bg-primary/10 text-primary")}>
           <Icon className="h-4 w-4" />
         </span>
       </div>
@@ -90,9 +90,9 @@ export function Kpi({ icon: Icon, label, href, value, unit, sub, meter, loading,
 
 export function Tag({ tone, children }: { tone: "good" | "warn" | "crit" | "info"; children: ReactNode }) {
   const cls = {
-    good: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400",
-    warn: "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-    crit: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400",
+    good: "bg-emerald-50 text-emerald-700",
+    warn: "bg-amber-50 text-amber-800",
+    crit: "bg-red-50 text-red-700",
     info: "bg-primary/10 text-primary",
   }[tone];
   return <span className={cn("inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold", cls)}>{children}</span>;

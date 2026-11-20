@@ -59,15 +59,15 @@ export function NavFinder({
         title={compact ? "Find a Page" : undefined}
         aria-label="Find a Page"
         className={cn(
-          "flex items-center rounded-lg bg-white/[0.07] text-[#8fa0cc] hover:bg-white/[0.12] hover:text-white transition-colors shrink-0",
-          compact ? "mx-auto h-10 w-10 justify-center" : "mx-3 h-9 gap-2 px-2.5 text-[13px]"
+          "flex items-center rounded-xl border border-white/25 bg-white/[0.14] text-white shadow-sm hover:bg-white/[0.2] hover:border-white/40 transition-colors shrink-0",
+          compact ? "mx-auto h-10 w-10 justify-center" : "mx-3 w-[calc(100%-1.5rem)] h-10 gap-2.5 px-3 text-[13.5px] font-medium"
         )}
       >
-        <Search className="h-4 w-4 shrink-0" />
+        <Search className="h-[18px] w-[18px] shrink-0 text-blue-200" />
         {!compact && (
           <>
-            <span className="flex-1 text-left">Find a Page</span>
-            {hotkey && <kbd className="rounded bg-white/10 px-1.5 py-px text-[11px] font-medium text-[#c9d3ee]">{isMac ? "⌘K" : "Ctrl K"}</kbd>}
+            <span className="flex-1 text-left">Find a Page...</span>
+            {hotkey && <kbd className="rounded-md border border-white/25 bg-white/10 px-1.5 py-px text-[11px] font-semibold text-white">{isMac ? "⌘K" : "Ctrl K"}</kbd>}
           </>
         )}
       </button>
