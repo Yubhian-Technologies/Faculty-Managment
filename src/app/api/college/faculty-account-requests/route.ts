@@ -4,12 +4,13 @@ import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { editableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
 import type { EmployeeCategory } from "@/types";
 import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/types";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "WEBMASTER", "SUPER_ADMIN", "ACCOUNTS", "COLLEGE_ACCOUNTS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "WEBMASTER", "SUPER_ADMIN", "ACCOUNTS", "COLLEGE_ACCOUNTS", "HOD");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
@@ -23,6 +24,18 @@ export async function GET(request: Request) {
 
     let requests = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     if (status) requests = requests.filter((r) => (r as { status?: string }).status === status);
+
+    // An HOD's Hiring Pipeline only needs to know how far each of their own departments' new hires has got: just
+    // that, never the emails or the one-time credentials the rest of the record holds.
+    if (session.role === "HOD") {
+      const scope = await getHodDepartmentScope(db, session.collegeId, session.uid, { activeOnly: false });
+      const mine = new Set(editableDepartmentNames(scope));
+      const own = requests
+        .map((r) => r as { id: string; candidateId?: string; offerId?: string; department?: string; status?: string })
+        .filter((r) => !!r.department && mine.has(r.department))
+        .map((r) => ({ id: r.id, candidateId: r.candidateId, offerId: r.offerId, department: r.department, status: r.status }));
+      return NextResponse.json({ requests: own });
+    }
 
     return NextResponse.json({ requests });
   } catch (err) {
