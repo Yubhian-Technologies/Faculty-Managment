@@ -24,6 +24,10 @@ import { cn } from "@/lib/utils";
 import {
   Bar, Card, CRIT, fmtPct, getJson, GOOD, hhmm12, initials, Kpi, Legend, Panel, SectionTitle, SHORT, shortDay, Tag, TrendChart, WARN,
 } from "@/components/dashboard/DashboardParts";
+import {
+  ClassesTodayDetail, FacultyTodayDetail, KpiDetailDialog, ShortageDetail, StudentsTodayDetail,
+  type AbsenteeRow, type BelowRow, type KpiDetailKey,
+} from "@/components/dashboard/KpiDetails";
 
 // HOD home: key numbers -> what is waiting for the HOD -> today (classes, students, faculty, leave) -> this semester
 // (trend, shortage, Mid papers, exams, results) -> the HOD's own day. Everything is the HOD's own department tree.
@@ -47,6 +51,7 @@ interface TodayData {
     pct: number | null;
     absentAllDay: number;
     sections: { sectionId: string; label: string; department: string; pct: number | null; absentAllDay: number; students: number }[];
+    absentees?: AbsenteeRow[];
   };
   onLeave: { name: string; leaveType: string; halfDay: string | null; covers: { period: number; section: string; substitute: string }[]; uncovered: number }[];
   departments: string[];
@@ -57,6 +62,7 @@ interface SemesterData {
   shortage: {
     students: number; below: number; critical: number;
     criticalList: { name: string; rollNumber: string; section: string; pct: number }[];
+    belowList?: BelowRow[];
     bySubject: { label: string; name: string; below: number }[];
   };
   results: { year: number; label: string; semester: number; examHeld: string; students: number; passed: number; pct: number | null }[];
@@ -204,6 +210,10 @@ export function HodDashboardHome() {
   });
   const myDay = useQuery({ queryKey: ["hdash", "mine", today], queryFn: () => getJson<{ periods?: MyPeriod[] }>("/api/college/student-attendance/today-periods").then((d) => d.periods ?? []), staleTime: 2 * 60_000 });
 
+  // Which number card's full list is open.
+  const [detail, setDetail] = useState<KpiDetailKey | null>(null);
+  const closeDetail = () => setDetail(null);
+
   // ── Derived ──
   const faculty = useMemo(() => {
     if (!roster.data) return null;
@@ -279,15 +289,15 @@ export function HodDashboardHome() {
         <Kpi icon={GraduationCap} label="Students" href="/hod/students" loading={strength.isLoading} error={strength.isError || !shown("/hod/students")}
           value={students ? students.total.toLocaleString("en-IN") : "-"}
           sub={students?.years.map((y) => `${["I", "II", "III", "IV", "V"][y.year - 1] ?? y.year} ${y.count}`).join(" · ")} />
-        <Kpi icon={ClipboardCheck} label="Student Attendance Today" href="#by-section" loading={day.isLoading} error={day.isError}
+        <Kpi icon={ClipboardCheck} label="Student Attendance Today" onOpen={() => setDetail("students")} loading={day.isLoading} error={day.isError}
           value={day.data?.students.pct == null ? "-" : day.data.students.pct.toFixed(1)} unit={day.data?.students.pct == null ? undefined : "%"}
           meter={day.data?.students.pct != null ? [{ value: day.data.students.pct, color: day.data.students.pct < SHORT ? CRIT : "hsl(var(--primary))" }] : undefined}
           sub={day.data ? `${day.data.students.absentAllDay} absent all day` : undefined} />
-        <Kpi icon={CalendarDays} label="Classes Today" href="#classes" loading={day.isLoading} error={day.isError}
+        <Kpi icon={CalendarDays} label="Classes Today" onOpen={() => setDetail("classes")} loading={day.isLoading} error={day.isError}
           value={cls ? cls.posted : "-"} unit={cls ? ` / ${cls.due} posted` : undefined}
           meter={cls && cls.due ? [{ value: (cls.posted / cls.due) * 100, color: GOOD }, { value: (dueOverdue / cls.due) * 100, color: CRIT }] : undefined}
           sub={cls ? (dueOverdue ? <Tag tone="crit">{dueOverdue} overdue</Tag> : <Tag tone="good">All posted</Tag>) : undefined} />
-        <Kpi icon={UserCheck} label="Faculty Present" href="#faculty" loading={roster.isLoading} error={roster.isError}
+        <Kpi icon={UserCheck} label="Faculty Present" onOpen={() => setDetail("faculty")} loading={roster.isLoading} error={roster.isError}
           value={faculty ? faculty.present + faculty.halfDay + faculty.onDuty : "-"} unit={faculty ? ` / ${faculty.total}` : undefined}
           meter={faculty && faculty.total ? [
             { value: ((faculty.present - faculty.late.length + faculty.halfDay + faculty.onDuty) / faculty.total) * 100, color: GOOD },
@@ -296,12 +306,34 @@ export function HodDashboardHome() {
             { value: ((faculty.notIn.length + faculty.absent) / faculty.total) * 100, color: CRIT },
           ] : undefined}
           sub={faculty ? `${faculty.late.length} late · ${faculty.onLeave} on leave · ${faculty.notIn.length} not in` : undefined} />
-        <Kpi icon={AlertTriangle} tone="crit" label={`Below ${SHORT}%`} href="#shortage" loading={sem.isLoading} error={sem.isError}
+        <Kpi icon={AlertTriangle} tone="crit" label={`Below ${SHORT}%`} onOpen={() => setDetail("shortage")} loading={sem.isLoading} error={sem.isError}
           value={sem.data ? sem.data.shortage.below : "-"}
           sub={sem.data && sem.data.shortage.students ? <>{((sem.data.shortage.below / sem.data.shortage.students) * 100).toFixed(1)}% of students{sem.data.shortage.critical > 0 && <> · <Tag tone="crit">{sem.data.shortage.critical} below 65%</Tag></>}</> : undefined} />
         <Kpi icon={Inbox} label="Waiting for You" href="#waiting" loading={waitingLoading && waitingTotal === 0} error={false}
           value={waitingTotal} sub={waitingHot ? `${waitingHot} need you today` : "Nothing urgent"} />
       </section>
+
+      {/* The number cards' full lists */}
+      <KpiDetailDialog open={detail === "students"} onClose={closeDetail} title="Student Attendance Today"
+        sub={day.data ? `${fmtPct(day.data.students.pct)} so far · ${day.data.students.absentAllDay} absent all day` : undefined}
+        pageHref="/hod/attendance-reports" pageLabel="Attendance Reports">
+        {day.data && <StudentsTodayDetail sections={day.data.students.sections} absentees={day.data.students.absentees ?? []} />}
+      </KpiDetailDialog>
+      <KpiDetailDialog open={detail === "classes"} onClose={closeDetail} title="Classes Today"
+        sub={cls ? `${cls.posted} of ${cls.due} posted · ${dueOverdue} not posted · ${cls.running} running now` : undefined}
+        pageHref="/hod/attendance-reports" pageLabel="Attendance Reports">
+        {cls && <ClassesTodayDetail sections={cls.sections} cells={cls.cells} />}
+      </KpiDetailDialog>
+      <KpiDetailDialog open={detail === "faculty"} onClose={closeDetail} title="Faculty Attendance Today"
+        sub={faculty ? `${faculty.present + faculty.halfDay + faculty.onDuty} of ${faculty.total} in · ${faculty.late.length} late · ${faculty.onLeave} on leave` : undefined}
+        pageHref="/hod/faculty-attendance" pageLabel="Faculty Attendance">
+        {roster.data && <FacultyTodayDetail roster={roster.data} />}
+      </KpiDetailDialog>
+      <KpiDetailDialog open={detail === "shortage"} onClose={closeDetail} title={`Students Below ${SHORT}%`}
+        sub={sem.data ? `This semester so far · ${sem.data.shortage.below} of ${sem.data.shortage.students} students` : undefined}
+        pageHref="/hod/attendance-reports" pageLabel="Attendance Reports">
+        {sem.data && <ShortageDetail list={sem.data.shortage.belowList ?? []} critical={sem.data.shortage.critical} />}
+      </KpiDetailDialog>
 
       {/* Waiting */}
       <section id="waiting" className="scroll-mt-20 space-y-2.5 rounded-2xl">
