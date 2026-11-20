@@ -6,7 +6,7 @@
 
 import { dayCellText, registerTotals, type DayCell } from "./dayRegister";
 
-export interface ExportSubject { subjectId: string; subjectName: string; subjectCode: string }
+export interface ExportSubject { subjectId: string; subjectName: string; subjectCode: string; shortCode?: string }
 export interface ExportTally { held: number; attended: number; percentage: number | null }
 export interface ExportRow {
   studentId: string;
@@ -41,7 +41,8 @@ export const SIGNATURES = ["Class In-charge", "HOD", "Principal"];
 
 /** The college prints percentages with two decimals ("95.36"). */
 export const pct2 = (p: number | null | undefined): string => (p == null ? "-" : p.toFixed(2));
-export const subjectLabel = (s: ExportSubject): string => s.subjectCode || s.subjectName;
+/** A subject column's heading: its short name (Subject Acronym), else its code, else its name. */
+export const subjectLabel = (s: ExportSubject): string => s.shortCode || s.subjectCode || s.subjectName;
 const below = (p: number | null | undefined, threshold: number) => p != null && p < threshold;
 
 /**

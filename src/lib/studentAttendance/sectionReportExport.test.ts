@@ -139,3 +139,12 @@ describe("date-wise register", () => {
     expect(registerPrintHtml(meta, reg, "")).toContain("02-11");
   });
 });
+
+describe("subject column heading", () => {
+  it("uses the Subject Acronym, else the code, else the name", async () => {
+    const { subjectLabel } = await import("./sectionReportExport");
+    expect(subjectLabel({ subjectId: "a", subjectName: "Engineering Chemistry", subjectCode: "UG26BS1T04", shortCode: "EC" })).toBe("EC");
+    expect(subjectLabel({ subjectId: "a", subjectName: "Engineering Chemistry", subjectCode: "UG26BS1T04" })).toBe("UG26BS1T04");
+    expect(subjectLabel({ subjectId: "a", subjectName: "Library", subjectCode: "" })).toBe("Library");
+  });
+});

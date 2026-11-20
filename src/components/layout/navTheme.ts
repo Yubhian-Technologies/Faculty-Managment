@@ -40,11 +40,33 @@ export const HUE_DOT: Record<NavHue, string> = {
   slate: "bg-slate-300",
 };
 
+/** A section title's text - its hue, light enough to read on navy and stand above its pages. */
+export const HUE_TITLE: Record<NavHue, string> = {
+  blue: "text-blue-200",
+  violet: "text-violet-200",
+  teal: "text-teal-200",
+  amber: "text-amber-200",
+  green: "text-emerald-200",
+  sky: "text-sky-200",
+  slate: "text-slate-200",
+};
+
+/** The thin line down the left of a section's pages (shows which heading they belong to). */
+export const HUE_GUIDE: Record<NavHue, string> = {
+  blue: "border-blue-300/25",
+  violet: "border-violet-300/25",
+  teal: "border-teal-300/25",
+  amber: "border-amber-300/25",
+  green: "border-emerald-300/25",
+  sky: "border-sky-300/25",
+  slate: "border-slate-300/25",
+};
+
 /** Background of the sidebar / drawer. */
 export const NAV_SURFACE = "bg-gradient-to-b from-[#14224d] to-[#0f1a3c] text-[#c9d3ee] border-[#0f1a3c]";
 /** The open page's row. */
 export const NAV_ACTIVE = "bg-gradient-to-r from-[#3b63f0] to-[#5b7cf7] text-white font-semibold shadow-[0_4px_14px_rgba(59,99,240,0.45)]";
 /** Any other row. */
-export const NAV_IDLE = "text-[#c9d3ee] hover:bg-white/[0.07] hover:text-white";
+export const NAV_IDLE = "text-[#aab6da] hover:bg-white/[0.07] hover:text-white";
 /** Small muted text on the navy background. */
 export const NAV_MUTED = "text-[#8fa0cc]";

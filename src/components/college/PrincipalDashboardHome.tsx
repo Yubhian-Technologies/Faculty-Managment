@@ -204,7 +204,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
   return (
     <div className="mx-auto max-w-[1320px] space-y-5 pb-10">
       {/* Banner */}
-      <section className="relative overflow-hidden rounded-[20px] bg-gradient-to-r from-[#1c5cab] to-[#2a78d6] px-5 pb-10 pt-6 text-white sm:px-7 dark:from-[#13325c] dark:to-[#1c5cab]">
+      <section className="relative overflow-hidden rounded-[20px] bg-gradient-to-r from-[#1c5cab] to-[#2a78d6] px-5 pb-10 pt-6 text-white sm:px-7">
         <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/[0.07]" />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -268,7 +268,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
             {(activeWaiting.length ? activeWaiting : waiting).map((w) => (
               <Link key={w.key} href={w.href} className="flex items-center gap-3 rounded-2xl border bg-card p-3.5 shadow-sm transition hover:border-primary">
                 <span className={cn("grid h-10 min-w-10 place-items-center rounded-xl px-2 text-base font-bold tabular-nums",
-                  w.hot && (w.count ?? 0) > 0 ? "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400" : "bg-primary/10 text-primary")}>
+                  w.hot && (w.count ?? 0) > 0 ? "bg-red-50 text-red-600" : "bg-primary/10 text-primary")}>
                   {w.count === undefined ? <span className="h-4 w-4 animate-pulse rounded bg-current/20" /> : w.count}
                 </span>
                 <span className="min-w-0">
