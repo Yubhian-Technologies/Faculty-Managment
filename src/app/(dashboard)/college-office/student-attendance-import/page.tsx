@@ -33,7 +33,7 @@ const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
 // The template's own Sample and How to fill sheets (and similar) hold no real attendance and are never read.
 const SKIPPED_SHEET = /^(sample|example|how|instruction|help|read ?me)/i;
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const range = (g: PastAttendanceGrid) => (g.dates.length ? `${g.dates[0]} to ${g.dates[g.dates.length - 1]}` : "no dates");
+const range = (g: PastAttendanceGrid) => (g.dates.length ? `${dmy(g.dates[0])} to ${dmy(g.dates[g.dates.length - 1])}` : "no dates");
 
 function sheetStatus(s: SheetState): { label: string; variant: "approved" | "rejected" | "pending" | "in_progress" | "outline" } {
   if (s.grid.errors.length > 0) return { label: "Needs fixing", variant: "rejected" };
@@ -487,7 +487,7 @@ function SheetResult({ sheet, onToggleJoining }: { sheet: SheetState; onToggleJo
       {r.beforeJoining.length > 0 && (
         <Note>
           Left out - dated before the student&apos;s Date of Joining (attendance counts from that date):{" "}
-          {r.beforeJoining.map((b) => `${b.roll} (joined ${b.joinedOn}, ${b.days} day${b.days === 1 ? "" : "s"})`).join(", ")}
+          {r.beforeJoining.map((b) => `${b.roll} (joined ${dmy(b.joinedOn)}, ${b.days} day${b.days === 1 ? "" : "s"})`).join(", ")}
         </Note>
       )}
 
@@ -508,9 +508,9 @@ function SheetResult({ sheet, onToggleJoining }: { sheet: SheetState; onToggleJo
                   </label>
                 ) : (
                   <span>
-                    <b>{j.roll}</b> - {j.status === "SET" ? (j.on ? `Date of Joining set to ${j.date}` : `not set (unticked)`)
-                      : j.status === "SAME" ? `Date of Joining already ${j.date}`
-                      : j.status === "DIFFERENT" ? `register starts ${j.date}, but ${j.existing ? `Date of Joining ${j.existing} is already entered` : "a Date of Joining was entered meanwhile"} - left as it is; check it`
+                    <b>{j.roll}</b> - {j.status === "SET" ? (j.on ? `Date of Joining set to ${dmy(j.date)}` : `not set (unticked)`)
+                      : j.status === "SAME" ? `Date of Joining already ${dmy(j.date)}`
+                      : j.status === "DIFFERENT" ? `register starts ${dmy(j.date)}, but ${j.existing ? `Date of Joining ${dmy(j.existing)} is already entered` : "a Date of Joining was entered meanwhile"} - left as it is; check it`
                       : "not in this section"}
                   </span>
                 )}
