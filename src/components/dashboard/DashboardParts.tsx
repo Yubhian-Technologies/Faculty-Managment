@@ -31,15 +31,17 @@ export const GOOD = "#0ca30c", WARN = "#fab219", CRIT = "#d03b3b";
 
 // ── Small building blocks ───────────────────────────────────────────────────
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn("rounded-2xl border bg-card shadow-sm", className)}>{children}</div>;
+export function Card({ id, className, children }: { id?: string; className?: string; children: ReactNode }) {
+  return <div id={id} className={cn("rounded-2xl border bg-card shadow-sm", className)}>{children}</div>;
 }
 
-export function Panel({ title, sub, href, linkLabel, loading, error, onRetry, children, className }: {
+export function Panel({ id, title, sub, href, linkLabel, loading, error, onRetry, children, className }: {
+  /** Lets a number card at the top jump to this card. */
+  id?: string;
   title: string; sub?: ReactNode; href?: string; linkLabel?: string; loading?: boolean; error?: boolean; onRetry?: () => void; children: ReactNode; className?: string;
 }) {
   return (
-    <Card className={cn("p-4 sm:p-5", className)}>
+    <Card id={id} className={cn("scroll-mt-20 p-4 sm:p-5 transition-shadow", className)}>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-[15px] font-semibold leading-tight">{title}</h3>
@@ -63,8 +65,9 @@ export function Kpi({ icon: Icon, label, href, value, unit, sub, meter, loading,
   icon: LucideIcon; label: string; href: string; value: ReactNode; unit?: string; sub?: ReactNode;
   meter?: { value: number; color: string }[]; loading?: boolean; error?: boolean; tone?: "crit";
 }) {
-  return (
-    <Link href={href} className="group block rounded-2xl border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+  const cls = "group block rounded-2xl border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-2 text-xs font-medium text-muted-foreground">
         <span className="leading-snug">{label}</span>
         <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", tone === "crit" ? "bg-red-50 text-red-600" : "bg-primary/10 text-primary")}>
@@ -84,8 +87,22 @@ export function Kpi({ icon: Icon, label, href, value, unit, sub, meter, loading,
           {sub && <div className="mt-2 text-xs text-muted-foreground">{sub}</div>}
         </>
       )}
-    </Link>
+    </>
   );
+  // "#id" = a card further down this dashboard: scroll to it and flash it, so the detail opens at once.
+  if (href.startsWith("#")) {
+    return <a href={href} className={cls} onClick={(e) => { e.preventDefault(); jumpTo(href.slice(1)); }}>{body}</a>;
+  }
+  return <Link href={href} className={cls}>{body}</Link>;
+}
+
+/** Scrolls to a card of this dashboard and outlines it for a moment. */
+export function jumpTo(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.classList.add("ring-2", "ring-primary", "ring-offset-2");
+  window.setTimeout(() => el.classList.remove("ring-2", "ring-primary", "ring-offset-2"), 1800);
 }
 
 export function Tag({ tone, children }: { tone: "good" | "warn" | "crit" | "info"; children: ReactNode }) {

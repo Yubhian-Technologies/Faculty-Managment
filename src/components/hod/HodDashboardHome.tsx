@@ -279,15 +279,15 @@ export function HodDashboardHome() {
         <Kpi icon={GraduationCap} label="Students" href="/hod/students" loading={strength.isLoading} error={strength.isError || !shown("/hod/students")}
           value={students ? students.total.toLocaleString("en-IN") : "-"}
           sub={students?.years.map((y) => `${["I", "II", "III", "IV", "V"][y.year - 1] ?? y.year} ${y.count}`).join(" · ")} />
-        <Kpi icon={ClipboardCheck} label="Student Attendance Today" href="/hod/attendance-reports" loading={day.isLoading} error={day.isError}
+        <Kpi icon={ClipboardCheck} label="Student Attendance Today" href="#by-section" loading={day.isLoading} error={day.isError}
           value={day.data?.students.pct == null ? "-" : day.data.students.pct.toFixed(1)} unit={day.data?.students.pct == null ? undefined : "%"}
           meter={day.data?.students.pct != null ? [{ value: day.data.students.pct, color: day.data.students.pct < SHORT ? CRIT : "hsl(var(--primary))" }] : undefined}
           sub={day.data ? `${day.data.students.absentAllDay} absent all day` : undefined} />
-        <Kpi icon={CalendarDays} label="Classes Today" href="/hod/attendance-reports" loading={day.isLoading} error={day.isError}
+        <Kpi icon={CalendarDays} label="Classes Today" href="#classes" loading={day.isLoading} error={day.isError}
           value={cls ? cls.posted : "-"} unit={cls ? ` / ${cls.due} posted` : undefined}
           meter={cls && cls.due ? [{ value: (cls.posted / cls.due) * 100, color: GOOD }, { value: (dueOverdue / cls.due) * 100, color: CRIT }] : undefined}
           sub={cls ? (dueOverdue ? <Tag tone="crit">{dueOverdue} overdue</Tag> : <Tag tone="good">All posted</Tag>) : undefined} />
-        <Kpi icon={UserCheck} label="Faculty Present" href="/hod/faculty-attendance" loading={roster.isLoading} error={roster.isError}
+        <Kpi icon={UserCheck} label="Faculty Present" href="#faculty" loading={roster.isLoading} error={roster.isError}
           value={faculty ? faculty.present + faculty.halfDay + faculty.onDuty : "-"} unit={faculty ? ` / ${faculty.total}` : undefined}
           meter={faculty && faculty.total ? [
             { value: ((faculty.present - faculty.late.length + faculty.halfDay + faculty.onDuty) / faculty.total) * 100, color: GOOD },
@@ -296,7 +296,7 @@ export function HodDashboardHome() {
             { value: ((faculty.notIn.length + faculty.absent) / faculty.total) * 100, color: CRIT },
           ] : undefined}
           sub={faculty ? `${faculty.late.length} late · ${faculty.onLeave} on leave · ${faculty.notIn.length} not in` : undefined} />
-        <Kpi icon={AlertTriangle} tone="crit" label={`Below ${SHORT}%`} href="/hod/attendance-reports" loading={sem.isLoading} error={sem.isError}
+        <Kpi icon={AlertTriangle} tone="crit" label={`Below ${SHORT}%`} href="#shortage" loading={sem.isLoading} error={sem.isError}
           value={sem.data ? sem.data.shortage.below : "-"}
           sub={sem.data && sem.data.shortage.students ? <>{((sem.data.shortage.below / sem.data.shortage.students) * 100).toFixed(1)}% of students{sem.data.shortage.critical > 0 && <> · <Tag tone="crit">{sem.data.shortage.critical} below 65%</Tag></>}</> : undefined} />
         <Kpi icon={Inbox} label="Waiting for You" href="#waiting" loading={waitingLoading && waitingTotal === 0} error={false}
@@ -304,7 +304,7 @@ export function HodDashboardHome() {
       </section>
 
       {/* Waiting */}
-      <section id="waiting" className="space-y-2.5">
+      <section id="waiting" className="scroll-mt-20 space-y-2.5 rounded-2xl">
         <SectionTitle title="Waiting for You" sub="Each opens its own page" />
         {activeWaiting.length === 0 && !waitingLoading ? (
           <Card className="flex items-center gap-3 p-4 text-sm text-muted-foreground"><ShieldCheck className="h-5 w-5 text-emerald-600" />Nothing is waiting for you right now.</Card>
@@ -331,11 +331,11 @@ export function HodDashboardHome() {
       <section className="space-y-3">
         <SectionTitle title="Today" sub={day.data ? `Updated ${hhmm12(day.data.now)} · refreshes every 5 minutes` : undefined} />
         <div className="grid gap-3.5 lg:grid-cols-[2fr_1fr]">
-          <Panel title="Classes" sub="Every section, period by period" href="/hod/attendance-reports" linkLabel="Attendance Reports"
+          <Panel id="classes" title="Classes" sub="Every section, period by period" href="/hod/attendance-reports" linkLabel="Attendance Reports"
             loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
             {cls && <ClassGrid data={cls} />}
           </Panel>
-          <Panel title="Student Attendance by Section" sub="Today so far · lowest first" loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
+          <Panel id="by-section" title="Student Attendance by Section" sub="Today so far · lowest first" loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
             {day.data && (day.data.students.sections.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">No attendance posted yet today.</p>
             ) : (
@@ -353,7 +353,7 @@ export function HodDashboardHome() {
         </div>
 
         <div className="grid gap-3.5 md:grid-cols-2">
-          <Panel title="Faculty Attendance" sub={faculty ? `${faculty.total} faculty${faculty.staff ? ` · ${faculty.staff} supporting staff` : ""}` : undefined}
+          <Panel id="faculty" title="Faculty Attendance" sub={faculty ? `${faculty.total} faculty${faculty.staff ? ` · ${faculty.staff} supporting staff` : ""}` : undefined}
             href="/hod/faculty-attendance" linkLabel="Faculty Attendance" loading={roster.isLoading} error={roster.isError} onRetry={() => void roster.refetch()}>
             {faculty && (
               <>
@@ -415,7 +415,7 @@ export function HodDashboardHome() {
             loading={sem.isLoading} error={sem.isError} onRetry={() => void sem.refetch()}>
             {sem.data && <TrendChart points={sem.data.trend} />}
           </Panel>
-          <Panel title="Shortage by Subject" sub={`Students below ${SHORT}% in each subject`} loading={sem.isLoading} error={sem.isError} onRetry={() => void sem.refetch()}>
+          <Panel id="shortage" title="Shortage by Subject" sub={`Students below ${SHORT}% in each subject`} loading={sem.isLoading} error={sem.isError} onRetry={() => void sem.refetch()}>
             {sem.data && (sem.data.shortage.bySubject.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">No subject has students below {SHORT}%.</p>
             ) : (

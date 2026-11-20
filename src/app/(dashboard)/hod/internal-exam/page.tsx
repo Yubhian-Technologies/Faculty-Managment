@@ -25,8 +25,10 @@ export default function HodInternalExamPage() {
   const [sectionFilter, setSectionFilter] = useState(ALL); // sectionId ?? sectionName
   const [subjectFilter, setSubjectFilter] = useState(ALL); // subjectId
 
-  // The pickers above are a DRAFT; the table below shows only what the last Load applied.
-  const [applied, setApplied] = useState<{ course: string; year: string; faculty: string; section: string; subject: string } | null>(null);
+  // The pickers above are a DRAFT; the table below shows only what the last Load applied (everything, on arrival).
+  const [applied, setApplied] = useState<{ course: string; year: string; faculty: string; section: string; subject: string } | null>(
+    { course: ALL, year: ALL, faculty: ALL, section: ALL, subject: ALL }
+  );
 
   const [selectedBatch, setSelectedBatch] = useState<(InternalExamMarksBatch & { id: string }) | null>(null);
   const [selectedConfig, setSelectedConfig] = useState<ExamConfiguration | null>(null);

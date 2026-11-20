@@ -1,7 +1,7 @@
 "use client";
 
 import { useNavLabels } from "@/hooks/useNavLabels";
-import { groupNavItems } from "./navGroups";
+import { sidebarNavGroups } from "./navGroups";
 import { CollegeLogo } from "@/components/shared/CollegeLogo";
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
@@ -123,7 +123,7 @@ export function MobileDrawer({ hiddenModules, hiddenItems }: MobileDrawerProps) 
   if (user.readOnlyAccess) navItems = readOnlyNavItems();
 
   // A nav item that starts a `section` opens a new group; the items after it belong to it.
-  const groups = groupNavItems(navItems);
+  const groups = sidebarNavGroups(navItems);
   const workingAs = contexts.find((c) => c.key === activeContext)?.label ?? ROLE_LABELS[user.realRole ?? user.role];
   const subtitle = [collegeInfo?.code, workingAs].filter(Boolean).join(" · ");
   const close = () => setSidebarOpen(false);
