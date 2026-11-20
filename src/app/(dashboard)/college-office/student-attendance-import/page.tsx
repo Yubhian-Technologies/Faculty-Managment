@@ -25,7 +25,10 @@ interface Result { days: DayReport[]; unmatchedRolls: string[]; rosterNotInFile:
 // A late joiner found in the register (blank on the first class days): their first marked date, offered as the
 // student's Date of Joining - set on Import while ticked, never over one already entered.
 interface JoiningRow { roll: string; date: string; blankClassDays: number; status: "SET" | "SAME" | "DIFFERENT" | "NOT_FOUND"; existing?: string; on: boolean }
-interface SheetState { name: string; grid: PastAttendanceGrid; sectionId: string; result?: Result; applied?: boolean; runId?: string; joining?: JoiningRow[] }
+// A student marked in the register before their entered Date of Joining: counted from their first marked date (and
+// the Date of Joining moved back to it on Import) while ticked; left out as before when unticked.
+interface JoiningMove { roll: string; from: string; to: string; days: number; on: boolean; status?: "MOVED" | "DIFFERENT" | "NOT_FOUND" | "SET" | "SAME" }
+interface SheetState { name: string; grid: PastAttendanceGrid; sectionId: string; result?: Result; applied?: boolean; runId?: string; joining?: JoiningRow[]; moves?: JoiningMove[] }
 
 const DATES_PER_REQUEST = 7;
 const STEPS = ["Upload file", "Match sections", "Preview", "Import"] as const;
@@ -33,7 +36,7 @@ const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
 // The template's own Sample and How to fill sheets (and similar) hold no real attendance and are never read.
 const SKIPPED_SHEET = /^(sample|example|how|instruction|help|read ?me)/i;
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const range = (g: PastAttendanceGrid) => (g.dates.length ? `${g.dates[0]} to ${g.dates[g.dates.length - 1]}` : "no dates");
+const range = (g: PastAttendanceGrid) => (g.dates.length ? `${dmy(g.dates[0])} to ${dmy(g.dates[g.dates.length - 1])}` : "no dates");
 
 function sheetStatus(s: SheetState): { label: string; variant: "approved" | "rejected" | "pending" | "in_progress" | "outline" } {
   if (s.grid.errors.length > 0) return { label: "Needs fixing", variant: "rejected" };
@@ -145,11 +148,27 @@ export default function StudentAttendanceImportPage() {
     });
   }
 
+  /** On Import: the ticked "count from the first marked date" students get their Date of Joining moved back first. */
+  async function saveMoves(sh: SheetState): Promise<JoiningMove[] | undefined> {
+    const on = (sh.moves ?? []).filter((m) => m.on);
+    if (on.length === 0) return sh.moves;
+    const res = await fetch("/api/college/student-attendance/past-import/joining-dates", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sectionId: sh.sectionId, apply: true, items: on.map((m) => ({ roll: m.roll, date: m.to, earlier: true })) }),
+    });
+    const json = (await res.json()) as { items?: { roll: string; status: JoiningMove["status"] }[]; error?: string };
+    if (!res.ok) throw new Error(`${sh.name}: ${json.error ?? "Unable to update the Dates of Joining"}`);
+    const by = new Map((json.items ?? []).map((x) => [x.roll, x.status]));
+    return (sh.moves ?? []).map((m) => (m.on ? { ...m, status: by.get(m.roll) ?? m.status } : m));
+  }
+
   async function runSheet(i: number, apply: boolean): Promise<void> {
     const sh = sheets[i];
     const runId = apply ? `pastimport-${Date.now()}-${i}` : undefined;
     // Dates of Joining first: on Import the ticked ones are saved before the attendance goes in.
     const joining = await joiningDates(sh, apply);
+    const moves = apply ? await saveMoves(sh) : sh.moves;
+    const joiningFrom = (moves ?? []).filter((m) => m.on && (!apply || m.status === "MOVED" || m.status === "SAME")).map((m) => ({ roll: m.roll, date: m.to }));
     const merged: Result = { days: [], unmatchedRolls: [], rosterNotInFile: [], beforeJoining: [] };
     for (let from = 0; from < sh.grid.dates.length; from += DATES_PER_REQUEST) {
       const idxs = sh.grid.dates.map((_, k) => k).slice(from, from + DATES_PER_REQUEST);
@@ -157,7 +176,7 @@ export default function StudentAttendanceImportPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sectionId: sh.sectionId, apply, runId,
+          sectionId: sh.sectionId, apply, runId, joiningFrom,
           dates: idxs.map((k) => sh.grid.dates[k]),
           students: sh.grid.students.map((s) => ({ roll: s.roll, marks: idxs.map((k) => s.marks[k]) })),
         }),
@@ -173,7 +192,16 @@ export default function StudentAttendanceImportPage() {
         if (cur) cur.days += b.days; else merged.beforeJoining.push({ ...b });
       }
     }
-    patch(i, { result: merged, applied: apply, joining, ...(runId ? { runId } : {}) });
+    // The first preview finds who was marked before their Date of Joining; they are offered (ticked) from then on.
+    const found: JoiningMove[] = merged.beforeJoining.flatMap((b) => {
+      const row = sh.grid.students.find((st) => st.roll.trim().toUpperCase() === b.roll.trim().toUpperCase());
+      const k = row ? row.marks.findIndex((m) => m != null) : -1;
+      const to = k >= 0 ? sh.grid.dates[k] : "";
+      return to && b.joinedOn && to < b.joinedOn ? [{ roll: b.roll, from: b.joinedOn, to, days: b.days, on: true }] : [];
+    });
+    const keep = new Map((moves ?? []).map((m) => [m.roll, m]));
+    const nextMoves = [...(moves ?? []), ...found.filter((f) => !keep.has(f.roll))];
+    patch(i, { result: merged, applied: apply, joining, moves: nextMoves, ...(runId ? { runId } : {}) });
   }
 
   async function runAll(apply: boolean) {
@@ -352,7 +380,7 @@ export default function StudentAttendanceImportPage() {
                       disabled={!!busy || sh.applied}
                       aria-invalid={!!sh.sectionId && usedTwice.has(sh.sectionId)}
                       aria-describedby={sh.sectionId && usedTwice.has(sh.sectionId) ? `${selectId}-error` : undefined}
-                      onChange={(e) => patch(i, { sectionId: e.target.value, result: undefined })}
+                      onChange={(e) => patch(i, { sectionId: e.target.value, result: undefined, moves: undefined })}
                     >
                       <option value="">Select a section…</option>
                       {sections.map((s) => <option key={s.id} value={s.id}>{s.department} - Year {s.year} - {s.name}</option>)}
@@ -382,7 +410,9 @@ export default function StudentAttendanceImportPage() {
                     </details>
                   )}
 
-                  {sh.result && <SheetResult sheet={sh} onToggleJoining={(roll, on) => patch(i, { joining: (sh.joining ?? []).map((j) => (j.roll === roll ? { ...j, on } : j)) })} />}
+                  {sh.result && <SheetResult sheet={sh}
+                    onToggleJoining={(roll, on) => patch(i, { joining: (sh.joining ?? []).map((j) => (j.roll === roll ? { ...j, on } : j)) })}
+                    onToggleMove={(roll, on) => patch(i, { moves: (sh.moves ?? []).map((m) => (m.roll === roll ? { ...m, on } : m)) })} />}
                 </CardContent>
               </Card>
             );
@@ -464,7 +494,11 @@ function Stat({ label, value }: { label: string; value: number }) {
 }
 
 // One sheet's preview / result: notes first (what to look at), the day-by-day table folded away until asked for.
-function SheetResult({ sheet, onToggleJoining }: { sheet: SheetState; onToggleJoining: (roll: string, on: boolean) => void }) {
+function SheetResult({ sheet, onToggleJoining, onToggleMove }: {
+  sheet: SheetState; onToggleJoining: (roll: string, on: boolean) => void; onToggleMove: (roll: string, on: boolean) => void;
+}) {
+  const moves = sheet.moves ?? [];
+  const moveRolls = new Set(moves.filter((m) => m.on).map((m) => m.roll));
   const r = sheet.result!;
   const joining = sheet.joining ?? [];
   const notes = r.days.filter((d) => d.timetableNote);
@@ -484,10 +518,37 @@ function SheetResult({ sheet, onToggleJoining }: { sheet: SheetState; onToggleJo
       )}
       {r.unmatchedRolls.length > 0 && <Note tone="error">Regd. Nos not in this section (ignored): {r.unmatchedRolls.join(", ")}</Note>}
       {r.rosterNotInFile.length > 0 && <Note>In the section but not in the sheet (no record): {r.rosterNotInFile.join(", ")}</Note>}
-      {r.beforeJoining.length > 0 && (
+      {moves.length > 0 && (
+        <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+          <p className="font-medium">Marked Before Their Date of Joining</p>
+          <p className="text-xs">
+            The register has P / A for these students before the Date of Joining entered for them.{" "}
+            {sheet.applied ? "" : "Ticked: their attendance counts from the first marked date, and their Date of Joining is changed to it when you import. Untick to keep the entered date (those marks are left out)."}
+          </p>
+          <ul className="space-y-1">
+            {moves.map((m) => (
+              <li key={m.roll}>
+                {sheet.applied ? (
+                  <span>
+                    <b>{m.roll}</b> - {!m.on ? `left out ${plural(m.days, "day")} before ${dmy(m.from)} (Date of Joining kept)`
+                      : m.status === "MOVED" || m.status === "SAME" ? `Date of Joining changed from ${dmy(m.from)} to ${dmy(m.to)}; counted from ${dmy(m.to)}`
+                      : `Date of Joining not changed (it was edited meanwhile) - check it`}
+                  </span>
+                ) : (
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="h-4 w-4" checked={m.on} onChange={(e) => onToggleMove(m.roll, e.target.checked)} />
+                    <span><b>{m.roll}</b> - count from {dmy(m.to)} <span className="text-xs text-muted-foreground">(Date of Joining {dmy(m.from)} → {dmy(m.to)}, {plural(m.days, "day")} more)</span></span>
+                  </label>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {r.beforeJoining.filter((b) => !moveRolls.has(b.roll) && !moves.some((m) => m.roll === b.roll)).length > 0 && (
         <Note>
           Left out - dated before the student&apos;s Date of Joining (attendance counts from that date):{" "}
-          {r.beforeJoining.map((b) => `${b.roll} (joined ${b.joinedOn}, ${b.days} day${b.days === 1 ? "" : "s"})`).join(", ")}
+          {r.beforeJoining.filter((b) => !moves.some((m) => m.roll === b.roll)).map((b) => `${b.roll} (joined ${dmy(b.joinedOn)}, ${b.days} day${b.days === 1 ? "" : "s"})`).join(", ")}
         </Note>
       )}
 
@@ -508,9 +569,9 @@ function SheetResult({ sheet, onToggleJoining }: { sheet: SheetState; onToggleJo
                   </label>
                 ) : (
                   <span>
-                    <b>{j.roll}</b> - {j.status === "SET" ? (j.on ? `Date of Joining set to ${j.date}` : `not set (unticked)`)
-                      : j.status === "SAME" ? `Date of Joining already ${j.date}`
-                      : j.status === "DIFFERENT" ? `register starts ${j.date}, but ${j.existing ? `Date of Joining ${j.existing} is already entered` : "a Date of Joining was entered meanwhile"} - left as it is; check it`
+                    <b>{j.roll}</b> - {j.status === "SET" ? (j.on ? `Date of Joining set to ${dmy(j.date)}` : `not set (unticked)`)
+                      : j.status === "SAME" ? `Date of Joining already ${dmy(j.date)}`
+                      : j.status === "DIFFERENT" ? `register starts ${dmy(j.date)}, but ${j.existing ? `Date of Joining ${dmy(j.existing)} is already entered` : "a Date of Joining was entered meanwhile"} - left as it is; check it`
                       : "not in this section"}
                   </span>
                 )}

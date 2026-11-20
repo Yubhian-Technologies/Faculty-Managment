@@ -36,6 +36,9 @@ interface Body {
   students?: { roll?: string; marks?: (ImportMark | null)[] }[];
   apply?: boolean;
   runId?: string;
+  /** Students to count from their first marked date although their entered Date of Joining is later (its move is
+   * saved by joining-dates before the import; here it only stops those marks being left out). */
+  joiningFrom?: { roll?: string; date?: string }[];
 }
 
 interface DayReport {
@@ -106,6 +109,11 @@ export async function POST(request: Request) {
       if (st) markOf.set(st.id, r.marks!);
     }
     const studentById = new Map(roster.map((s) => [s.id, s]));
+    const joiningFrom = new Map(
+      (Array.isArray(body.joiningFrom) ? body.joiningFrom : [])
+        .filter((j) => typeof j?.roll === "string" && typeof j?.date === "string" && DATE_RE.test(j.date))
+        .map((j) => [j.roll!.trim().toUpperCase(), j.date!]),
+    );
     const notInFile = roster.filter((s) => !markOf.has(s.id)).map((s) => s.rollNumber);
 
     // The section's published timetable, read as it is now (same liveness rule the not-posted report uses).
@@ -162,6 +170,8 @@ export async function POST(request: Request) {
         if (marks[idx] == null) return false;
         const st = studentById.get(studentId);
         if (joinedBy(st, date)) return true;
+        const from = joiningFrom.get((st?.rollNumber ?? "").trim().toUpperCase());
+        if (from && date >= from) return true;
         const roll = st?.rollNumber ?? studentId;
         beforeJoining.set(roll, { joinedOn: effectiveJoiningDate(st) ?? "", days: (beforeJoining.get(roll)?.days ?? 0) + 1 });
         return false;

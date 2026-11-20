@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Step } from "@/components/shared/PipelineStep";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { AddFromPoolDialog } from "@/components/hiring/AddFromPoolDialog";
 import { getCurrentStage, stateForStage, getDetailedHiringStatus, getApprovedDetailedStatuses, getOnboardingSummary, isHiringClosed, DETAILED_HIRING_STATUS_LABELS, type PipelineStage } from "@/lib/hiringPipeline";
 import { formatDate, toDate } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
@@ -122,15 +123,18 @@ function PipelineCard({
   appointmentCandidateIds,
   accountRequestStatusByCandidate,
   onDeleted,
+  onChanged,
 }: {
   entry: PipelineEntry;
   offerStatusByCandidate: Record<string, OfferStatus>;
   appointmentCandidateIds: Set<string>;
   accountRequestStatusByCandidate: Record<string, FacultyAccountRequestStatus>;
   onDeleted: (vacancyId: string) => void;
+  onChanged: () => void;
 }) {
   const { vacancy, candidates, batch } = entry;
   const [expanded, setExpanded] = useState(false);
+  const [poolOpen, setPoolOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
@@ -269,6 +273,12 @@ function PipelineCard({
                 <Plus className="h-3.5 w-3.5 mr-1" />
                 Add Candidate
               </Link>
+            </Button>
+          )}
+          {vacancy.status === "APPROVED" && !batch && (
+            <Button size="sm" variant="outline" onClick={() => setPoolOpen(true)}>
+              <UserCheck className="h-3.5 w-3.5 mr-1" />
+              Add From Pool
             </Button>
           )}
           {showShortlist && (
@@ -413,6 +423,7 @@ function PipelineCard({
         </div>
       )}
 
+      <AddFromPoolDialog vacancyId={vacancy.id} position={vacancy.position} open={poolOpen} onOpenChange={setPoolOpen} onAttached={onChanged} />
       <ConfirmDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
@@ -574,6 +585,7 @@ export function PipelineBoard({ scope }: { scope: "active" | "closed" }) {
           appointmentCandidateIds={appointmentCandidateIds}
           accountRequestStatusByCandidate={accountRequestStatusByCandidate}
           onDeleted={(vacancyId) => setEntries((prev) => prev.filter((entry) => entry.vacancy.id !== vacancyId))}
+          onChanged={load}
         />
       ))}
     </div>

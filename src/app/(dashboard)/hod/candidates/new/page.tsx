@@ -248,43 +248,8 @@ export default function NewCandidatePage() {
     ? vacancies.filter((v) => v.position.toLowerCase().includes(vacancySearch.trim().toLowerCase()))
     : vacancies;
 
-  // Candidates can only be added while there's an active (approved, open-post,
-  // not-yet-completed) hiring request to receive them - otherwise the pool
-  // grows with nothing to attach them to.
-  if (!isLoadingVacancies && vacancies.length === 0) {
-    return (
-      <div className="max-w-3xl">
-        <PageHeader title="Add Candidate" description="Add a candidate to the pool. Link them to a hiring request now or later." />
-        <Card>
-          <CardContent className="py-10 text-center space-y-3">
-            {pendingVacancies.length > 0 ? (
-              <>
-                <p className="font-medium">Waiting for the Principal&apos;s Approval</p>
-                <p className="text-sm text-muted-foreground">
-                  Your hiring request{pendingVacancies.length === 1 ? "" : "s"}{" "}
-                  {pendingVacancies.map((v) => `${v.position} (${v.department})`).join(", ")}{" "}
-                  {pendingVacancies.length === 1 ? "is" : "are"} waiting for the Principal. Candidates can be added once it is approved.
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <Button variant="outline" onClick={() => router.back()}>Back</Button>
-                  <Button onClick={() => router.push("/hod/pipeline")}>Open Hiring Pipeline</Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="font-medium">No active hiring request</p>
-                <p className="text-sm text-muted-foreground">Candidates can be added only while your department has an approved hiring request with open posts. Raise one; once the Principal approves it, add candidates here.</p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <Button variant="outline" onClick={() => router.back()}>Back</Button>
-                  <Button onClick={() => router.push("/hod/vacancy/new")}>Raise a Hiring Request</Button>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // A candidate may be added to the pool before any hiring request exists; once the department's request is
+  // approved they are attached to it (here, on the candidate's page, or "Add From Pool" on the Hiring Pipeline).
 
   return (
     <div className="max-w-3xl">
@@ -450,6 +415,12 @@ export default function NewCandidatePage() {
             <div className="space-y-2">
               {isLoadingVacancies ? (
                 <p className="text-sm text-muted-foreground">Loading hiring requests...</p>
+              ) : vacancies.length === 0 && !prefilledVacancyId ? (
+                <div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+                  {pendingVacancies.length > 0
+                    ? <>Your hiring request {pendingVacancies.map((v) => v.position).join(", ")} is waiting for the Principal&apos;s approval. The candidate is added to your pool now; attach them to it once it is approved (Hiring Pipeline &gt; Add From Pool).</>
+                    : <>No approved hiring request yet. The candidate is added to your pool now; attach them once a request is approved (Hiring Pipeline &gt; Add From Pool).</>}
+                </div>
               ) : prefilledVacancyId ? (
                 (() => {
                   const linked = vacancies.find((v) => v.id === prefilledVacancyId);
