@@ -122,8 +122,8 @@ describe("certificate text", () => {
   });
 
   it("fills record values, pronouns, roman year and day-first dates", () => {
-    expect(values).toMatchObject({ studentName: "Ravi Kumar", heShe: "he", sonDaughter: "son", MrMs: "Mr.", year: "III", dateOfBirth: "09-05-2004", issueDate: "03-11-2026", studentStatus: "is studying", semester: "5", conduct: "Good" });
-    expect(displayDate("2026-01-31")).toBe("31-01-2026");
+    expect(values).toMatchObject({ studentName: "Ravi Kumar", heShe: "he", sonDaughter: "son", MrMs: "Mr.", year: "III", dateOfBirth: "09/05/2004", issueDate: "03/11/2026", studentStatus: "is studying", semester: "5", conduct: "Good" });
+    expect(displayDate("2026-01-31")).toBe("31/01/2026");
   });
 
   it("a form answer never replaces a record value", () => {

@@ -9,10 +9,10 @@ export function displayDate(v: string | Date | undefined | null): string {
   if (!v) return "";
   if (v instanceof Date) {
     const ist = new Date(v.getTime() + 330 * 60_000);
-    return `${String(ist.getUTCDate()).padStart(2, "0")}-${String(ist.getUTCMonth() + 1).padStart(2, "0")}-${ist.getUTCFullYear()}`;
+    return `${String(ist.getUTCDate()).padStart(2, "0")}/${String(ist.getUTCMonth() + 1).padStart(2, "0")}/${ist.getUTCFullYear()}`;
   }
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : v;
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : v;
 }
 
 function pronouns(gender: string | undefined) {

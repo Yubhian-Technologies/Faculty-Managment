@@ -45,10 +45,10 @@ export function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-/** "2026-10-03" -> "03-10-2026" - the label format the faculty report already uses. */
+/** "2026-10-03" -> "03/10/2026" - the label format the faculty report already uses. */
 export function ddmmyyyy(date: string): string {
   const [y, m, d] = date.split("-");
-  return `${d}-${m}-${y}`;
+  return `${d}/${m}/${y}`;
 }
 
 function isRealDate(date: string): boolean {

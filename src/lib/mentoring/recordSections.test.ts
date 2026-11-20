@@ -53,7 +53,7 @@ describe("cleanEntryValues", () => {
 
 describe("formatting", () => {
   it("prints dates and months the way the rest of the app does", () => {
-    expect(formatEntryDate("2025-03-07")).toBe("07-03-2025");
+    expect(formatEntryDate("2025-03-07")).toBe("07/03/2025");
     expect(formatEntryMonth("2025-03")).toBe("Mar 2025");
     expect(formatEntryMonth("March")).toBe("March");
   });

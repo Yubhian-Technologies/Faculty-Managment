@@ -27,7 +27,7 @@ interface LabRow {
   faculty: LabFaculty[];
 }
 
-const dmy = (d: string) => { const [y, m, day] = d.split("-"); return `${day}-${m}-${y}`; };
+const dmy = (d: string) => { const [y, m, day] = d.split("-"); return `${day}/${m}/${y}`; };
 const sameBatch = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 // For each lab (PRACTICAL subject) of a section: should its attendance run batch

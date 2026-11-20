@@ -39,7 +39,7 @@ const EMPTY_RANGE: LabAttendanceDateRange = { from: "", to: "" };
 
 function dmy(d: string) {
   const [y, m, day] = d.split("-");
-  return `${day}-${m}-${y}`;
+  return `${day}/${m}/${y}`;
 }
 
 export function LabAttendanceAllocation({ loadAssignments }: { loadAssignments: () => Promise<AllocAssignment[]> }) {

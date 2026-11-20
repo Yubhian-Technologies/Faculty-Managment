@@ -108,7 +108,7 @@ function todayStr(): string {
 
 function formatDateDDMMYYYY(dateStr: string) {
   const [y, m, d] = dateStr.split("-");
-  return `${d}-${m}-${y}`;
+  return `${d}/${m}/${y}`;
 }
 
 function ordinalYear(year: number) {
@@ -921,7 +921,7 @@ export default function MarkAttendancePage() {
               </tbody>
             </table>
           </div>
-          <div className="bg-amber-50 px-4 py-2 text-xs text-amber-900 border-t">Attendance open only in time. Grouped continuous lab periods share a unified multi-column attendance marking layout.</div>
+          <div className="bg-amber-50 px-4 py-2 text-xs text-amber-900 border-t">Attendance can be marked only during the class time. Continuous lab periods are marked together on one sheet.</div>
         </Card>
       )}
 
@@ -938,7 +938,7 @@ export default function MarkAttendancePage() {
           {!isExpandedOpen && (
             <Card className="border-amber-200 bg-amber-50">
               <CardContent className="py-4 text-sm text-amber-900">
-                This period group is not open now ({formatTime12h(expandedGroup.startTime)} – {formatTime12h(expandedGroup.closeTime ?? expandedGroup.endTime)}). Attendance open only in time — contact Dept Office for office correction.
+                This period group is not open now ({formatTime12h(expandedGroup.startTime)} – {formatTime12h(expandedGroup.closeTime ?? expandedGroup.endTime)}). Attendance can be marked only during the class time - contact the Department Office for a correction.
               </CardContent>
             </Card>
           )}
