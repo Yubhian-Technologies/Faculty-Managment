@@ -125,6 +125,7 @@ export async function loadUnavailability(
   for (const doc of leaveSnap.docs) {
     if (doc.id === opts.excludeRequestId) continue;
     const r = doc.data() as LeaveRequest;
+    if (r.isLateAttendancePenalty) continue; // the late check-in CL deduction: never blocks a real leave that day
     const from = toISODate(r.fromDate);
     const to = toISODate(r.toDate);
     if (!from || !to || to < fromISO || from > toISO) continue;

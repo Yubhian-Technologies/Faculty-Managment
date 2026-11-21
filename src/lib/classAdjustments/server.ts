@@ -49,6 +49,7 @@ async function leaveRanges(db: Firestore, c: string, uid: string | undefined, da
   const snap = await col(db, c).collection("leaveRequests").where("uid", "==", uid).where("status", "==", "APPROVED").get();
   const out: { slotId: string; startTime: string; endTime: string; label: string }[] = [];
   for (const d of snap.docs) {
+    if ((d.data() as { isLateAttendancePenalty?: boolean }).isLateAttendancePenalty) continue; // the late check-in CL deduction: not a day away
     const r = d.data() as { fromDate?: { toDate?: () => Date }; toDate?: { toDate?: () => Date }; isHalfDay?: boolean; halfDaySession?: "FN" | "AN" };
     const f = r.fromDate?.toDate?.(), t = r.toDate?.toDate?.();
     if (!f || !t || istDateKey(f) > date || istDateKey(t) < date) continue;

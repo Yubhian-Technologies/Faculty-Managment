@@ -32,7 +32,8 @@ export async function isOnApprovedLeaveToday(
     .where("status", "==", "APPROVED")
     .get();
   return snap.docs.some((doc) => {
-    const r = doc.data() as { fromDate?: unknown; toDate?: unknown };
+    const r = doc.data() as { fromDate?: unknown; toDate?: unknown; isLateAttendancePenalty?: boolean };
+    if (r.isLateAttendancePenalty) return false; // the late check-in CL deduction: not a day away
     const from = toJsDate(r.fromDate);
     const to = toJsDate(r.toDate);
     return !!from && !!to && coversDay(today, from, to);

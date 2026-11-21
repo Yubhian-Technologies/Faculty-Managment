@@ -226,6 +226,7 @@ export async function dayLeave(db: Firestore, c: string, date: string): Promise<
   const snap = await REQUESTS_COL(c, db).where("status", "==", "APPROVED").get();
   const out = new Map<string, TimeRange[]>();
   for (const d of snap.docs) {
+    if ((d.data() as { isLateAttendancePenalty?: boolean }).isLateAttendancePenalty) continue; // the late check-in CL deduction: not a day away
     const r = d.data() as { uid?: string; fromDate?: { toDate?: () => Date }; toDate?: { toDate?: () => Date }; isHalfDay?: boolean; halfDaySession?: "FN" | "AN"; leaveTypeCode?: string };
     const f = r.fromDate?.toDate?.(), t = r.toDate?.toDate?.();
     if (!r.uid || !f || !t || istDateKey(f) > date || istDateKey(t) < date) continue;

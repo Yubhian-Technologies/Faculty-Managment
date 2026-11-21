@@ -15,6 +15,8 @@ import { toast } from "@/hooks/useToast";
 import { useMyDepartments } from "@/hooks/useMyDepartments";
 import { downloadTablePdf, downloadTableXlsx, type TableExport } from "@/lib/attendance/tableExport";
 import type { Department, Course } from "@/types";
+import { dmy } from "@/lib/utils";
+import { istDateKey } from "@/lib/attendance/istTime";
 
 interface AllRow {
   facultyId: string;
@@ -45,7 +47,7 @@ export function FacultyNotPostedView({
 }) {
   // Settings > Website Display Name > "Attendance and leave": names shown (and exported) as Display Names - display only.
   const { nameFor } = useFacultyDisplayNames();
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(() => istDateKey());
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [courses, setCourses] = useState<Course[]>([]);
@@ -66,7 +68,8 @@ export function FacultyNotPostedView({
 
   // For an HOD a level with one option is not a choice: Department is asked only
   // when there are sub-departments, Course only when there are several courses.
-  const departmentId = selectedDepartmentId || (hodScoped && departments.length === 1 ? departments[0].id : "");
+  // An HOD starts on "All" - every department they look after, the same people the HOD dashboard counts.
+  const departmentId = selectedDepartmentId || (hodScoped ? ALL : "");
   const myDepartments = useMyDepartments();
   const hodOwnDepartments = hodScoped ? myDepartments.filter(Boolean) : null;
 
@@ -128,6 +131,14 @@ export function FacultyNotPostedView({
   // A report needs "All", or a department AND a course.
   const canLoad = allDepartments || (!!selectedDepartment && !!courseId);
 
+  // An HOD lands on today's report for all their departments straight away (no Load press needed).
+  const [autoLoaded, setAutoLoaded] = useState(false);
+  useEffect(() => {
+    if (!hodScoped || autoLoaded || !allDepartments) return;
+    void (async () => { setAutoLoaded(true); await load("daily"); })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hodScoped, autoLoaded, allDepartments]);
+
   async function load(mode: "daily" | "period") {
     if (!canLoad) {
       toast({ variant: "destructive", title: "Select a department and course" });
@@ -163,7 +174,7 @@ export function FacultyNotPostedView({
   function currentTable(): TableExport | null {
     if (data == null) return null;
     const rows = onlyNotPosted ? data.rows.filter((r) => r.notMarked > 0) : data.rows;
-    const range = data.dates.length === 1 ? data.dates[0] : `${data.dates[0]} to ${data.dates[data.dates.length - 1]}`;
+    const range = data.dates.length === 1 ? dmy(data.dates[0]) : `${dmy(data.dates[0])} to ${dmy(data.dates[data.dates.length - 1])}`;
     const scope = allDepartments ? "All departments" : `${selectedDepartment?.name ?? ""} - ${courses.find((c) => c.id === courseId)?.name ?? ""}`;
     return {
       title: "Faculty not posted", subtitle: `${scope} - ${range}${onlyNotPosted ? " - only faculty with not-posted periods" : ""}`,
@@ -287,7 +298,7 @@ export function FacultyNotPostedView({
       {data != null && (() => {
         const d = data;
         const rows = onlyNotPosted ? d.rows.filter((r) => r.notMarked > 0) : d.rows;
-        const range = d.dates.length === 1 ? d.dates[0] : `${d.dates[0]} to ${d.dates[d.dates.length - 1]}`;
+        const range = d.dates.length === 1 ? dmy(d.dates[0]) : `${dmy(d.dates[0])} to ${dmy(d.dates[d.dates.length - 1])}`;
         return (
           <Card>
             <CardHeader>

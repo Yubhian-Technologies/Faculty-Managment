@@ -56,6 +56,7 @@ export async function GET() {
     const entries: ActiveLeaveEntry[] = [];
     for (const doc of snap.docs) {
       const r = doc.data() as LeaveRequest;
+      if (r.isLateAttendancePenalty) continue; // the late check-in CL deduction: not a day away
       if (hodDepts && (!r.department || !hodDepts.includes(r.department))) continue;
       const from = toDate(r.fromDate);
       const to = toDate(r.toDate);
