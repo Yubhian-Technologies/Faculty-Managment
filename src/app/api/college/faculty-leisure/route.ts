@@ -170,6 +170,7 @@ export async function GET(request: Request) {
     // full-day leave blocks everything.
     const leaveByUid = new Map<string, Range[]>();
     for (const doc of leaveSnap.docs) {
+      if ((doc.data() as { isLateAttendancePenalty?: boolean }).isLateAttendancePenalty) continue; // late check-in CL deduction
       const r = doc.data() as { uid?: string; fromDate?: { toDate?: () => Date }; toDate?: { toDate?: () => Date }; isHalfDay?: boolean; halfDaySession?: "FN" | "AN" };
       const f = r.fromDate?.toDate?.();
       const t = r.toDate?.toDate?.();

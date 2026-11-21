@@ -36,6 +36,7 @@ export async function GET() {
     const leaveByType = new Map<string, number>();
     for (const d of leaveSnap.docs) {
       const r = d.data() as LeaveRequest;
+      if (r.isLateAttendancePenalty) continue; // the late check-in CL deduction: not a day away
       if (!r.department || !depts.includes(r.department)) continue;
       const from = toDate(r.fromDate);
       if (!from || from.getFullYear() !== year || from.getMonth() + 1 !== month) continue;

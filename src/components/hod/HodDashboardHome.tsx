@@ -53,7 +53,8 @@ interface TodayData {
     sections: { sectionId: string; label: string; department: string; pct: number | null; absentAllDay: number; students: number }[];
     absentees?: AbsenteeRow[];
   };
-  onLeave: { name: string; leaveType: string; halfDay: string | null; covers: { period: number; section: string; substitute: string }[]; uncovered: number }[];
+  onLeave: { name: string; leaveType: string; halfDay: string | null; covers: { period: number; section: string; substitute: string }[]; uncovered: number;
+    uncoveredPeriods?: { period: number; section: string; subject: string; start: string; end: string }[] }[];
   departments: string[];
 }
 interface SemesterData {
@@ -80,7 +81,7 @@ const CELL: Record<ClassCell["status"], { cls: string; mark: string; label: stri
   UPCOMING: { cls: "bg-slate-100 text-slate-400 ring-1 ring-inset ring-slate-200", mark: "", label: "Later today" },
 };
 
-function ClassGrid({ data }: { data: TodayData["classes"] }) {
+function ClassGrid({ data, onMore }: { data: TodayData["classes"]; onMore?: () => void }) {
   // With many sections the grid scrolls inside the card (period row and section names stay in view), and the
   // HOD can narrow it to the sections with a period not posted yet.
   const [onlyOverdue, setOnlyOverdue] = useState(false);
@@ -148,7 +149,11 @@ function ClassGrid({ data }: { data: TodayData["classes"] }) {
               <li key={i} className="truncate"><span className="font-medium">P{o.period} · {o.section}</span> <span className="text-muted-foreground">{o.subject} · {o.faculty}</span></li>
             ))}
           </ul>
-          {data.overdue.length > 8 && <p className="mt-1 text-xs text-muted-foreground">and {data.overdue.length - 8} more</p>}
+          {data.overdue.length > 8 && (
+            <button type="button" onClick={onMore} className="mt-1.5 text-xs font-medium text-red-700 hover:underline">
+              and {data.overdue.length - 8} more - see all →
+            </button>
+          )}
         </div>
       )}
     </>
@@ -365,7 +370,7 @@ export function HodDashboardHome() {
         <div className="grid gap-3.5 lg:grid-cols-[2fr_1fr]">
           <Panel id="classes" title="Classes" sub="Every section, period by period" href="/hod/attendance-reports" linkLabel="Attendance Reports"
             loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
-            {cls && <ClassGrid data={cls} />}
+            {cls && <ClassGrid data={cls} onMore={() => setDetail("classes")} />}
           </Panel>
           <Panel id="by-section" title="Student Attendance by Section" sub="Today so far · lowest first" loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
             {day.data && (day.data.students.sections.length === 0 ? (
@@ -429,8 +434,13 @@ export function HodDashboardHome() {
                       <span className="font-medium">{l.name}</span>
                       <span className="text-muted-foreground"> · {LEAVE_TYPE_LABELS[l.leaveType as keyof typeof LEAVE_TYPE_LABELS] ?? l.leaveType}{l.halfDay ? ` (${l.halfDay === "FN" ? "Forenoon" : "Afternoon"})` : ""}</span>
                       {l.covers.length > 0 && <span className="block truncate text-[11px] text-muted-foreground">{l.covers.map((c) => `P${c.period} ${c.section} → ${c.substitute}`).join(" · ")}</span>}
+                      {(l.uncoveredPeriods?.length ?? 0) > 0 && (
+                        <span className="block text-[11px] text-red-700">
+                          No substitute: {l.uncoveredPeriods!.map((u) => `P${u.period} ${u.section}${u.subject ? ` (${u.subject})` : ""}`).join(" · ")}
+                        </span>
+                      )}
                     </span>
-                    {l.uncovered > 0 ? <Tag tone="crit">{l.uncovered} uncovered</Tag> : <Tag tone="good">Covered</Tag>}
+                    {l.uncovered > 0 ? <Tag tone="crit">{l.uncovered} without substitute</Tag> : <Tag tone="good">Covered</Tag>}
                   </li>
                 ))}
               </ul>

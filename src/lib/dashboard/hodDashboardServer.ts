@@ -111,7 +111,7 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
 
   // Every faculty member's periods today (substitutes and class adjustments included) -> the section x period grid.
   const cells: Record<string, ClassCell> = {};
-  const periodsByFaculty = new Map<string, { periodNumber: number; sectionId: string }[]>();
+  const periodsByFaculty = new Map<string, { periodNumber: number; sectionId: string; start: string; end: string; subject: string }[]>();
   const timingCache = new Map();
   // 24 faculty at a time: each is a few small timetable reads, and the dashboard waits for all of them.
   for (const ids of chunk([...faculty.keys()], 24)) {
@@ -121,7 +121,7 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
       for (const p of list) {
         const sectionId = p.slot.sectionId ?? "";
         const periodNumber = p.slot.periodNumber;
-        periodsByFaculty.set(ids[i], [...(periodsByFaculty.get(ids[i]) ?? []), { periodNumber, sectionId }]);
+        periodsByFaculty.set(ids[i], [...(periodsByFaculty.get(ids[i]) ?? []), { periodNumber, sectionId, start: p.startTime ?? "", end: p.endTime ?? "", subject: p.slot.subjectName ?? "" }]);
         if (!sectionIds.has(sectionId)) continue;
         const key = `${sectionId}|${periodNumber}`;
         cells[key] = mergeCell(cells[key], {
@@ -212,6 +212,9 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
   const facultyByUid = new Map([...faculty.values()].filter((f) => f.userUid).map((f) => [f.userUid!, f]));
   const onLeave = leaveSnap.docs
     .map((d) => ({ ...(d.data() as LeaveRequest), id: d.id }))
+    // The automatic 0.5 CL deduction for 3 late check-ins is stored as an approved CL dated that day - it is a
+    // balance entry, not a day away (the person is at work), so it never shows as "on leave".
+    .filter((r) => !r.isLateAttendancePenalty)
     .filter((r) => college || (!!r.department && facultyDepts!.includes(r.department)))
     .filter((r) => {
       const from = toDate(r.fromDate), to = toDate(r.toDate);
@@ -220,8 +223,13 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
     .map((r) => {
       const subs = (r.periodSubstitutions ?? []).filter((p) => p.date === today);
       const f = facultyByUid.get(r.uid);
-      const mine = f ? (periodsByFaculty.get(f.id) ?? []) : [];
+      // A half-day leave covers only its half (forenoon before 13:00, afternoon from 13:00 - the rule the class
+      // adjustments and invigilation use), so the other half's periods are not "uncovered".
+      const half = r.isHalfDay ? (r.halfDaySession ?? "FN") : null;
+      const mine = (f ? (periodsByFaculty.get(f.id) ?? []) : [])
+        .filter((p) => !half || !p.start || (half === "FN" ? p.start < "13:00" : p.start >= "13:00"));
       const coveredPeriods = new Set(subs.map((p) => p.periodNumber));
+      const open = mine.filter((p) => !coveredPeriods.has(p.periodNumber)).sort((a, b) => a.periodNumber - b.periodNumber);
       return {
         name: r.employeeName,
         department: r.department ?? "",
@@ -230,7 +238,9 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
         leaveType: r.leaveTypeCode ?? "OTHER",
         halfDay: r.isHalfDay ? (r.halfDaySession ?? "FN") : null,
         covers: subs.map((p) => ({ period: p.periodNumber, section: p.sectionName ?? "", substitute: p.substituteFacultyName })),
-        uncovered: mine.filter((p) => !coveredPeriods.has(p.periodNumber)).length,
+        uncovered: open.length,
+        // Which periods: nobody is assigned to take them.
+        uncoveredPeriods: open.map((p) => ({ period: p.periodNumber, section: byId.get(p.sectionId)?.label ?? "", subject: p.subject, start: p.start, end: p.end })),
       };
     })
     .sort((a, b) => Number(b.isHod) - Number(a.isHod) || b.uncovered - a.uncovered || a.name.localeCompare(b.name));

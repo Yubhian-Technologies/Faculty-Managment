@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import type { Timestamp } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { getHodDepartmentScope, canHodEditDepartment, facultyManageableDepartmentNames } from "@/lib/departments/scope";
+import { getHodDepartmentScope, canHodEditDepartment, editableDepartmentNames, facultyManageableDepartmentNames } from "@/lib/departments/scope";
 import { resolveMergedCourseIds } from "@/lib/departments/courseGrouping";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { isFacultyAvailable } from "@/types";
@@ -265,19 +265,41 @@ export async function GET(request: Request) {
         }
         teachingCourse = new Set(await facultyIdsTeachingCourse(collegeRef, department, courseId));
       }
+      // An HOD's report covers the same people as the HOD dashboard: their departments' faculty, plus anyone from
+      // another department who teaches one of their sections (e.g. Basic Science faculty taking 1st-year ECE) -
+      // for those, only the periods of the HOD's sections count (`outsideOnly`: their assignment ids there).
+      const outsideOnly = new Map<string, Set<string>>();
+      if (hodScope) {
+        const names = editableDepartmentNames(hodScope);
+        if (names.length) {
+          const taSnap = await whereIn(collegeRef.collection("teachingAssignments"), "department", names).get();
+          for (const d of taSnap.docs) {
+            const ta = d.data() as TeachingAssignment;
+            if (ta.isPast || !ta.facultyId) continue;
+            if (teachingCourse && !teachingCourse.has(ta.facultyId)) continue;
+            outsideOnly.set(ta.facultyId, (outsideOnly.get(ta.facultyId) ?? new Set()).add(d.id));
+          }
+        }
+      }
       const facultySnap = await collegeRef.collection("facultyMembers").get();
       const people = facultySnap.docs
         .map((d) => ({ ...(d.data() as FacultyMember), id: d.id }))
-        .filter((f) => isFacultyAvailable(f.status) && (!hodDepartments || hodDepartments.has(f.department ?? ""))
+        .filter((f) => isFacultyAvailable(f.status)
+          && ((!hodDepartments || hodDepartments.has(f.department ?? "")) || outsideOnly.has(f.id))
           && (!teachingCourse || teachingCourse.has(f.id)));
+      // Own-department faculty: every period they teach (as before). Others: only their periods in the HOD's sections.
+      const limitTo = (f: FacultyMember & { id: string }) =>
+        hodDepartments && !hodDepartments.has(f.department ?? "") ? outsideOnly.get(f.id) ?? new Set<string>() : null;
 
       const timingCache = new Map();
       const rows: { facultyId: string; name: string; department: string; totalPeriods: number; onTime: number; late: number; notMarked: number; pending: number }[] = [];
       for (let i = 0; i < people.length; i += 8) {
         const chunk = await Promise.all(people.slice(i, i + 8).map(async (f) => {
           const statuses: PeriodSlotWithStatus[] = [];
+          const only = limitTo(f);
           for (const d of dates) {
-            const slots = await getFacultyPeriodsForDate(db, session.collegeId, f.id, d, timingCache);
+            const slots = (await getFacultyPeriodsForDate(db, session.collegeId, f.id, d, timingCache))
+              .filter((p) => !only || only.has(p.slot.assignmentId));
             const snaps = await Promise.all(slots.map((p) => collegeRef.collection("studentAttendance").doc(`${p.slot.assignmentId}_${d}_${p.slot.periodNumber}`).get()));
             slots.forEach((p, k) => {
               const sess = snaps[k].exists ? (snaps[k].data() as StudentAttendanceSession) : null;
@@ -293,7 +315,7 @@ export async function GET(request: Request) {
         rows.push(...chunk);
       }
       rows.sort((a, b) => a.department.localeCompare(b.department) || a.name.localeCompare(b.name));
-      return NextResponse.json({ dates, rows });
+      return NextResponse.json({ dates, rows: rows.filter((r) => r.totalPeriods > 0 || !hodDepartments || hodDepartments.has(r.department)) });
     }
 
     // An HOD's Edit Attendance picker needs neither: staff edit only their own department's

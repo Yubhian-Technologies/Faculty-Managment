@@ -33,7 +33,8 @@ export async function GET() {
 
     const counts: Record<string, number> = {};
     for (const doc of snap.docs) {
-      const r = doc.data() as { department?: string; fromDate?: unknown; toDate?: unknown };
+      const r = doc.data() as { department?: string; fromDate?: unknown; toDate?: unknown; isLateAttendancePenalty?: boolean };
+      if (r.isLateAttendancePenalty) continue; // the late check-in CL deduction: not a day away
       if (!r.department) continue;
       const from = toDate(r.fromDate);
       const to = toDate(r.toDate);

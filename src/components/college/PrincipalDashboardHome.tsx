@@ -49,7 +49,8 @@ interface TodayData {
     overdue: { section: string; sectionDepartment: string; period: number; subject: string; faculty: string; facultyId: string; facultyDepartment: string; end: string }[];
   };
   students: { pct: number | null; absentAllDay: number; sections?: SectionTodayRow[]; absentees?: AbsenteeRow[] };
-  onLeave: { name: string; department: string; isHod: boolean; handoverTo: string | null; leaveType: string; halfDay: string | null; covers: { period: number; section: string; substitute: string }[]; uncovered: number }[];
+  onLeave: { name: string; department: string; isHod: boolean; handoverTo: string | null; leaveType: string; halfDay: string | null; covers: { period: number; section: string; substitute: string }[]; uncovered: number;
+    uncoveredPeriods?: { period: number; section: string; subject: string; start: string; end: string }[] }[];
   departments: string[];
   departmentCodes: Record<string, string>;
   byDepartment: { department: string; total: number; due: number; posted: number; overdue: number; counted: number; present: number; absentAllDay: number; pct: number | null }[];
@@ -392,7 +393,11 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
                     </li>
                   ))}
                 </ul>
-                {notPosted.length > 6 && <p className="mt-2 text-xs text-muted-foreground">and {notPosted.length - 6} more faculty</p>}
+                {notPosted.length > 6 && (
+                  <button type="button" onClick={() => setDetail("classes")} className="mt-2 text-xs font-medium text-red-700 hover:underline">
+                    and {notPosted.length - 6} more faculty - see all →
+                  </button>
+                )}
               </>
             )}
           </Panel>
@@ -410,8 +415,13 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
                         <span className="block truncate text-[11px] text-muted-foreground">
                           {l.isHod && l.handoverTo ? `HOD duties with ${l.handoverTo}` : l.covers.length ? l.covers.map((c) => `P${c.period} ${c.section} → ${c.substitute}`).join(" · ") : l.uncovered ? "Classes not assigned to anyone" : "No classes today"}
                         </span>
+                        {(l.uncoveredPeriods?.length ?? 0) > 0 && (
+                          <span className="block text-[11px] text-red-700">
+                            No substitute: {l.uncoveredPeriods!.map((u) => `P${u.period} ${u.section}${u.subject ? ` (${u.subject})` : ""}`).join(" · ")}
+                          </span>
+                        )}
                       </span>
-                      {l.uncovered > 0 ? <Tag tone="crit">{l.uncovered} uncovered</Tag> : l.isHod ? <Tag tone="warn">HOD</Tag> : <Tag tone="good">Covered</Tag>}
+                      {l.uncovered > 0 ? <Tag tone="crit">{l.uncovered} without substitute</Tag> : l.isHod ? <Tag tone="warn">HOD</Tag> : <Tag tone="good">Covered</Tag>}
                     </li>
                   ))}
                 </ul>
