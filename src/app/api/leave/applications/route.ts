@@ -17,7 +17,7 @@ import {
   DUPLICATE_SUBMISSION_MESSAGE, DuplicateLeaveSubmissionError, createLeaveRequestOnce, isPendingStatus,
 } from "@/lib/leave/submissionGuard";
 import { countWorkingDays, todayISODate, yearsOfService, isoDateKey } from "@/lib/leave/dayCounter";
-import { loadUnavailability } from "@/lib/leave/availability";
+import { loadUnavailability, coverClashes, describeCoverClashes } from "@/lib/leave/availability";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
 import { resolveLeaveType } from "@/lib/leave/resolveLeaveTypes";
@@ -585,12 +585,11 @@ export async function POST(request: Request) {
       // committed to cover would keep showing them as the covering faculty
       // while they're themselves on leave, with nobody notified.
       const unavailability = await loadUnavailability(db, session.collegeId, isoDateKey(fromDate), isoDateKey(toDate));
-      if (unavailability.coveringFacultyIdsBetween(isoDateKey(fromDate), isoDateKey(toDate)).has(facultyMemberId)) {
-        return NextResponse.json(
-          { error: "You're already committed to cover another faculty member's periods during these dates - resolve that coverage before applying for leave over the same range." },
-          { status: 400 },
-        );
-      }
+      // Only a class they cover on a day (or half) the leave actually takes away.
+      const clashes = coverClashes(unavailability, facultyMemberId, {
+        fromISO: isoDateKey(fromDate), toISO: isoDateKey(toDate), isHalfDay: !!body.isHalfDay, halfDaySession: body.halfDaySession, firstDayHalf, lastDayHalf,
+      });
+      if (clashes.length) return NextResponse.json({ error: describeCoverClashes(clashes) }, { status: 400 });
 
       const result = await validatePeriodSubstitutions({
         db, collegeId: session.collegeId, facultyMemberId, department: identity.department,

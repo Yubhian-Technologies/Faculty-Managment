@@ -22,7 +22,7 @@ import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import { resolveStaffGender, resolveEmployeeIdentity } from "@/lib/leave/identity";
 import { isoDateKey, yearsOfService, countWorkingDays, todayISODate } from "@/lib/leave/dayCounter";
 import { getWorkingDayWeightsForRole } from "@/lib/attendance/workingDays";
-import { loadUnavailability } from "@/lib/leave/availability";
+import { loadUnavailability, coverClashes, describeCoverClashes } from "@/lib/leave/availability";
 import { resolveLeaveType } from "@/lib/leave/resolveLeaveTypes";
 import { OTHER_CATEGORIES_COL } from "@/lib/leave/otherCategories";
 import { LEAVE_TYPE_SEED } from "@/lib/leave/seedData";
@@ -513,12 +513,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const unavailability = await loadUnavailability(
           db, session.collegeId, isoDateKey(fromDate), isoDateKey(toDate), { excludeRequestId: id }
         );
-        if (unavailability.coveringFacultyIdsBetween(isoDateKey(fromDate), isoDateKey(toDate)).has(facultyMemberId)) {
-          return NextResponse.json(
-            { error: "You're already committed to cover another faculty member's periods during these dates - resolve that coverage before editing your leave to overlap them." },
-            { status: 400 },
-          );
-        }
+        const clashes = coverClashes(unavailability, facultyMemberId, { fromISO: isoDateKey(fromDate), toISO: isoDateKey(toDate), ...span });
+        if (clashes.length) return NextResponse.json({ error: describeCoverClashes(clashes) }, { status: 400 });
         const result = await validatePeriodSubstitutions({
           db, collegeId: session.collegeId, facultyMemberId, department: identity.department,
           fromDate, toDate, holidayDates,

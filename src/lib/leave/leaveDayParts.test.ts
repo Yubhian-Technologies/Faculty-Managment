@@ -45,3 +45,21 @@ describe("1.5 / 2.5 day leave: half days at the ends", () => {
     expect(halfEndsNote({ fromDate: "2026-11-26", toDate: "2026-11-27" }, fmt)).toBe("");
   });
 });
+
+describe("a leave against the classes the applicant covers for colleagues", () => {
+  it("clashes only on the leave's own days, and on a half day only in that half", async () => {
+    const { coverClashes, describeCoverClashes } = await import("./availability");
+    const list = [
+      { date: "2026-11-20", periodNumber: 5, startTime: "13:50", sectionName: "ECE-A", forName: "Mr X" },
+      { date: "2026-11-21", periodNumber: 2, startTime: "09:40", sectionName: "CSE-C", subjectName: "Maths", forName: "Dr Y" },
+    ];
+    const u = {
+      coveringCommitments: (_id: string, from: string, to: string) => list.filter((c) => c.date >= from && c.date <= to),
+    } as unknown as Parameters<typeof coverClashes>[0];
+    // Leave on 21/11 only: the 20/11 cover is no clash.
+    expect(coverClashes(u, "f1", { fromISO: "2026-11-21", toISO: "2026-11-21" }).map((c) => c.periodNumber)).toEqual([2]);
+    // An afternoon half day on 21/11: the forenoon P2 cover is still theirs to take.
+    expect(coverClashes(u, "f1", { fromISO: "2026-11-21", toISO: "2026-11-21", isHalfDay: true, halfDaySession: "AN" })).toEqual([]);
+    expect(describeCoverClashes([list[1]])).toBe("You're down to cover P2 CSE-C (Maths) on 21/11/2026 for Dr Y. Ask them to choose someone else, or decline it in Work Adjustments, before applying for leave at that time.");
+  });
+});
