@@ -1,4 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
+import { leavePartOn, type LeaveSpan } from "@/lib/leave/leaveDayParts";
 import { NextResponse } from "next/server";
 import { badBodyResponse } from "@/lib/http/readJsonBody";
 import { ordinalYearLabel } from "@/lib/college/courseYears";
@@ -10,7 +11,6 @@ import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { dayOfWeekFromISODate } from "@/lib/timetable/leisureQuery";
 import { getActiveSubstitutionsForDates } from "@/lib/leave/periodCoverage";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
-import { istDateKey } from "@/lib/attendance/istTime";
 import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import { isFacultyAvailable } from "@/types";
 import type { CourseYearTiming, MidExamPlan, MidTimetable, PeriodTiming, TimetableDraft, TimetableSlot } from "@/types";
@@ -228,10 +228,10 @@ export async function dayLeave(db: Firestore, c: string, date: string): Promise<
   for (const d of snap.docs) {
     if ((d.data() as { isLateAttendancePenalty?: boolean }).isLateAttendancePenalty) continue; // the late check-in CL deduction: not a day away
     const r = d.data() as { uid?: string; fromDate?: { toDate?: () => Date }; toDate?: { toDate?: () => Date }; isHalfDay?: boolean; halfDaySession?: "FN" | "AN"; leaveTypeCode?: string };
-    const f = r.fromDate?.toDate?.(), t = r.toDate?.toDate?.();
-    if (!r.uid || !f || !t || istDateKey(f) > date || istDateKey(t) < date) continue;
-    const range: TimeRange = r.isHalfDay && r.halfDaySession
-      ? (r.halfDaySession === "FN" ? { from: "00:00", to: "13:00", label: `${r.leaveTypeCode ?? "Leave"} - forenoon` } : { from: "13:00", to: "24:00", label: `${r.leaveTypeCode ?? "Leave"} - afternoon` })
+    const part = r.uid ? leavePartOn(r as LeaveSpan, date) : null;
+    if (!r.uid || !part) continue;
+    const range: TimeRange = part === "FN" ? { from: "00:00", to: "13:00", label: `${r.leaveTypeCode ?? "Leave"} - forenoon` }
+      : part === "AN" ? { from: "13:00", to: "24:00", label: `${r.leaveTypeCode ?? "Leave"} - afternoon` }
       : { from: "00:00", to: "24:00", label: r.leaveTypeCode ?? "Leave" };
     out.set(r.uid, [...(out.get(r.uid) ?? []), range]);
   }

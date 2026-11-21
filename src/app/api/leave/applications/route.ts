@@ -289,6 +289,8 @@ export async function POST(request: Request) {
       toDate?: string;
       isHalfDay?: boolean;
       halfDaySession?: "FN" | "AN";
+      firstDayHalf?: "AN" | null;
+      lastDayHalf?: "FN" | null;
       reason?: string;
       extendsRequestId?: string;
       periodSubstitutions?: PeriodSubstitutionInput[];
@@ -389,6 +391,19 @@ export async function POST(request: Request) {
     }
     if (body.isHalfDay && body.halfDaySession !== "FN" && body.halfDaySession !== "AN") {
       return NextResponse.json({ error: "Select forenoon or afternoon for a half day request" }, { status: 400 });
+    }
+    // A range with a half day at an end (1.5, 2.5 ... days): only "first day afternoon only" / "last day forenoon only",
+    // only on a range, only for a leave type that allows half days.
+    const firstDayHalf = !body.isHalfDay && body.firstDayHalf === "AN" ? "AN" as const : undefined;
+    const lastDayHalf = !body.isHalfDay && body.lastDayHalf === "FN" ? "FN" as const : undefined;
+    if ((body.firstDayHalf && body.firstDayHalf !== "AN") || (body.lastDayHalf && body.lastDayHalf !== "FN")) {
+      return NextResponse.json({ error: "The first day can only start in the afternoon, and the last day can only end at the forenoon." }, { status: 400 });
+    }
+    if ((firstDayHalf || lastDayHalf) && !leaveType?.rules.halfDayAllowed) {
+      return NextResponse.json({ error: "Half day isn't available for this leave type" }, { status: 400 });
+    }
+    if ((firstDayHalf || lastDayHalf) && body.fromDate === body.toDate) {
+      return NextResponse.json({ error: "For one date, choose Half Day instead." }, { status: 400 });
     }
 
     const fromDate = new Date(body.fromDate);
@@ -547,7 +562,7 @@ export async function POST(request: Request) {
       getHolidayDateKeys(db, session.collegeId, fromDate, toDate),
       getWorkingDayWeightsForRole(db, session.collegeId, fromDate, toDate, session.role as UserRole),
     ]);
-    const totalDays = countWorkingDays(fromDate, toDate, holidayDates, body.isHalfDay, workingDayWeights);
+    const totalDays = countWorkingDays(fromDate, toDate, holidayDates, body.isHalfDay, workingDayWeights, { firstDayHalf, lastDayHalf });
 
     // Insufficient balance never blocks submission - days beyond what's
     // remaining are accepted and split into Loss of Pay at approval time
@@ -582,6 +597,8 @@ export async function POST(request: Request) {
         fromDate, toDate, holidayDates,
         submitted: body.periodSubstitutions ?? [],
         mode: "FULL",
+        // Only the periods in the half on leave need a substitute.
+        coverageOptions: { span: { isHalfDay: !!body.isHalfDay, halfDaySession: body.halfDaySession, firstDayHalf, lastDayHalf } },
       });
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: 400 });
@@ -717,6 +734,8 @@ export async function POST(request: Request) {
       totalDays,
       isHalfDay: body.isHalfDay || false,
       ...(body.isHalfDay ? { halfDaySession: body.halfDaySession } : {}),
+      ...(firstDayHalf ? { firstDayHalf } : {}),
+      ...(lastDayHalf ? { lastDayHalf } : {}),
       reason: body.reason.trim(),
       // Only stored when it's the non-default target - HOD is implicit
       // whenever this is absent (see LeaveReasonOption's own doc-comment).

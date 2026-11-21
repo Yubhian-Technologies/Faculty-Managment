@@ -79,7 +79,14 @@ function daysWithinWindow(
   if (start > end) return 0;
   // A half day is 0.5 wherever it falls, and never spans a boundary.
   if (r.isHalfDay) return 0.5;
-  return countWorkingDays(start, end, holidayDates);
+  let days = countWorkingDays(start, end, holidayDates);
+  // A range's half-day ends count half in whichever month they fall (lib/leave/leaveDayParts.ts).
+  const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (!sameDay(from, to)) {
+    if (r.firstDayHalf === "AN" && from >= start && from <= end) days -= Math.min(0.5, countWorkingDays(from, from, holidayDates));
+    if (r.lastDayHalf === "FN" && to >= start && to <= end) days -= Math.min(0.5, countWorkingDays(to, to, holidayDates));
+  }
+  return days;
 }
 
 // The same share, expressed as a fraction of the request's own total - used to

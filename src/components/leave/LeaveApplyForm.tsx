@@ -15,7 +15,7 @@ import { toast } from "@/hooks/useToast";
 import { OD_PROOF_GRACE_DAYS } from "@/lib/leave/odProof";
 import { AlertTriangle, CalendarPlus, Users } from "lucide-react";
 import { countWorkingDays, dateKey, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
-import { toDate as toJsDate, formatDate, formatTime12h } from "@/lib/utils";
+import { toDate as toJsDate, dmy, formatDate, formatTime12h } from "@/lib/utils";
 import { toRoman } from "@/lib/academic/format";
 import { useAuthStore } from "@/store/authStore";
 import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
@@ -75,6 +75,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // Vacation and Extend below since those are inherently a span of days.
   const [fullDayMode, setFullDayMode] = useState<"ONE" | "RANGE">("ONE");
   const [halfDaySession, setHalfDaySession] = useState<"FN" | "AN">("FN");
+  // Multiple Days with a half day at an end (1.5, 2.5 ... days): the first day from the afternoon only, the last day
+  // up to the forenoon only (lib/leave/leaveDayParts.ts). Offered when the type allows half days.
+  const [firstDayHalf, setFirstDayHalf] = useState(false);
+  const [lastDayHalf, setLastDayHalf] = useState(false);
   const [reason, setReason] = useState("");
   // Only meaningful when the selected type has reasonOptions configured (see
   // BalanceEntry) - true once "Other" is picked from that dropdown, revealing
@@ -268,9 +272,14 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
   // Matches the server's countWorkingDays exactly - Sundays and declared
   // holidays within the range don't count, same rule the server enforces.
   const selectedType = types.find((t) => t.code === leaveTypeCode);
+  // The half-day ends apply only to a real range of a type that allows half days.
+  const halfEndsAllowed = !isHalfDay && fullDayMode === "RANGE" && !!selectedType?.halfDayAllowed && !!fromDate && !!toDate && toDate > fromDate;
+  const halfEnds = halfEndsAllowed
+    ? { firstDayHalf: firstDayHalf ? "AN" as const : undefined, lastDayHalf: lastDayHalf ? "FN" as const : undefined }
+    : {};
   const previewTotalDays =
     fromDate && toDate && toDate >= fromDate
-      ? countWorkingDays(new Date(fromDate), new Date(toDate), holidayDates, isHalfDay, workingDayWeights)
+      ? countWorkingDays(new Date(fromDate), new Date(toDate), holidayDates, isHalfDay, workingDayWeights, halfEnds)
       : 0;
   const lopPreviewDays =
     selectedType && !selectedType.unlimited && selectedType.remaining !== undefined && previewTotalDays > selectedType.remaining
@@ -307,7 +316,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
     }
     let cancelled = false;
     setIsLoadingPeriods(true);
-    fetch(`/api/leave/period-coverage?fromDate=${fromDate}&toDate=${toDate}`)
+    // Only the periods in the half on leave need a substitute.
+    const halfQs = isHalfDay ? `&halfDay=${effectiveHalfDaySession}`
+      : `${halfEnds.firstDayHalf ? "&firstDayHalf=AN" : ""}${halfEnds.lastDayHalf ? "&lastDayHalf=FN" : ""}`;
+    fetch(`/api/leave/period-coverage?fromDate=${fromDate}&toDate=${toDate}${halfQs}`)
       .then((r) => r.json() as Promise<{ periods?: PeriodCoverageEntry[]; error?: string }>)
       .then((data) => {
         if (cancelled) return;
@@ -322,7 +334,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
         if (!cancelled) setIsLoadingPeriods(false);
       });
     return () => { cancelled = true; };
-  }, [leaveTypeCode, fromDate, toDate]);
+  }, [leaveTypeCode, fromDate, toDate, isHalfDay, effectiveHalfDaySession, halfEnds.firstDayHalf, halfEnds.lastDayHalf]);
 
   // Every department any period's candidates actually belong to - not a
   // fetched department list, so "All Departments" never offers a choice that
@@ -441,6 +453,8 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
         setToDate(isoDateKey(toJsDate(r.toDate) ?? new Date()));
         setIsHalfDay(!!r.isHalfDay);
         if (r.halfDaySession) setHalfDaySession(r.halfDaySession);
+        setFirstDayHalf(r.firstDayHalf === "AN");
+        setLastDayHalf(r.lastDayHalf === "FN");
         setReason(r.reason ?? "");
         setPlaceOfVisit(r.placeOfVisit ?? "");
       })
@@ -533,6 +547,8 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               toDate,
               isHalfDay,
               halfDaySession: isHalfDay ? effectiveHalfDaySession : undefined,
+              firstDayHalf: halfEnds.firstDayHalf ?? null,
+              lastDayHalf: halfEnds.lastDayHalf ?? null,
               reason: reason.trim(),
               placeOfVisit: placeOfVisit.trim() || undefined,
               periodSubstitutions,
@@ -548,6 +564,8 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
               toDate,
               isHalfDay,
               halfDaySession: isHalfDay ? effectiveHalfDaySession : undefined,
+              firstDayHalf: halfEnds.firstDayHalf ?? null,
+              lastDayHalf: halfEnds.lastDayHalf ?? null,
               reason: reason.trim(),
               extendsRequestId: extendId ?? undefined,
               handoverToUid: HANDOVER_ENABLED ? (handoverToUid || undefined) : undefined,
@@ -772,6 +790,21 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
             <p className="text-xs text-muted-foreground -mt-2">
               Pick any dates within your College Office&rsquo;s declared range ({formatDate(summerHoliday.from)} - {formatDate(summerHoliday.to)}).
             </p>
+          )}
+
+          {halfEndsAllowed && (
+            <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+              <Label>Half Day at the Start or End</Label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4" checked={firstDayHalf} onChange={(e) => setFirstDayHalf(e.target.checked)} />
+                <span>First day ({dmy(fromDate)}): afternoon only <span className="text-xs text-muted-foreground">- you work the forenoon</span></span>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4" checked={lastDayHalf} onChange={(e) => setLastDayHalf(e.target.checked)} />
+                <span>Last day ({dmy(toDate)}): forenoon only <span className="text-xs text-muted-foreground">- you work the afternoon</span></span>
+              </label>
+              <p className="text-xs text-muted-foreground">The day splits at 1 PM. Check in on the half you work, as on any day.</p>
+            </div>
           )}
 
           {isHalfDay && isHalfDayEligible && (

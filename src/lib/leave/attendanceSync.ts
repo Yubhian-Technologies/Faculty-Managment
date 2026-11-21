@@ -1,4 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
+import { leavePartOn } from "@/lib/leave/leaveDayParts";
 import { enumerateWorkingDates, isoDateKey, todayISODate } from "@/lib/leave/dayCounter";
 import { getHolidayDateKeys } from "@/lib/leave/holidaysCount";
 import type { LeaveRequest } from "@/types/leave";
@@ -17,7 +18,7 @@ import type { LeaveRequest } from "@/types/leave";
 export async function syncApprovedLeaveToAttendance(
   db: Firestore,
   collegeId: string,
-  req: Pick<LeaveRequest, "uid" | "employeeName" | "department" | "fromDate" | "toDate">,
+  req: Pick<LeaveRequest, "uid" | "employeeName" | "department" | "fromDate" | "toDate" | "isHalfDay" | "halfDaySession" | "firstDayHalf" | "lastDayHalf" | "leaveTypeCode">,
   leaveApplicationId: string
 ): Promise<void> {
   const from = (req.fromDate as unknown as { toDate(): Date }).toDate();
@@ -28,7 +29,9 @@ export async function syncApprovedLeaveToAttendance(
 
   const col = db.collection("colleges").doc(collegeId).collection("attendanceRecords");
   const now = new Date();
-  await Promise.all(dates.map(async (day) => {
+  // Only WHOLE days are written as On Leave: on a half day (a single-date half day, or a range's half-day end) the
+  // person checks in for the half they work, so that day's record is their own check-in (lib/leave/leaveDayParts.ts).
+  await Promise.all(dates.filter((day) => leavePartOn(req, isoDateKey(day)) === "FULL").map(async (day) => {
     const ref = col.doc(`${req.uid}_${isoDateKey(day)}`);
     const snap = await ref.get();
     if (snap.exists) return;

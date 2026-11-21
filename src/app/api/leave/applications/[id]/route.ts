@@ -1,5 +1,9 @@
 export const dynamic = "force-dynamic";
 
+import type { LeaveSpan } from "@/lib/leave/leaveDayParts";
+// The stored request's half days, for re-checking substitute periods.
+const spanOf = (r: { isHalfDay?: boolean; halfDaySession?: "FN" | "AN"; firstDayHalf?: "AN"; lastDayHalf?: "FN" }): Omit<LeaveSpan, "fromDate" | "toDate"> =>
+  ({ isHalfDay: r.isHalfDay, halfDaySession: r.halfDaySession, firstDayHalf: r.firstDayHalf, lastDayHalf: r.lastDayHalf });
 import { loadGroupLeavePolicy } from "@/lib/leave/groupLeavePolicy";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
@@ -141,6 +145,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       toDate?: string;
       isHalfDay?: boolean;
       halfDaySession?: "FN" | "AN";
+      firstDayHalf?: "AN" | null;
+      lastDayHalf?: "FN" | null;
       placeOfVisit?: string;
       pointOfContact?: string;
     };
@@ -308,7 +314,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           fromDate: reqFromDate, toDate: reqToDate, holidayDates,
           submitted: declinedPeriods.map((p) => ({ date: p.date, timetableSlotId: p.timetableSlotId, substituteFacultyId: body.newSubstituteFacultyId! })),
           mode: "PARTIAL",
-          coverageOptions: { excludeRequestId: id },
+          coverageOptions: { excludeRequestId: id, span: spanOf(req) },
         });
         if (!result.ok) {
           return NextResponse.json({ error: result.error }, { status: 400 });
@@ -416,6 +422,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (body.isHalfDay && body.halfDaySession !== "FN" && body.halfDaySession !== "AN") {
         return NextResponse.json({ error: "Select forenoon or afternoon for a half day request" }, { status: 400 });
       }
+      // A range's half-day ends (1.5, 2.5 ... days) - same rules as a new request (applications POST).
+      const firstDayHalf = !body.isHalfDay && body.firstDayHalf === "AN" ? "AN" as const : undefined;
+      const lastDayHalf = !body.isHalfDay && body.lastDayHalf === "FN" ? "FN" as const : undefined;
+      if ((body.firstDayHalf && body.firstDayHalf !== "AN") || (body.lastDayHalf && body.lastDayHalf !== "FN")) {
+        return NextResponse.json({ error: "The first day can only start in the afternoon, and the last day can only end at the forenoon." }, { status: 400 });
+      }
+      if ((firstDayHalf || lastDayHalf) && !leaveType?.rules.halfDayAllowed) {
+        return NextResponse.json({ error: "Half day isn't available for this leave type" }, { status: 400 });
+      }
+      if ((firstDayHalf || lastDayHalf) && body.fromDate === body.toDate) {
+        return NextResponse.json({ error: "For one date, choose Half Day instead." }, { status: 400 });
+      }
+      const span = { isHalfDay: !!body.isHalfDay, halfDaySession: body.halfDaySession, firstDayHalf, lastDayHalf };
 
       const fromDate = new Date(body.fromDate!);
       const toDate = new Date(body.toDate!);
@@ -486,7 +505,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         getHolidayDateKeys(db, session.collegeId, fromDate, toDate),
         getWorkingDayWeightsForRole(db, session.collegeId, fromDate, toDate, session.role as UserRole),
       ]);
-      const totalDays = countWorkingDays(fromDate, toDate, holidayDates, !!body.isHalfDay, workingDayWeights);
+      const totalDays = countWorkingDays(fromDate, toDate, holidayDates, !!body.isHalfDay, workingDayWeights, { firstDayHalf, lastDayHalf });
 
       let periodSubstitutions: PeriodSubstitution[] | undefined;
       if (!req.isOtherRequest && identity.isTeachingStaff && identity.department) {
@@ -505,7 +524,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           fromDate, toDate, holidayDates,
           submitted: body.periodSubstitutions ?? [],
           mode: "FULL",
-          coverageOptions: { excludeRequestId: id },
+          coverageOptions: { excludeRequestId: id, span },
         });
         if (!result.ok) {
           return NextResponse.json({ error: result.error }, { status: 400 });
@@ -559,6 +578,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         totalDays,
         isHalfDay: !!body.isHalfDay,
         ...(body.isHalfDay ? { halfDaySession: body.halfDaySession } : {}),
+        // Cleared when no longer chosen (update keeps a field the patch leaves out).
+        firstDayHalf: (firstDayHalf ?? FieldValue.delete()) as LeaveRequest["firstDayHalf"],
+        lastDayHalf: (lastDayHalf ?? FieldValue.delete()) as LeaveRequest["lastDayHalf"],
         reason: body.reason!.trim(),
         ...(proofRoutedTo === "EXAM_CELL" ? { proofRoutedTo } : {}),
         ...(body.placeOfVisit?.trim() ? { placeOfVisit: body.placeOfVisit.trim() } : {}),
@@ -639,7 +661,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         db, collegeId: session.collegeId, facultyMemberId, department: req.department,
         fromDate: reqFromDate, toDate: reqToDate, holidayDates,
         submitted: body.periodSubstitutions, mode: "PARTIAL",
-        coverageOptions: { excludeRequestId: id },
+        coverageOptions: { excludeRequestId: id, span: spanOf(req) },
       });
       if (!result.ok) {
         return NextResponse.json({ error: result.error }, { status: 400 });

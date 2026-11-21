@@ -1,5 +1,6 @@
 "use client";
 
+import { halfEndsNote } from "@/lib/leave/leaveDayParts";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/useToast";
 import { useReadOnlyAccess } from "@/hooks/useReadOnlyAccess";
-import { formatDate, toDate } from "@/lib/utils";
+import { dmy, formatDate, toDate } from "@/lib/utils";
 import { Plus, ChevronRight, History, CalendarPlus } from "lucide-react";
 import { evaluateODProof } from "@/lib/leave/odProof";
 import { evaluateLeaveCertificate } from "@/lib/leave/leaveCertificate";
@@ -500,6 +501,9 @@ export function LeaveHistoryRow({
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
               Half Day &middot; {request.halfDaySession === "AN" ? "Afternoon" : "Forenoon"}
             </Badge>
+          )}
+          {halfEndsNote(request, dmy) && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">{halfEndsNote(request, dmy)}</Badge>
           )}
           {request.extendsRequestId && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">Extension</Badge>
