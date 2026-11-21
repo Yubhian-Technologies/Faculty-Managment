@@ -14,6 +14,7 @@ import { MASTER_IMPORT_MAX_ROWS } from "../limits";
 import { OWNER_DEPARTMENTS_MAX, ownerDepartmentRefs } from "../ownerDepartment";
 import { OWN_BRANCH_PAPERS_MAX, ownBranchPaperBlockers } from "../ownBranchPapers";
 import { RENAME_STEPS, renameJobsCol, type RenameJob } from "../rename";
+import { cleanSubjectParts, isPartKey, partBranchLabel, partsOf, type PartKey, type SubjectPart } from "../parts";
 import type { Subject, SubjectSemesterAssignment } from "@/types";
 
 // The one place a master subject is created, edited or removed. A master
@@ -612,6 +613,135 @@ export class SubjectMasterService {
       });
     }
     return { updated: changed.filter((x) => !same(x.before, x.next)).length };
+  }
+
+  /**
+   * Turns "taught in parts" on (two parts: name, units, department) or off (`parts: null`) for one master subject.
+   * The parts' departments become its Subject Departments. When a FROZEN syllabus exists the parts must cover
+   * exactly its units. Audited.
+   */
+  async setParts(p: { collegeId: string; subjectId: string; parts: unknown; actor?: SubjectActor }): Promise<{ parts: SubjectPart[] | null }> {
+    const college = this.college(p.collegeId);
+    const ref = college.collection("subjects").doc(String(p.subjectId ?? ""));
+    const snap = p.subjectId ? await ref.get() : null;
+    if (!snap?.exists) throw new SubjectRequestError("Subject not found. It may have been deleted.", 404);
+    const cur = snap.data() as Subject;
+    if (!cur.courseId) throw new SubjectRequestError("Only Curriculum subjects (a course + regulation) can be taught in parts.");
+    const before = partsOf(cur);
+
+    if (p.parts === null) {
+      if (!before) return { parts: null };
+      await ref.update({ parts: FieldValue.delete(), partFirst: FieldValue.delete(), updatedAt: new Date() });
+      await writeAuditLogSafe(this.db, p.collegeId, {
+        action: "SUBJECT_PARTS_CHANGED", performedBy: p.actor?.uid ?? "unknown", performedByName: p.actor?.name, targetId: snap.id,
+        details: { code: cur.code, name: cur.name, from: before.map((x) => `${x.name} ${x.units.join(",")}`), to: [] },
+      });
+      return { parts: null };
+    }
+
+    const [deptSnap, syllabusSnap] = await Promise.all([
+      college.collection("departments").get(),
+      college.collection("subjectSyllabus").doc(snap.id).get(),
+    ]);
+    const departments = new Map(deptSnap.docs.map((d) => [d.id, String((d.data() as { name?: string }).name ?? "").trim()] as const).filter(([, n]) => !!n));
+    const syl = syllabusSnap.exists ? (syllabusSnap.data() as { status?: string; units?: unknown[] }) : null;
+    const unitCount = syl?.status === "FROZEN" && Array.isArray(syl.units) ? syl.units.length : null;
+    const { parts, error } = cleanSubjectParts(p.parts, departments, unitCount);
+    if (error) throw new SubjectRequestError(error);
+    // Mid papers already started for a part keep its name and units: changing them would orphan that work.
+    if (before) {
+      const same = (a: SubjectPart, b: SubjectPart) => a.name === b.name && a.units.join(",") === b.units.join(",") && a.departmentId === b.departmentId;
+      const changedLabels = before.filter((b) => !parts.some((x) => x.key === b.key && same(x, b))).map((b) => partBranchLabel(b));
+      if (changedLabels.length) {
+        const banks = await college.collection("midQuestionBanks").where("subjectId", "==", snap.id).get();
+        const used = banks.docs.filter((d) => changedLabels.includes(String(d.get("branch") ?? "")) && !d.get("withdrawn"));
+        if (used.length) throw new SubjectRequestError(`Mid papers are already being prepared for ${[...new Set(used.map((d) => String(d.get("branch"))))].join(", ")} - a part's name, units or department can't change now.`, 409);
+      }
+    }
+
+    const owners: { id: string; name: string }[] = [];
+    for (const x of parts) if (!owners.some((o) => o.id === x.departmentId)) owners.push({ id: x.departmentId, name: x.departmentName });
+    // A part's department can't also be a branch with its own papers.
+    const ownPapers = (cur.ownBranchPapers ?? []).filter((b) => !owners.some((o) => o.id === b.id));
+    await ref.update({
+      parts,
+      ownerDepartments: owners, ownerDepartmentIds: owners.map((o) => o.id),
+      ownerDepartmentId: FieldValue.delete(), ownerDepartmentName: FieldValue.delete(),
+      ...(ownPapers.length !== (cur.ownBranchPapers ?? []).length
+        ? (ownPapers.length ? { ownBranchPapers: ownPapers, ownBranchPaperIds: ownPapers.map((b) => b.id) } : { ownBranchPapers: FieldValue.delete(), ownBranchPaperIds: FieldValue.delete() })
+        : {}),
+      updatedAt: new Date(),
+    });
+    await writeAuditLogSafe(this.db, p.collegeId, {
+      action: "SUBJECT_PARTS_CHANGED", performedBy: p.actor?.uid ?? "unknown", performedByName: p.actor?.name, targetId: snap.id,
+      details: {
+        code: cur.code, name: cur.name,
+        from: (before ?? []).map((x) => `${x.name} ${x.units.join(",")} (${x.departmentName})`),
+        to: parts.map((x) => `${x.name} ${x.units.join(",")} (${x.departmentName})`),
+      },
+    });
+    return { parts };
+  }
+
+  /**
+   * For a subject taught in parts: which part each section takes first (`first`: sectionId -> "A" | "B") and which
+   * part each faculty row teaches (`assignmentParts`: teaching assignment id -> "A" | "B" | null). Only the entries
+   * sent change. Every assignment must be one of this subject's. Audited.
+   */
+  async setPartPlan(p: { collegeId: string; subjectId: string; first: Record<string, unknown>; assignmentParts: Record<string, unknown>; actor?: SubjectActor }): Promise<{ sections: number; faculty: number }> {
+    const college = this.college(p.collegeId);
+    const ref = college.collection("subjects").doc(String(p.subjectId ?? ""));
+    const snap = p.subjectId ? await ref.get() : null;
+    if (!snap?.exists) throw new SubjectRequestError("Subject not found. It may have been deleted.", 404);
+    const cur = snap.data() as Subject;
+    if (!partsOf(cur)) throw new SubjectRequestError("Set the subject's two parts first.");
+
+    const first: Record<string, PartKey> = {};
+    for (const [sectionId, v] of Object.entries(p.first ?? {})) {
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(sectionId)) throw new SubjectRequestError("Unknown section.");
+      if (!isPartKey(v)) throw new SubjectRequestError("Pick which part each section takes first.");
+      first[sectionId] = v;
+    }
+    const assignmentIds = Object.keys(p.assignmentParts ?? {});
+    if (assignmentIds.length > 400 || Object.keys(first).length > 400) throw new SubjectRequestError("Too many changes at once.");
+    for (const v of Object.values(p.assignmentParts ?? {})) if (v !== null && !isPartKey(v)) throw new SubjectRequestError("Pick the part each faculty member teaches.");
+    const aSnaps = assignmentIds.length ? await this.db.getAll(...assignmentIds.map((id) => college.collection("teachingAssignments").doc(id))) : [];
+    for (const a of aSnaps) {
+      if (!a.exists || (a.data() as { subjectId?: string }).subjectId !== snap.id) throw new SubjectRequestError("A teaching assignment was not found for this subject. Reload and try again.", 404);
+    }
+
+    // A section's order decides which part's paper it writes in each Mid: once a part's paper is printed for this
+    // subject, the order of the sections that wrote it can't change.
+    const changedSections = Object.keys(first).filter((id) => (cur.partFirst?.[id] ?? "A") !== first[id]);
+    if (changedSections.length) {
+      const labels = new Set(partsOf(cur)!.map((x) => partBranchLabel(x)));
+      const finals = (await college.collection("midPaperChoices").where("subjectId", "==", snap.id).get()).docs
+        .filter((d) => labels.has(String(d.get("branch") ?? "")) && d.get("final"));
+      if (finals.length) {
+        const bankIds = [...new Set(finals.map((d) => String(d.get("bankId") ?? "")).filter(Boolean))];
+        const banks = bankIds.length ? await this.db.getAll(...bankIds.map((id) => college.collection("midQuestionBanks").doc(id))) : [];
+        const printed = new Set(banks.flatMap((b) => ((b.get("sections") ?? []) as { sectionId: string }[]).map((x) => x.sectionId)));
+        const locked = changedSections.filter((id) => printed.has(id));
+        if (locked.length) throw new SubjectRequestError(`A Mid paper is already printed for ${locked.length === 1 ? "one of these sections" : `${locked.length} of these sections`} - their order can't change now.`, 409);
+      }
+    }
+    const batch = new ChunkedBatch(this.db);
+    const now = new Date();
+    if (Object.keys(first).length) {
+      const update: Record<string, unknown> = { updatedAt: now };
+      for (const [sectionId, v] of Object.entries(first)) update[`partFirst.${sectionId}`] = v;
+      batch.update(ref, update);
+    }
+    for (const a of aSnaps) {
+      const v = p.assignmentParts[a.id];
+      batch.update(a.ref, { part: v === null ? FieldValue.delete() : v, updatedAt: now });
+    }
+    await batch.commit();
+    await writeAuditLogSafe(this.db, p.collegeId, {
+      action: "SUBJECT_PART_PLAN_CHANGED", performedBy: p.actor?.uid ?? "unknown", performedByName: p.actor?.name, targetId: snap.id,
+      details: { code: cur.code, name: cur.name, first, assignmentParts: p.assignmentParts },
+    });
+    return { sections: Object.keys(first).length, faculty: aSnaps.length };
   }
 
   /**

@@ -35,7 +35,8 @@ export function sectionsForScope(rows: TeachingRow[], subjectId: string, branch:
   const only = scopeBranches(branch);
   for (const r of rows) {
     if (r.subjectId !== subjectId || (only && !only.includes(r.branch))) continue;
-    const s = by.get(r.sectionId) ?? { sectionId: r.sectionId, sectionName: r.sectionName, facultyIds: [], facultyNames: [], branch: r.branch };
+    // Tagged with the section's own branch (a part's paper covers sections of several branches).
+    const s = by.get(r.sectionId) ?? { sectionId: r.sectionId, sectionName: r.sectionName, facultyIds: [], facultyNames: [], branch: r.realBranch ?? r.branch };
     if (!s.facultyIds.includes(r.facultyId)) { s.facultyIds.push(r.facultyId); s.facultyNames.push(r.facultyName); }
     by.set(r.sectionId, s);
   }
@@ -54,11 +55,14 @@ export function paperBranchLabel(
   totalSections?: ReadonlyMap<string, number>,
 ): { branch: string; sections: string[] } {
   const whole = (n: string, covered: number) => totalSections?.has(n) === true && covered >= (totalSections.get(n) ?? Infinity);
-  if (!isMultiBranch(b.branch)) {
+  // A part's paper (subject taught in parts): its sections are tagged with their own branches - name those.
+  const partPaper = !isMultiBranch(b.branch) && b.sections.length > 0 && b.sections.every((s) => !!s.branch && s.branch !== b.branch);
+  if (!isMultiBranch(b.branch) && !partPaper) {
     const secs = b.sections.map((s) => s.sectionName);
     return { branch: codeOf(b.branch) || b.branch, sections: whole(b.branch, secs.length) ? [] : secs };
   }
-  const names = b.branches?.length ? b.branches : scopeBranches(b.branch) ?? [...new Set(b.sections.map((s) => s.branch ?? ""))].filter(Boolean);
+  const names = partPaper ? [...new Set(b.sections.map((s) => s.branch ?? ""))].filter(Boolean)
+    : b.branches?.length ? b.branches : scopeBranches(b.branch) ?? [...new Set(b.sections.map((s) => s.branch ?? ""))].filter(Boolean);
   const label = [...names].sort().map((n) => {
     const secs = b.sections.filter((s) => s.branch === n).map((s) => s.sectionName);
     return `${codeOf(n) || n}${secs.length && !whole(n, secs.length) ? ` (${secs.join(", ")})` : ""}`;
@@ -69,7 +73,7 @@ export function paperBranchLabel(
 /** Sections of a subject per branch (for `paperBranchLabel`'s "every section" check). */
 export function sectionCountsByBranch(rows: TeachingRow[], subjectId: string): Map<string, number> {
   const m = new Map<string, Set<string>>();
-  for (const r of rows) if (r.subjectId === subjectId) m.set(r.branch, (m.get(r.branch) ?? new Set()).add(r.sectionId));
+  for (const r of rows) if (r.subjectId === subjectId) { const b = r.realBranch ?? r.branch; m.set(b, (m.get(b) ?? new Set()).add(r.sectionId)); }
   return new Map([...m].map(([k, v]) => [k, v.size]));
 }
 

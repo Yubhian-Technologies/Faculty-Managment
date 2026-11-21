@@ -10,8 +10,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { notify } from "@/lib/notify";
 import { checkSectionPick, claimIdFor, sectionsOf } from "@/lib/midBank/sections";
-import {
-  bankAccess, guardError, writeRefusal, MID_BANK_OVERSEERS, loadOutcomes, loadQuestions, loadSubject, loginUidsOf, MID_BANK_READ_ROLES, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor, teachingForCached } from "@/lib/midBank/server";
+import { bankAccess, guardError, writeRefusal, MID_BANK_OVERSEERS, loadOutcomes, loadQuestions, loadSubject, loginUidsOf, MID_BANK_READ_ROLES, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, bankTeachingFor, bankTeachingForCached } from "@/lib/midBank/server";
 
 // One question bank.
 //   GET    everything the workspace / review need; the owner may write until the
@@ -41,7 +40,7 @@ export async function GET(_request: Request, { params }: Params) {
     // How the paper names its branches on the header (short codes; several branches each with their own sections).
     const codeOf = new Map(departments.map((x) => { const v = x.data() as { name?: string; code?: string }; return [v.name ?? "", v.code ?? ""]; }));
     // A branch whose every section the paper covers prints as its code alone.
-    const totals = deadline ? sectionCountsByBranch(await teachingForCached(db, session.collegeId, deadline), bank.subjectId) : undefined;
+    const totals = deadline ? sectionCountsByBranch(await bankTeachingForCached(db, session.collegeId, deadline), bank.subjectId) : undefined;
     const branchLabel = paperBranchLabel(bank, (n) => codeOf.get(n) ?? "", totals);
     // Question papers: the answers (MCQ key, blanks) are for the owner, the HOD reviewing and the Exam Cell -
     // not for colleagues who only read the papers.
@@ -80,7 +79,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const { bank, deadline } = access;
     if (bank.assignmentId) return NextResponse.json({ error: "Your HOD assigned this one - it covers every section of the assignment" }, { status: 409 });
     const refs = midBankRefs(db, session.collegeId);
-    const available = sectionsOf(await teachingFor(db, session.collegeId, deadline), bank.subjectId, bank.branch);
+    const available = sectionsOf(await bankTeachingFor(db, session.collegeId, deadline), bank.subjectId, bank.branch);
     const before = new Set(bank.viewerFacultyIds);
 
     const result = await db.runTransaction(async (tx) => {

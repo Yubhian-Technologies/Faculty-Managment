@@ -8,6 +8,7 @@ import { syllabusAsOutcomes, syllabusSubjectOf } from "@/lib/subjects/syllabus";
 import { isDeadlineLocked } from "./deadline";
 import { isMidBankSubject, type TeachingRow } from "./sections";
 import { isAllBranches } from "./assignments";
+import { midPaperBranch, partOfBranch, partsOf } from "@/lib/subjects/parts";
 
 // Server side of the Mid Question Bank: collection refs, who teaches what for a
 // deadline, who may read / write a bank, and which Exam Cell rules apply.
@@ -56,7 +57,11 @@ export async function courseIdsForKey(db: Db, collegeId: string, courseKey: stri
  * sections of that year, the subjects assigned to that semester (Academics >
  * Curriculum), and the current teaching assignments joining them.
  */
-export async function teachingFor(db: Db, collegeId: string, d: Pick<MidBankDeadline, "courseIds" | "year" | "semester">): Promise<TeachingRow[]> {
+export async function teachingFor(
+  db: Db, collegeId: string, d: Pick<MidBankDeadline, "courseIds" | "year" | "semester"> & { midNumber?: number; id?: string },
+  /** The Mid paper flow: a subject taught in parts files each section under the part it writes in this Mid. */
+  opts?: { parts?: boolean },
+): Promise<TeachingRow[]> {
   const refs = midBankRefs(db, collegeId);
   if (d.courseIds.length === 0) return [];
   const [sectionDocs, instanceDocs] = await Promise.all([
@@ -81,10 +86,24 @@ export async function teachingFor(db: Db, collegeId: string, d: Pick<MidBankDead
   const [masters, teachDocs] = await Promise.all([
     db.getAll(...[...subjects.keys()].map((id) => refs.college.collection("subjects").doc(id))),
     inChunks([...sections.keys()], async (ids) => (await refs.college.collection("teachingAssignments").where("sectionId", "in", ids)
-      .select("isPast", "sectionId", "subjectId", "subjectName", "subjectCode", "facultyId", "facultyName").get()).docs),
+      .select("isPast", "sectionId", "subjectId", "subjectName", "subjectCode", "facultyId", "facultyName", "part").get()).docs),
   ]);
   // Mid exam subjects only (the master subject's type and teaching-load tick; the semester copy's snapshot may be stale).
-  for (const m of masters) if (!m.exists || !isMidBankSubject(m.data() as Subject)) subjects.delete(m.id);
+  const parted = new Map<string, Subject>();
+  for (const m of masters) {
+    if (!m.exists || !isMidBankSubject(m.data() as Subject)) { subjects.delete(m.id); continue; }
+    if (opts?.parts && d.midNumber && partsOf(m.data() as Subject)) parted.set(m.id, m.data() as Subject);
+  }
+  // A Mid already prepared per branch for a subject (papers started before it was taught in parts - e.g. Mid 1)
+  // stays per branch: only Mids with no per-branch work for it go per part.
+  if (parted.size && d.id) {
+    const started = (await refs.banks.where("deadlineId", "==", d.id).select("subjectId", "branch", "withdrawn").get()).docs;
+    for (const b of started) {
+      const sid = String(b.get("subjectId") ?? "");
+      const sub = parted.get(sid);
+      if (sub && !b.get("withdrawn") && !partOfBranch(sub, String(b.get("branch") ?? ""))) parted.delete(sid);
+    }
+  }
   if (subjects.size === 0) return [];
   const rows: TeachingRow[] = [];
   for (const t of teachDocs) {
@@ -96,6 +115,15 @@ export async function teachingFor(db: Db, collegeId: string, d: Pick<MidBankDead
       subjectId: ta.subjectId, subjectName: subj.name || ta.subjectName, subjectCode: subj.code || ta.subjectCode,
       branch: sec.department, sectionId: sec.id, sectionName: sec.name, facultyId: ta.facultyId, facultyName: ta.facultyName,
     });
+    const ps = parted.get(ta.subjectId);
+    if (ps) {
+      const label = midPaperBranch(ps, sec.id, sec.department, d.midNumber!);
+      if (label !== sec.department) {
+        const row = rows[rows.length - 1];
+        row.branch = label; row.realBranch = sec.department;
+        if (ta.part === "A" || ta.part === "B") row.taughtPart = ta.part;
+      }
+    }
   }
   return rows;
 }
@@ -104,6 +132,16 @@ export async function teachingFor(db: Db, collegeId: string, d: Pick<MidBankDead
  *  Assign card ask together). Writes (start, assign, save) call `teachingFor` itself. */
 export function teachingForCached(db: Db, collegeId: string, d: Pick<MidBankDeadline, "courseIds" | "year" | "semester">): Promise<TeachingRow[]> {
   return cachedValue(`teachingFor/${collegeId}/${[...d.courseIds].sort().join(",")}/${d.year}/${d.semester}`, 60_000, () => teachingFor(db, collegeId, d));
+}
+
+/** The Mid paper flow's view of a deadline: as `teachingFor`, with a subject taught in parts filed per part. */
+export function bankTeachingFor(db: Db, collegeId: string, d: Pick<MidBankDeadline, "courseIds" | "year" | "semester" | "midNumber">): Promise<TeachingRow[]> {
+  return teachingFor(db, collegeId, d, { parts: true });
+}
+
+/** `bankTeachingFor` kept 60 s per server instance (pages that only show progress / assignments). */
+export function bankTeachingForCached(db: Db, collegeId: string, d: Pick<MidBankDeadline, "courseIds" | "year" | "semester" | "midNumber">): Promise<TeachingRow[]> {
+  return cachedValue(`bankTeachingFor/${collegeId}/${[...d.courseIds].sort().join(",")}/${d.year}/${d.semester}/m${d.midNumber}`, 60_000, () => bankTeachingFor(db, collegeId, d));
 }
 
 export async function loadDeadline(db: Db, collegeId: string, id: string): Promise<MidBankDeadline | null> {

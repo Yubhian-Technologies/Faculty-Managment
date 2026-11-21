@@ -3,6 +3,8 @@
 /** GET mid-paper-choices: one subject + branch on an exam day, its approved papers and the one chosen. */
 export interface PaperChoiceRow {
   subjectId: string; subjectName: string; subjectCode: string; branch: string; branchCode: string;
+  /** A subject taught in parts: this row is one part's paper - the sections (any branch) writing it today. */
+  partSections?: string[];
   papers: { bankId: string; ownerName: string; sections: string[]; setNo: number }[];
   /** Paper sets of this subject + branch not approved yet (so the Exam Cell knows who to chase). */
   pending: { ownerName: string; stage: string }[];

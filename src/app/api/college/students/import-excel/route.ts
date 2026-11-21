@@ -804,7 +804,16 @@ export async function POST(request: Request) {
         failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Course "${row.course}" is not offered by ${section.department}` });
         continue;
       }
-      if (resolvedPlacedCourseId !== section.courseId) {
+      // The same programme filed under the section's own branch is the same course: a shared 1st year can be
+      // owned by a managing department (Basic Science) while its sections carry the branch's own B.Tech course
+      // (Vishnu Institute of Technology). Only a different programme (M.Tech vs B.Tech) is a mismatch. The student
+      // record takes the section's courseId either way (buildStudentDoc).
+      const sectionCourseDoc = plainCourses.find((c) => c.id === section.courseId);
+      const resolvedCourseDoc = plainCourses.find((c) => c.id === resolvedPlacedCourseId);
+      const sameProgramme = !!sectionCourseDoc && !!resolvedCourseDoc
+        && (sectionCourseDoc.name ?? "").trim() === (resolvedCourseDoc.name ?? "").trim()
+        && (sectionCourseDoc.catalogId ?? "") === (resolvedCourseDoc.catalogId ?? "");
+      if (resolvedPlacedCourseId !== section.courseId && !sameProgramme) {
         failed.push({ row: rowNum, rollNumber: row.rollNumber ?? "-", error: `Course "${resolvedPlacedCourse}" does not match section ${section.name}'s actual course (${section.courseName ?? "unknown"}) - check this row's Section/Course columns` });
         continue;
       }

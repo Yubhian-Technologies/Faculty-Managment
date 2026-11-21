@@ -276,7 +276,12 @@ function SubjectCard({ rows, busy, onChoose, onChooseFor, onPrint, onAnswerKey, 
     <Card className="rounded-2xl"><CardContent className="space-y-4 p-5">
       <div>
         <p className="font-semibold">{head.subjectName} <span className="text-sm text-muted-foreground">({head.subjectCode})</span></p>
-        <p className="text-xs text-muted-foreground">{rows.length} branch{rows.length === 1 ? "" : "es"}: {rows.map((r) => r.branchCode).join(", ")}</p>
+        {rows.some((r) => r.partSections) ? (
+          // Taught in parts: one paper per part; each section writes the part it covers in this Mid.
+          rows.map((r) => <p key={r.branch} className="text-xs text-muted-foreground"><span className="font-medium text-foreground">{r.branchCode}</span> - {r.partSections?.length ?? 0} section{r.partSections?.length === 1 ? "" : "s"}: {(r.partSections ?? []).join(", ")}</p>)
+        ) : (
+          <p className="text-xs text-muted-foreground">{rows.length} branch{rows.length === 1 ? "" : "es"}: {rows.map((r) => r.branchCode).join(", ")}</p>
+        )}
       </div>
 
       {papers.length === 0 ? (

@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { partOfBranch, partsOf } from "@/lib/subjects/parts";
 import { patternForSubject } from "@/lib/midPapers/server";
 import { withCurrentNames } from "@/lib/midPapers/pattern";
 import { FieldValue } from "firebase-admin/firestore";
@@ -10,7 +11,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { loadEffectiveTiming } from "@/lib/college/semester";
 import { loadPlan, midTimetableRefs } from "@/lib/midTimetable/server";
-import { actorName, guardError, loadOutcomes, loadSubject, midBankRefs, loadDeadline, teachingForCached } from "@/lib/midBank/server";
+import { actorName, guardError, loadOutcomes, loadSubject, midBankRefs, loadDeadline, bankTeachingFor, bankTeachingForCached } from "@/lib/midBank/server";
 import { loadPaperQuestions } from "@/lib/midPapers/server";
 import { cleanPrintLayout } from "@/lib/midPapers/printLayout";
 import { partMax, setNumbers } from "@/lib/midPapers/pattern";
@@ -46,8 +47,26 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
     plan.courseIds[0] ? loadEffectiveTiming(db, collegeId, plan.courseIds[0], plan.year) : null,
     choicesCol(db, collegeId).where("planId", "==", plan.id).where("date", "==", date).get(),
   ]);
-  const onDay = tts.docs.map((d) => d.data() as MidTimetable).flatMap((t) => t.slots.filter((s) => s.date === date).map((s) => ({ ...s, branch: t.branch })));
-  if (onDay.length === 0) return { error: "No exam is on that date in this Mid timetable", status: 400 } as const;
+  const onDay0 = tts.docs.map((d) => d.data() as MidTimetable).flatMap((t) => t.slots.filter((s) => s.date === date).map((s) => ({ ...s, branch: t.branch })));
+  if (onDay0.length === 0) return { error: "No exam is on that date in this Mid timetable", status: 400 } as const;
+  // A subject taught in parts (BEEE: Electrical / Electronics) has one paper per PART, not per branch: its branches'
+  // slots become one row per part written that day (each section writes the part it covers in this Mid).
+  const partedIds = new Set<string>();
+  const subjectDocs = new Map(await Promise.all([...new Set(onDay0.map((x) => x.subjectId))].map(async (id) => [id, await loadSubject(db, collegeId, id)] as const)));
+  for (const [id, sub] of subjectDocs) if (partsOf(sub)) partedIds.add(id);
+  const partRows = partedIds.size ? (await bankTeachingFor(db, collegeId, plan)).filter((r) => partedIds.has(r.subjectId) && r.realBranch) : [];
+  // A Mid prepared per branch before the subject went into parts stays per branch (bankTeachingFor files no part rows).
+  for (const id of [...partedIds]) if (!partRows.some((r) => r.subjectId === id)) partedIds.delete(id);
+  const onDay: typeof onDay0 = [];
+  const seenPart = new Set<string>();
+  for (const slot of onDay0) {
+    if (!partedIds.has(slot.subjectId)) { onDay.push(slot); continue; }
+    for (const label of new Set(partRows.filter((r) => r.subjectId === slot.subjectId && r.realBranch === slot.branch).map((r) => r.branch))) {
+      if (seenPart.has(`${slot.subjectId}|${label}`)) continue;
+      seenPart.add(`${slot.subjectId}|${label}`);
+      onDay.push({ ...slot, branch: label });
+    }
+  }
   const sets = banksSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<MidQuestionBank, "id">) })).filter((b) => b.kind === "PAPERS");
   const codeOf = new Map(depts.docs.map((d) => [(d.data() as Department).name, (d.data() as Department).code]));
   const chosen = new Map(choices.docs.map((d) => [`${d.get("subjectId")}|${d.get("branch")}`, d.data()]));
@@ -59,7 +78,7 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
   // Each subject's current pattern: part names (wording) follow the Exam Cell on every paper not yet printed.
   const subjectIds = [...new Set(onDay.map((x) => x.subjectId))];
   const currentPattern = new Map(await Promise.all(subjectIds.map(async (id) => {
-    const sub = await loadSubject(db, collegeId, id);
+    const sub = subjectDocs.get(id) ?? null;
     return [id, sub ? await patternForSubject(db, collegeId, sub) : null] as const;
   })));
   const rows: PaperChoiceRow[] = onDay.sort((a, b) => a.branch.localeCompare(b.branch) || a.subjectName.localeCompare(b.subjectName)).map((slot) => {
@@ -70,6 +89,8 @@ async function day(db: FirebaseFirestore.Firestore, collegeId: string, planId: s
     const c = chosen.get(`${slot.subjectId}|${slot.branch}`) as (Record<string, unknown> & { final?: MidPaperFinal }) | undefined;
     return {
       subjectId: slot.subjectId, subjectName: slot.subjectName, subjectCode: slot.subjectCode, branch: slot.branch, branchCode: codeOf.get(slot.branch) || slot.branch,
+      // A part's row: every section writing that part today (any branch) - how many copies of which paper to print.
+      ...(partedIds.has(slot.subjectId) ? { partSections: [...new Set(partRows.filter((r) => r.subjectId === slot.subjectId && r.branch === slot.branch).map((r) => r.sectionName))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) } : {}),
       papers: approved.flatMap((b) => (b.pattern ? setNumbers(b.pattern) : []).map((setNo) => ({ bankId: b.id, ownerName: b.ownerName, sections: b.sections.map((s) => s.sectionName), setNo }))),
       pending: mine.filter((b) => !approved.includes(b)).map((b) => ({ ownerName: b.ownerName, stage: b.approval === "SUBMITTED" ? "with the HOD" : b.approval === "RETURNED" ? "returned by the HOD" : b.status === "COMPLETE" ? "complete, not submitted" : `${b.completeCount}/${b.totalCount} questions written` })),
       choice: c ? {
@@ -168,9 +189,11 @@ async function finalize(db: FirebaseFirestore.Firestore, session: { uid: string;
       // branches names every branch it is for.
       ...(await (async () => {
         const dl = await loadDeadline(db, session.collegeId, bank.deadlineId);
-        const totals = dl ? sectionCountsByBranch(await teachingForCached(db, session.collegeId, dl), bank.subjectId) : undefined;
-        const l = paperBranchLabel(isMultiBranch(bank.branch) ? bank : { ...bank, sections: bank.sections.filter((s) => !s.branch || s.branch === row.branch) }, (n) => r.codeOf.get(n) ?? "", totals);
-        return { branchCode: isMultiBranch(bank.branch) ? l.branch : row.branchCode, sections: l.sections };
+        const totals = dl ? sectionCountsByBranch(await bankTeachingForCached(db, session.collegeId, dl), bank.subjectId) : undefined;
+        // A part's paper (taught in parts) covers sections of several branches, like a group paper.
+        const many = isMultiBranch(bank.branch) || !!partOfBranch(subject, bank.branch);
+        const l = paperBranchLabel(many ? bank : { ...bank, sections: bank.sections.filter((s) => !s.branch || s.branch === row.branch) }, (n) => r.codeOf.get(n) ?? "", totals);
+        return { branchCode: many ? l.branch : row.branchCode, sections: l.sections };
       })()),
       exam: { courseName: r.header.courseCode, year: r.header.year, semester: r.header.semester, semesterInYear: r.header.semesterInYear, midNumber: r.header.midNumber, academicYear: r.header.academicYear, date: r.header.date },
       layout: value,
@@ -192,7 +215,9 @@ export async function DELETE(request: Request) {
     const snap = await ref.get();
     if (!snap.exists || !(snap.data() as { final?: unknown }).final) return NextResponse.json({ error: "This question paper isn't finalized" }, { status: 404 });
     const marks = await midBankRefs(db, session.collegeId).college.collection("internalExamMarks").where("subjectId", "==", subjectId).get();
-    const entered = marks.docs.filter((d) => d.get("department") === branch && Number(d.get("enteredCount") ?? 0) > 0);
+    // A part's paper (taught in parts) is written by sections of several branches - any of them counts.
+    const anyBranch = !!partOfBranch(await loadSubject(db, session.collegeId, subjectId), branch);
+    const entered = marks.docs.filter((d) => (anyBranch || d.get("department") === branch) && Number(d.get("enteredCount") ?? 0) > 0);
     if (entered.length) return NextResponse.json({ error: `Marks are already entered for this subject (${entered.map((d) => d.get("facultyName")).filter(Boolean).join(", ")}) - it can't be un-finalized` }, { status: 409 });
     await ref.update({ final: FieldValue.delete(), finalizedAt: FieldValue.delete() });
     return NextResponse.json({ ok: true });

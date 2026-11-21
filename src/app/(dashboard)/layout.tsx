@@ -121,7 +121,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
         <footer className="hidden md:flex items-center justify-between px-6 py-3 border-t bg-background text-xs text-muted-foreground">
           <span>© 2026 Sri Vishnu Educational Society. All rights reserved.</span>
-          <span>Developed by Yubhian Technologies LLP</span>
+          <span>Developed by <a href="https://vishnutechhub.in" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-foreground hover:underline">Vishnu Tech Hub</a> &amp; Yubhian Technologies LLP</span>
         </footer>
       </div>
       <BottomNav hiddenModules={hiddenModules} hiddenItems={navHiddenItems} />

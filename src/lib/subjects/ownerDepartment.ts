@@ -1,5 +1,6 @@
 import type { Subject } from "@/types";
 import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
+import { partOfBranch } from "./parts";
 
 // The Subject Department(s): the department(s) that look after a subject - its syllabus, and the HOD
 // approval of every question bank / question paper prepared for it - whichever branch's sections
@@ -10,7 +11,7 @@ import { cachedCollectionDocs } from "@/lib/firestore/sharedReads";
 
 export const OWNER_DEPARTMENTS_MAX = 2;
 
-export type OwnerDepartmentFields = Pick<Subject, "ownerDepartments" | "ownerDepartmentId" | "ownerDepartmentName" | "ownBranchPapers">;
+export type OwnerDepartmentFields = Pick<Subject, "ownerDepartments" | "ownerDepartmentId" | "ownerDepartmentName" | "ownBranchPapers"> & Partial<Pick<Subject, "parts">>;
 
 /** The saved Subject Departments: the list, else the single department saved before lists existed. */
 export function ownerDepartmentRefs(subject: OwnerDepartmentFields | null | undefined): { id: string; name: string }[] {
@@ -46,6 +47,9 @@ export function ownBranchPaperNames(subject: OwnerDepartmentFields | null | unde
  * Department: the branch.
  */
 export function reviewDepartmentsOf(branch: string, subject: OwnerDepartmentFields | null | undefined, namesById?: ReadonlyMap<string, string>): string[] {
+  // A subject taught in parts: a part's paper is its own department's (BEEE Electrical -> EEE, Electronics -> ECE).
+  const part = branch ? partOfBranch(subject, branch) : null;
+  if (part) return [namesById?.get(part.departmentId) || part.departmentName];
   const owners = ownerDepartmentNames(subject, namesById);
   if (!owners.length) return branch ? [branch] : [];
   return branch && ownBranchPaperNames(subject, namesById).includes(branch) ? [branch] : owners;

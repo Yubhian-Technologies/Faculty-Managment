@@ -16,6 +16,8 @@ import type { Subject, SubjectCategory, SubjectType } from "@/types";
 import { CategoryField } from "@/components/academics/CategoryField";
 import { downloadCSV, toCSV } from "@/lib/utils/csv";
 import { ownBranchPaperNames, ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
+import { partLabel, partsOf } from "@/lib/subjects/parts";
+import { SubjectPartsDialog } from "@/components/academics/SubjectPartsDialog";
 
 const PAGE_SIZE = 20;
 const SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
@@ -70,6 +72,8 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
   const [bulkDept2, setBulkDept2] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [syllabusBusy, setSyllabusBusy] = useState("");
+  // Taught in two parts by two departments (BEEE: Electrical / Electronics) - Academics.
+  const [partsFor, setPartsFor] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDepartments()
@@ -341,6 +345,10 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
                         {deptName(s) && ownPaperNames(s).length > 0 && (
                           <p className="text-xs text-muted-foreground" title="Chosen by the Subject Department's HOD: these branches prepare and approve their own Mid papers.">Own Mid papers: {ownPaperNames(s).join(", ")}</p>
                         )}
+                        {partsOf(s) && <p className="text-xs text-muted-foreground">In parts: {partsOf(s)!.map(partLabel).join(" · ")}</p>}
+                        <button type="button" className="block text-xs text-primary underline-offset-2 hover:underline" onClick={() => setPartsFor(s.id)}>
+                          {partsOf(s) ? "Parts and Order" : "Taught in Parts"}
+                        </button>
                       </td>
                       <td className="py-1.5 pr-3 whitespace-nowrap">
                         {s.syllabusUrl && (
@@ -375,6 +383,8 @@ export function SubjectsMasterTable({ courseId, catalogId, courseName, regulatio
           </>
         )}
       </CardContent>
+
+      <SubjectPartsDialog subjectId={partsFor} departments={departments} onClose={() => setPartsFor(null)} onSaved={() => void load()} />
 
       <Dialog open={!!editForm} onOpenChange={(o) => !o && setEditForm(null)}>
         <DialogContent className="max-w-md">

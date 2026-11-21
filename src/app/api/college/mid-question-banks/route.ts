@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { allowedFormats } from "@/lib/midBank/validateQuestion";
 import { NextResponse } from "next/server";
+import { partUnitSplit } from "@/lib/subjects/parts";
 import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
 import { loadSyllabus } from "@/lib/subjects/syllabusServer";
 import { syllabusOutcomesId } from "@/lib/subjects/syllabus";
@@ -19,8 +20,7 @@ import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { bankTotals, unitStatuses } from "@/lib/midBank/rules";
 import { paperSetupIssues, setupIssues, withSyllabus } from "@/lib/midBank/setup";
 import { bankIdFor, checkSectionPick, claimIdFor, sectionsOf, type TeachingRow } from "@/lib/midBank/sections";
-import {
-  actorName, guardError, loadOutcomes, loadSubject, loginUidsOf, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor, subjectSplitFor } from "@/lib/midBank/server";
+import { actorName, guardError, loadOutcomes, loadSubject, loginUidsOf, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, bankTeachingFor, subjectSplitFor } from "@/lib/midBank/server";
 import { assignmentIdFor, isMultiBranch, sectionsForScope, servesBranch } from "@/lib/midBank/assignments";
 import { assignmentsCol, loadAssignments } from "@/lib/midBank/assignmentsServer";
 import type { MidBankAssignment, MidBankDeadline, MidQuestionBank } from "@/types";
@@ -52,7 +52,7 @@ export async function GET() {
 
     const items = [];
     for (const d of deadlines) {
-      const rows = await teachingFor(db, session.collegeId, d);
+      const rows = await bankTeachingFor(db, session.collegeId, d);
       const mine = rows.filter((r) => r.facultyId === me);
       if (mine.length === 0) continue;
       const banks = (await refs.banks.where("deadlineId", "==", d.id).get()).docs.map((b) => ({ id: b.id, ...(b.data() as Omit<MidQuestionBank, "id">) }));
@@ -107,17 +107,19 @@ export async function POST(request: Request) {
 
     const [me, rows, subject] = await Promise.all([
       resolveFacultyMemberId(db, session.collegeId, session.uid),
-      teachingFor(db, session.collegeId, d),
+      bankTeachingFor(db, session.collegeId, d),
       loadSubject(db, session.collegeId, subjectId),
     ]);
     if (!subject) return NextResponse.json({ error: "Subject not found. It may have been deleted." }, { status: 404 });
     // Units / COs / mapping come from the subject's frozen syllabus (HOD prepares, Academics freezes).
     const outcomesId = syllabusOutcomesId(subjectId);
-    const [rules, outcomes, exception, settings, syllabus, subjectDepartments] = await Promise.all([
+    const [rules, outcomes, exception0, settings, syllabus, subjectDepartments] = await Promise.all([
       rulesForSubject(db, session.collegeId, subject), loadOutcomes(db, session.collegeId, outcomesId), subjectSplitFor(db, session.collegeId, subjectId), loadMidSettings(db, session.collegeId),
       loadSyllabus(db, session.collegeId, subjectId), ownerDepartmentNamesLive(db, session.collegeId, subject),
     ]);
     // "The HOD assigns": only an assigned setter starts it, for every section of the scope (a branch or all branches).
+    // Taught in parts (BEEE): a part's paper covers that part's units in this Mid, the other part the other Mid.
+    const exception = partUnitSplit(subject, branch, d.midNumber) ?? exception0;
     const hodMode = settings.midAssignment === "HOD";
     const assignmentId = assignmentIdFor(d.id, subjectId, branch);
     const assignment = hodMode ? ((await assignmentsCol(db, session.collegeId).doc(assignmentId).get()).data() as MidBankAssignment | undefined) : undefined;
@@ -211,7 +213,7 @@ async function hodModeItems(db: FirebaseFirestore.Firestore, collegeId: string, 
   for (const d of deadlines) {
     const assignments = await loadAssignments(db, collegeId, d.id);
     const mineAssigned = assignments.filter((a) => a.facultyIds.includes(me));
-    const rows = await teachingFor(db, collegeId, d);
+    const rows = await bankTeachingFor(db, collegeId, d);
     const teach = rows.filter((r) => r.facultyId === me);
     if (mineAssigned.length === 0 && teach.length === 0) continue;
     const banks = (await refs.banks.where("deadlineId", "==", d.id).get()).docs.map((b) => ({ id: b.id, ...(b.data() as Omit<MidQuestionBank, "id">) }));
