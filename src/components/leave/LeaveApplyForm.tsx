@@ -829,8 +829,10 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                   periods={periods}
                   layout="list"
                   renderPeriod={(p, key) => {
+                    // The department filter narrows the list, but a person already picked for this period always stays
+                    // in it: dropped from the options, the dropdown reported an empty value and wiped the choice.
                     const candidates = substituteDeptFilter
-                      ? p.candidates.filter((c) => c.facultyDepartment === substituteDeptFilter)
+                      ? p.candidates.filter((c) => c.facultyDepartment === substituteDeptFilter || c.facultyId === substituteByPeriod[key])
                       : p.candidates;
                     const picked = p.candidates.find((c) => c.facultyId === substituteByPeriod[key]) as
                       | { facultyName: string; facultyDepartment?: string; ownSubject?: string } | undefined;
@@ -857,7 +859,7 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
                         <div className="w-full sm:w-64 shrink-0 space-y-1">
                           <Select
                             value={substituteByPeriod[key] ?? ""}
-                            onValueChange={(v) => setSubstituteByPeriod((prev) => ({ ...prev, [key]: v }))}
+                            onValueChange={(v) => { if (v) setSubstituteByPeriod((prev) => ({ ...prev, [key]: v })); }}
                             disabled={candidates.length === 0}
                           >
                             <SelectTrigger className="w-full">
