@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { withCurriculumSerial } from "@/lib/subjects/curriculumOrder";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -177,7 +178,7 @@ export async function GET(request: Request) {
       assignments,
       // Full Subject docs so the grid/PDF/Excel can resolve each subject's own
       // shortCode/code/type rather than deriving an abbreviation from the name.
-      subjects: Array.from(subjectMap.values()),
+      subjects: await withCurriculumSerial(collegeRef, Array.from(subjectMap.values()) as { id: string }[], section.department),
       resolvedSemester: currentSemester,
       availableSemesters,
       workingDays: timetableRules.workingDays,

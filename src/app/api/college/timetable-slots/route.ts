@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { withCurriculumSerial } from "@/lib/subjects/curriculumOrder";
 import { stampTimetableAdminUpdate } from "@/lib/timetable/adminStamp";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
@@ -154,7 +155,8 @@ export async function GET(request: Request) {
         : s;
     });
 
-    return NextResponse.json({ slots, subjects: subjectDocs, workingDays: rules.workingDays });
+    const sectionDepartment = (section as { department?: string }).department;
+    return NextResponse.json({ slots, subjects: await withCurriculumSerial(collegeRef, subjectDocs as { id: string }[], sectionDepartment), workingDays: rules.workingDays });
   } catch (err) {
     const badBody = badBodyResponse(err);
     if (badBody) return badBody;

@@ -266,13 +266,25 @@ export function buildAllocationList(
     if (name) entry.facultySet.add(name);
   }
 
-  return Array.from(byKey.values()).map(({ facultySet, periodKeys, ...rest }) => ({
-    ...rest,
-    hoursPerWeek: periodKeys.size,
-    // "Not assigned" only when genuinely nobody is - previously the literal
-    // "Unassigned" was baked in, uppercase, whether or not that was true.
-    faculty: Array.from(facultySet).join(" / ") || "Not assigned",
-  }));
+  // Curriculum order (the semester's Course Structure, `curriculumSerial` sent with the subjects - see
+  // lib/subjects/curriculumOrder.ts), then code: the same order as the Student Attendance report's columns.
+  // Without it the list followed whatever order the timetable entries happened to load in.
+  const serialOf = (key: string) => {
+    const subject = opts.subjects instanceof Map ? opts.subjects.get(key) : opts.subjects?.find((x) => x.id === key);
+    const v = (subject as { curriculumSerial?: number } | undefined)?.curriculumSerial;
+    return typeof v === "number" ? v : Number.MAX_SAFE_INTEGER;
+  };
+  return Array.from(byKey.entries())
+    .sort(([ka, a], [kb, b]) => serialOf(ka) - serialOf(kb)
+      || (a.code ?? "").localeCompare(b.code ?? "", undefined, { numeric: true })
+      || (a.name ?? "").localeCompare(b.name ?? ""))
+    .map(([, { facultySet, periodKeys, ...rest }]) => ({
+      ...rest,
+      hoursPerWeek: periodKeys.size,
+      // "Not assigned" only when genuinely nobody is - previously the literal
+      // "Unassigned" was baked in, uppercase, whether or not that was true.
+      faculty: Array.from(facultySet).join(" / ") || "Not assigned",
+    }));
 }
 
 /** "Bachelor of Technology · Computer Science & Engineering · 2nd Year · Section A" */

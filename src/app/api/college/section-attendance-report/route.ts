@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { compareCurriculum, curriculumSerials, subjectGroupRank } from "@/lib/subjects/curriculumOrder";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -58,15 +59,31 @@ async function currentSectionSubjects(
 
 // Each subject column's short name (the subject's own "Short Code", e.g. "CHE") for the report's headers; a subject
 // without one keeps its code. Read from the master subjects in one getAll.
-async function withShortCodes<T extends { subjectId: string }>(
+async function withShortCodes<T extends { subjectId: string; subjectCode?: string; subjectName?: string }>(
   collegeRef: FirebaseFirestore.DocumentReference,
   subjects: T[],
+  department?: string,
 ): Promise<(T & { shortCode?: string })[]> {
   const ids = [...new Set(subjects.map((s) => s.subjectId).filter(Boolean))];
   if (!ids.length) return subjects;
-  const docs = await collegeRef.firestore.getAll(...ids.map((id) => collegeRef.collection("subjects").doc(id)));
+  const [docs, serials] = await Promise.all([
+    collegeRef.firestore.getAll(...ids.map((id) => collegeRef.collection("subjects").doc(id))),
+    curriculumSerials(collegeRef, ids, department),
+  ]);
   const short = new Map(docs.map((d) => [d.id, String((d.data() as { shortCode?: string } | undefined)?.shortCode ?? "").trim()]));
-  return subjects.map((s) => (short.get(s.subjectId) ? { ...s, shortCode: short.get(s.subjectId) } : s));
+  const rank = new Map(docs.map((d) => {
+    const x = d.data() as { type?: string; isNonTeachingLoad?: boolean; name?: string } | undefined;
+    return [d.id, subjectGroupRank({ type: x?.type, isNonTeachingLoad: x?.isNonTeachingLoad, name: x?.name })];
+  }));
+  // Columns in the same order as the subject list under the section's timetable: Theory, Practical, ... Co-Curricular,
+  // each block in the curriculum order.
+  return subjects
+    .map((s) => (short.get(s.subjectId) ? { ...s, shortCode: short.get(s.subjectId) } : s))
+    .sort((a, b) => ((rank.get(a.subjectId) ?? subjectGroupRank({ name: a.subjectName })) - (rank.get(b.subjectId) ?? subjectGroupRank({ name: b.subjectName })))
+      || compareCurriculum(
+        { serial: serials.get(a.subjectId), code: a.subjectCode, name: a.subjectName },
+        { serial: serials.get(b.subjectId), code: b.subjectCode, name: b.subjectName },
+      ));
 }
 
 // "Attendance Reports": Section -> Year -> Month -> Date, aggregated across
@@ -411,7 +428,7 @@ export async function GET(request: Request) {
       }
 
       return NextResponse.json({
-        subjects: await withShortCodes(collegeRef, subjects), students,
+        subjects: await withShortCodes(collegeRef, subjects, section.department), students,
         meta: {
           absentOnly, shortage, threshold, consolidated, subjectFilter, total: students.length,
           academicYear: rangeIsUnbounded ? (academicWindow?.label ?? "all") : undefined,
@@ -579,7 +596,7 @@ export async function GET(request: Request) {
       // Letterhead for the report's exports (name, address, phone, logo) - one document read.
       const collegeDoc = (await collegeRef.get()).data() as { name?: string; logoUrl?: string; address?: string; contactPhone?: string } | undefined;
       return NextResponse.json({
-        subjects: await withShortCodes(collegeRef, subjects), students, summary,
+        subjects: await withShortCodes(collegeRef, subjects, section.department), students, summary,
         college: {
           name: collegeDoc?.name ?? "", address: collegeDoc?.address ?? "", phone: collegeDoc?.contactPhone ?? "",
           logoUrl: collegeDoc?.logoUrl?.trim() || "/vishnulogo.png",
@@ -701,7 +718,7 @@ export async function GET(request: Request) {
         }) as typeof students;
       }
 
-      return NextResponse.json({ subjects: await withShortCodes(collegeRef, subjects), weekLabels: weekRanges.map((w) => w.label), students, meta: { absentOnly, shortage, threshold } });
+      return NextResponse.json({ subjects: await withShortCodes(collegeRef, subjects, section.department), weekLabels: weekRanges.map((w) => w.label), students, meta: { absentOnly, shortage, threshold } });
     }
 
     if (!dateParam) {
@@ -786,7 +803,7 @@ export async function GET(request: Request) {
     }
     // dailyPercent flag: if requested, client can read bySubjectDaily/overall percent directly
 
-    return NextResponse.json({ subjects: await withShortCodes(collegeRef, subjects), students, classwork, meta: { absentOnly, shortage, threshold, dailyPercent } });
+    return NextResponse.json({ subjects: await withShortCodes(collegeRef, subjects, section.department), students, classwork, meta: { absentOnly, shortage, threshold, dailyPercent } });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
