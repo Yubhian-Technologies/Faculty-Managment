@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { withCurriculumSerial } from "@/lib/subjects/curriculumOrder";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -162,7 +163,7 @@ export async function GET(request: Request) {
       : [];
     const subjects = subjectDocs.filter((d) => d.exists).map((d) => ({ id: d.id, ...d.data() })) as (Subject & { id: string })[];
 
-    return NextResponse.json({ workingDays: rules.workingDays, subjects, sections: result });
+    return NextResponse.json({ workingDays: rules.workingDays, subjects: await withCurriculumSerial(collegeRef, subjects), sections: result });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {
       return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });

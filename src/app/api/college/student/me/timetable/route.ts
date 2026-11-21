@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { withCurriculumSerial } from "@/lib/subjects/curriculumOrder";
 import { NextResponse } from "next/server";
 import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
@@ -125,7 +126,7 @@ export async function GET(request: Request) {
       timing,
       slots,
       assignments,
-      subjects: Array.from(subjectMap.values()),
+      subjects: await withCurriculumSerial(collegeRef, Array.from(subjectMap.values()) as { id: string }[], section.department),
       resolvedSemester: currentSemester,
       availableSemesters: timing?.semesters ?? [],
       workingDays: timetableRules.workingDays,
