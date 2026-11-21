@@ -93,7 +93,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Teaching assignment not found. It may have been deleted." }, { status: 404 });
     }
     const assignment = assignmentSnap.data() as TeachingAssignment;
-    if (assignment.facultyId !== facultyId || assignment.isPast) {
+    if (assignment.isPast) {
       return NextResponse.json({ error: "This assignment does not belong to that faculty member" }, { status: 400 });
     }
 
@@ -109,10 +109,15 @@ export async function POST(request: Request) {
     );
     if (!matchedPeriod) {
       return NextResponse.json(
-        { error: "No published class period matches this faculty/assignment/date/period combination" },
+        { error: assignment.facultyId !== facultyId
+          ? "This assignment does not belong to that faculty member"
+          : "No published class period matches this faculty/assignment/date/period combination" },
         { status: 400 }
       );
     }
+    // A period under someone else's assignment is fine when it is this faculty member's period that day: a leave
+    // substitute taking attendance only (the absent faculty's assignment, lib/leave/substituteTeaching.ts) or a class
+    // adjustment - getFacultyPeriodsForDate already lists exactly those, so `matchedPeriod` proves it.
     // Only once the period is over: a past day, or today after the period's own end time.
     if (!facultyWindowClosed(date, matchedPeriod.endTime)) {
       return NextResponse.json({ error: FACULTY_WINDOW_OPEN_MESSAGE }, { status: 403 });
@@ -205,7 +210,19 @@ export async function POST(request: Request) {
       // faculty who's had their attendance office-corrected still sees it on
       // their own Attendance Report.
       facultyId: faculty.userUid ?? facultyId,
-      facultyName: assignment.facultyName ?? facultyDisplayName(faculty),
+      // A leave substitute taking attendance only: the session is theirs, under the absent faculty's assignment -
+      // recorded exactly as the substitute's own posting would be (student-attendance POST).
+      ...(assignment.facultyId !== facultyId
+        ? {
+          facultyName: facultyDisplayName(faculty),
+          ...(matchedPeriod.attendanceOnly ? {
+            substituteForFacultyId: assignment.facultyId,
+            substituteForFacultyName: assignment.facultyName ?? "",
+            attendanceOnly: true,
+          } : {}),
+        }
+        : { facultyName: assignment.facultyName ?? facultyDisplayName(faculty) }),
+      ...(matchedPeriod.adjustedFrom ? { classAdjustment: matchedPeriod.adjustedFrom } : {}),
       date,
       periodNumber,
       ...(labBatch ? { labBatch } : {}),
