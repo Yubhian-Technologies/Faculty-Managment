@@ -29,7 +29,8 @@ describe("College Admin menu", () => {
   });
 
   it("keeps every College Office module under a heading (the duplicate Students item hands its heading on)", () => {
-    expect(items.find((i) => i.href === "/college-office/timings")?.section).toBe("Students");
+    // Named "College Office" here: the Principal's own "Students" group sits above it.
+    expect(items.find((i) => i.href === "/college-office/timings")?.section).toBe("College Office");
     const sections = items.filter((i) => i.section).map((i) => i.section);
     expect(sections).toEqual(expect.arrayContaining(["Staff", "Certificates"]));
     expect(sections).not.toContain("My Work");
