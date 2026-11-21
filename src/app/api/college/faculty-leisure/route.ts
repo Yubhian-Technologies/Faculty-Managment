@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { leavePartOn, type LeaveSpan } from "@/lib/leave/leaveDayParts";
 import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -13,7 +14,6 @@ import { getActiveSubstitutionsForDates } from "@/lib/leave/periodCoverage";
 import { isFacultyAvailable, DEFAULT_TIMETABLE_RULES } from "@/types";
 import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { REQUESTS_COL } from "@/lib/leave/balanceEngine";
-import { istDateKey } from "@/lib/attendance/istTime";
 import { normalizeHHMM, dayOfWeekFromISODate } from "@/lib/timetable/leisureQuery";
 import { facultyActiveOn, loadLabWindows } from "@/lib/students/labFacultyWindow";
 import type { CourseYearTiming, DayOfWeek, PeriodTiming, TimetableDraft, TimetableRules, TimetableSlot } from "@/types";
@@ -172,13 +172,10 @@ export async function GET(request: Request) {
     for (const doc of leaveSnap.docs) {
       if ((doc.data() as { isLateAttendancePenalty?: boolean }).isLateAttendancePenalty) continue; // late check-in CL deduction
       const r = doc.data() as { uid?: string; fromDate?: { toDate?: () => Date }; toDate?: { toDate?: () => Date }; isHalfDay?: boolean; halfDaySession?: "FN" | "AN" };
-      const f = r.fromDate?.toDate?.();
-      const t = r.toDate?.toDate?.();
-      if (!r.uid || !f || !t || !dateParam) continue;
-      if (istDateKey(f) > dateParam || istDateKey(t) < dateParam) continue;
-      addRange(leaveByUid, r.uid, r.isHalfDay && r.halfDaySession
-        ? (r.halfDaySession === "FN" ? ["00:00", "13:00"] : ["13:00", "24:00"])
-        : WHOLE_DAY);
+      if (!r.uid || !dateParam) continue;
+      const part = leavePartOn(r as LeaveSpan, dateParam);
+      if (!part) continue;
+      addRange(leaveByUid, r.uid, part === "FN" ? ["00:00", "13:00"] : part === "AN" ? ["13:00", "24:00"] : WHOLE_DAY);
     }
 
     // "Live" = this course-year's current semester AND this academic session. The

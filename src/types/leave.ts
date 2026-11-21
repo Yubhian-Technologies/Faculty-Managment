@@ -483,6 +483,11 @@ export interface LeaveRequest {
   // dayCounter.ts) but required by the client whenever isHalfDay is set, so
   // the approver knows which half without asking.
   halfDaySession?: "FN" | "AN";
+  // A range with a half day at an end (1.5, 2.5 ... days - lib/leave/leaveDayParts.ts): "AN" = the leave starts in
+  // the afternoon of fromDate (the forenoon is worked), "FN" = it ends at the forenoon of toDate (the afternoon is
+  // worked). Only on a range (fromDate < toDate) and only for a leave type that allows half days; absent = whole days.
+  firstDayHalf?: "AN";
+  lastDayHalf?: "FN";
   reason: string;
   // Resolved at submission time from the matching LeaveReasonOption (see
   // Settings > Leave Policy) - absent means the default, HOD. Never

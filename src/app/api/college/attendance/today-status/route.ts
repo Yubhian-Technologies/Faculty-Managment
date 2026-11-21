@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getHolidayNameForDate } from "@/lib/leave/holidaysCount";
-import { isOnApprovedLeaveToday } from "@/lib/leave/leaveStatusToday";
+import { approvedLeavePartOn } from "@/lib/leave/leaveStatusToday";
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { isSunday } from "@/lib/attendance/attendanceWindow";
 import { isWorkingDayForRole } from "@/lib/attendance/workingDays";
@@ -24,9 +24,9 @@ export async function GET() {
     const db = getAdminDb();
     const today = new Date();
 
-    const [holidayName, isOnLeave, isWorkingSunday] = await Promise.all([
+    const [holidayName, leavePart, isWorkingSunday] = await Promise.all([
       getHolidayNameForDate(db, session.collegeId, today),
-      isOnApprovedLeaveToday(db, session.collegeId, session.uid, today),
+      approvedLeavePartOn(db, session.collegeId, session.uid, today),
       isSunday() ? isWorkingDayForRole(db, session.collegeId, today, session.role as UserRole) : Promise.resolve(false),
     ]);
 
@@ -34,7 +34,9 @@ export async function GET() {
       isSunday: isSunday() && !isWorkingSunday,
       isHoliday: !!holidayName,
       holidayName,
-      isOnLeave,
+      // Whole day only - on a half-day leave the person checks in for the half they work (`leaveHalf` says which).
+      isOnLeave: leavePart === "FULL",
+      ...(leavePart === "FN" || leavePart === "AN" ? { leaveHalf: leavePart } : {}),
     });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

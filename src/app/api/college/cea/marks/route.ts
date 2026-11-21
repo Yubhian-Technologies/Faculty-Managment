@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const body = (await readJsonBody(request)) as { assignmentId?: unknown; unit?: unknown };
     const unit = Number(body.unit);
     if (typeof body.assignmentId !== "string" || !body.assignmentId || !Number.isInteger(unit)) throw new CeaError("Pick a section and unit");
-    return NextResponse.json(await openCeaSheet(getAdminDb(), session.collegeId, session.uid, session.email, body.assignmentId, unit));
+    return NextResponse.json(await openCeaSheet(getAdminDb(), session.collegeId, session, session.email, body.assignmentId, unit));
   } catch (err) {
     return ceaErrorResponse(err, "[college/cea/marks POST]");
   }

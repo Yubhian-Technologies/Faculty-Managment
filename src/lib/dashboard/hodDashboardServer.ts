@@ -1,4 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
+import { leavePartOn, partCovers } from "@/lib/leave/leaveDayParts";
 import { canHodEditDepartment, facultyManageableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { whereIn } from "@/lib/firestore/inQuery";
@@ -225,9 +226,11 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
       const f = facultyByUid.get(r.uid);
       // A half-day leave covers only its half (forenoon before 13:00, afternoon from 13:00 - the rule the class
       // adjustments and invigilation use), so the other half's periods are not "uncovered".
-      const half = r.isHalfDay ? (r.halfDaySession ?? "FN") : null;
+      // Today's part of the leave (a half day, or a range's half-day end): only those periods need cover.
+      const todayPart = leavePartOn(r, today);
+      const half = todayPart === "FN" || todayPart === "AN" ? todayPart : null;
       const mine = (f ? (periodsByFaculty.get(f.id) ?? []) : [])
-        .filter((p) => !half || !p.start || (half === "FN" ? p.start < "13:00" : p.start >= "13:00"));
+        .filter((p) => partCovers(todayPart, p.start));
       const coveredPeriods = new Set(subs.map((p) => p.periodNumber));
       const open = mine.filter((p) => !coveredPeriods.has(p.periodNumber)).sort((a, b) => a.periodNumber - b.periodNumber);
       return {
@@ -236,7 +239,7 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
         isHod: hodUids.has(r.uid),
         handoverTo: r.handoverToName ?? null,
         leaveType: r.leaveTypeCode ?? "OTHER",
-        halfDay: r.isHalfDay ? (r.halfDaySession ?? "FN") : null,
+        halfDay: half,
         covers: subs.map((p) => ({ period: p.periodNumber, section: p.sectionName ?? "", substitute: p.substituteFacultyName })),
         uncovered: open.length,
         // Which periods: nobody is assigned to take them.

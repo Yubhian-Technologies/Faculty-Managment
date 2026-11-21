@@ -1,4 +1,5 @@
 import { pickOwnAssignment } from "@/lib/classAdjustments/rules";
+import { leavePartOn, partCovers, type LeaveSpan } from "@/lib/leave/leaveDayParts";
 import type { Firestore } from "firebase-admin/firestore";
 import { LEGACY_TECHNICAL_DESIGNATIONS } from "@/lib/designations/config";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
@@ -160,7 +161,8 @@ export async function resolveRequiredPeriods(
   facultyMemberId: string,
   fromDate: Date,
   toDate: Date,
-  holidayDates: Set<string>
+  holidayDates: Set<string>,
+  span?: Omit<LeaveSpan, "fromDate" | "toDate">
 ): Promise<RequiredPeriod[]> {
   const collegeRef = db.collection("colleges").doc(collegeId);
   const slotsSnap = await collegeRef.collection("timetableSlots").where("facultyId", "==", facultyMemberId).get();
@@ -224,7 +226,12 @@ export async function resolveRequiredPeriods(
     p.subjectCode = subjectCodeById.get(p.subjectId) ?? undefined;
   }
 
-  return required.sort((a, b) => (a.date === b.date ? a.periodNumber - b.periodNumber : a.date.localeCompare(b.date)));
+  // A half day (single date, or a range's half-day end) needs cover only for the periods in the half on leave:
+  // forenoon = periods starting before 1 PM, afternoon = from 1 PM (lib/leave/leaveDayParts.ts).
+  const covered = span && (span.isHalfDay || span.firstDayHalf || span.lastDayHalf)
+    ? required.filter((p) => partCovers(leavePartOn({ ...span, fromDate: isoDateKey(fromDate), toDate: isoDateKey(toDate) }, p.date), p.startTime))
+    : required;
+  return covered.sort((a, b) => (a.date === b.date ? a.periodNumber - b.periodNumber : a.date.localeCompare(b.date)));
 }
 
 // Stamps startTime/endTime onto each period from its own course-year's
@@ -272,6 +279,9 @@ export interface CoverageOptions {
   /** Narrows who may be offered - the Adjustments module limits an HOD to
    *  their own department's faculty. */
   candidateFilter?: (f: FacultyMember) => boolean;
+  /** The leave's half days (single-date half day or a range's half-day ends): only periods in the half on leave
+   *  need cover. */
+  span?: Omit<LeaveSpan, "fromDate" | "toDate">;
 }
 
 export async function buildPeriodCoverage(
@@ -304,7 +314,7 @@ export async function buildPeriodCoverage(
     db, collegeId, isoDateKey(workingDates[0]), isoDateKey(workingDates[workingDates.length - 1]),
     { excludeRequestId: opts.excludeRequestId, excludeAdjustmentId: opts.excludeAdjustmentId },
   ));
-  const required = await resolveRequiredPeriods(db, collegeId, facultyMemberId, fromDate, toDate, holidayDates);
+  const required = await resolveRequiredPeriods(db, collegeId, facultyMemberId, fromDate, toDate, holidayDates, opts.span);
   if (required.length === 0) return [];
 
   const [deptFacultySnap, currentSlots, unavailability] = await Promise.all([facultyRead, slotsRead, unavailabilityRead]);

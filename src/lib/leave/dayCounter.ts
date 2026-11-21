@@ -22,21 +22,24 @@ export function dateKey(d: Date): string {
 // that gets stored and deducted) and the client-side preview
 // (LeaveApplyForm.tsx), so both agree on the same number before and after
 // submission.
+// `ends`: a range with a half day at an end (firstDayHalf "AN" / lastDayHalf "FN" - see LeaveRequest): that end date
+// counts half (never more than the day itself was worth - a Sunday or holiday end still counts 0).
 export function countWorkingDays(
-  from: Date, to: Date, holidayDates: Set<string>, isHalfDay?: boolean, workingDayWeights?: Map<string, number>
+  from: Date, to: Date, holidayDates: Set<string>, isHalfDay?: boolean, workingDayWeights?: Map<string, number>,
+  ends?: { firstDayHalf?: "AN" | null; lastDayHalf?: "FN" | null }
 ): number {
   if (isHalfDay) return 0.5;
   let count = 0;
   const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate());
   const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  const firstKey = dateKey(cursor), lastKey = dateKey(end);
+  const multi = firstKey !== lastKey;
   while (cursor <= end) {
     const key = dateKey(cursor);
     const overrideWeight = workingDayWeights?.get(key);
-    if (overrideWeight !== undefined) {
-      count += overrideWeight;
-    } else if (cursor.getDay() !== 0 && !holidayDates.has(key)) {
-      count++;
-    }
+    let w = overrideWeight !== undefined ? overrideWeight : cursor.getDay() !== 0 && !holidayDates.has(key) ? 1 : 0;
+    if (multi && ((key === firstKey && ends?.firstDayHalf === "AN") || (key === lastKey && ends?.lastDayHalf === "FN"))) w = Math.min(w, 0.5);
+    count += w;
     cursor.setDate(cursor.getDate() + 1);
   }
   return count;

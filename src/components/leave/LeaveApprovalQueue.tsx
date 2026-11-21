@@ -1,5 +1,6 @@
 "use client";
 
+import { halfEndsNote } from "@/lib/leave/leaveDayParts";
 import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useEffect, useState, useCallback } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -13,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/useToast";
 import { PermissionApprovalQueue } from "@/components/leave/PermissionApprovalQueue";
 import { PeriodCoverageGrid, type PeriodCoverageEntry } from "@/components/leave/PeriodCoverageGrid";
-import { cn, formatDate, formatTime12h } from "@/lib/utils";
+import { cn, dmy, formatDate, formatTime12h } from "@/lib/utils";
 import { CalendarClock, Check, X, ChevronDown, ChevronUp, FileCheck, BellRing } from "lucide-react";
 import { EFFECTIVE_CATEGORY_LABELS, EFFECTIVE_CATEGORY_ORDER, LEAVE_TYPE_LABELS, OTHER_LEAVE_CATEGORY_DESCRIPTIONS, OTHER_LEAVE_CATEGORY_LABELS, OTHER_LEAVE_CATEGORY_ORDER } from "@/types/leave";
 import type { EffectiveLeaveCategory, LeaveRequest, OtherLeaveCategory } from "@/types/leave";
@@ -506,6 +507,7 @@ export function LeaveApprovalQueue() {
                       {r.isHalfDay && (
                         <Badge variant="outline">Half Day &middot; {r.halfDaySession === "AN" ? "Afternoon" : "Forenoon"}</Badge>
                       )}
+                      {halfEndsNote(r, dmy) && <Badge variant="outline">{halfEndsNote(r, dmy)}</Badge>}
                       {r.extendsRequestId && (
                         <Badge variant="outline" title="This extends a leave that is already approved.">
                           Extension

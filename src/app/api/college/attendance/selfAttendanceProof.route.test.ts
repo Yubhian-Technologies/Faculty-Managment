@@ -19,7 +19,7 @@ vi.mock("@/lib/firebase/admin", () => ({ getAdminDb: () => h.db }));
 // Everything about "is today a working day / late" is out of scope here and is made neutral.
 vi.mock("@/lib/attendance/workingDays", () => ({ isWorkingDayForRole: async () => true }));
 vi.mock("@/lib/leave/holidaysCount", () => ({ getHolidayNameForDate: async () => null }));
-vi.mock("@/lib/leave/leaveStatusToday", () => ({ isOnApprovedLeaveToday: async () => false }));
+vi.mock("@/lib/leave/leaveStatusToday", () => ({ isOnApprovedLeaveToday: async () => false, approvedLeavePartOn: async () => null }));
 vi.mock("@/lib/attendance/checkInPermission", () => ({ resolveCheckInPermission: async () => undefined }));
 vi.mock("@/lib/attendance/lateStatus", () => ({ isLateCheckIn: () => false }));
 vi.mock("@/lib/leave/lateAttendancePenalty", () => ({ recordLateCheckIn: async () => {} }));

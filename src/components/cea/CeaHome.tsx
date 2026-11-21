@@ -7,7 +7,7 @@ import { CeaPlans } from "./CeaPlans";
 import { CeaSections } from "./CeaSections";
 
 // HOD / Exam Cell > CEA: the plans (per subject) and the marks by section.
-export function CeaHome({ title, description }: { title: string; description: string }) {
+export function CeaHome({ title, description, canUpload = false }: { title: string; description: string; canUpload?: boolean }) {
   const [tab, setTab] = useState<"plans" | "marks">("plans");
   const tabs = (
     <div role="tablist" className="flex gap-2 border-b">
@@ -17,6 +17,6 @@ export function CeaHome({ title, description }: { title: string; description: st
       ))}
     </div>
   );
-  return tab === "plans" ? <CeaPlans title={title} description={description} tabs={tabs} /> : <div className="max-w-6xl space-y-6"><PageHeader title={title} description={description} className="mb-0" />{tabs}<CeaSections /></div>;
+  return tab === "plans" ? <CeaPlans title={title} description={description} tabs={tabs} /> : <div className="max-w-6xl space-y-6"><PageHeader title={title} description={description} className="mb-0" />{tabs}<CeaSections canUpload={canUpload} /></div>;
 }
 

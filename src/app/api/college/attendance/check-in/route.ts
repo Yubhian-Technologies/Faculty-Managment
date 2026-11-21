@@ -9,9 +9,11 @@ import { SUNDAY_HOLIDAY_MESSAGE, isSunday } from "@/lib/attendance/attendanceWin
 import { COLLEGE_STAFF_UNIT_HEAD_ROLES } from "@/lib/attendance/collegeStaffUnits";
 import { isWorkingDayForRole } from "@/lib/attendance/workingDays";
 import { getHolidayNameForDate } from "@/lib/leave/holidaysCount";
-import { isOnApprovedLeaveToday } from "@/lib/leave/leaveStatusToday";
+import { approvedLeavePartOn } from "@/lib/leave/leaveStatusToday";
+import { HALF_DAY_SPLIT } from "@/lib/leave/leaveDayParts";
+import { lateAfterOf } from "@/lib/attendance/attendanceTimings";
 import { isLateCheckIn } from "@/lib/attendance/lateStatus";
-import { collegeLateAfter } from "@/lib/attendance/attendanceTimingsServer";
+import { collegeLateAfter, loadAttendanceTimings } from "@/lib/attendance/attendanceTimingsServer";
 import { recordLateCheckIn } from "@/lib/leave/lateAttendancePenalty";
 import { resolveCheckInPermission } from "@/lib/attendance/checkInPermission";
 import { nowInIndia } from "@/lib/leave/dayCounter";
@@ -45,7 +47,9 @@ export async function POST(request: Request) {
     if (holidayName) {
       return NextResponse.json({ error: `Today is a holiday — ${holidayName}. No attendance required.` }, { status: 403 });
     }
-    if (await isOnApprovedLeaveToday(db, session.collegeId, session.uid, today)) {
+    // A whole day of approved leave blocks check-in; a half day doesn't - the person checks in for the half they work.
+    const leavePart = await approvedLeavePartOn(db, session.collegeId, session.uid, today);
+    if (leavePart === "FULL") {
       return NextResponse.json({ error: "You're on approved leave today — attendance cannot be marked." }, { status: 403 });
     }
 
@@ -86,7 +90,10 @@ export async function POST(request: Request) {
     const [permittedCheckInTime, lateAfter] = await Promise.all([
       resolveCheckInPermission(db, session.collegeId, session.uid, docSuffix),
       // The college's own cut-off (Attendance Timings); stored on the record so the day always reads the same.
-      collegeLateAfter(db, session.collegeId),
+      // On a forenoon-leave day the working day starts at 1 PM, so the cut-off is 1 PM + the college's grace.
+      leavePart === "FN"
+        ? loadAttendanceTimings(db, session.collegeId).then((t) => lateAfterOf({ startTime: HALF_DAY_SPLIT, graceMinutes: t.graceMinutes }))
+        : collegeLateAfter(db, session.collegeId),
     ]);
     const late = isLateCheckIn(checkIn, permittedCheckInTime, lateAfter);
     const lateReason = body.lateReason?.trim();

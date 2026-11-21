@@ -1,4 +1,5 @@
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
+import { leavePartOn, type LeaveSpan } from "@/lib/leave/leaveDayParts";
 import type { ClassAdjustment, ClassAdjustmentKind, ClassAdjustmentLeg, FacultyMember, TeachingAssignment } from "@/types";
 import { getFacultyPeriodsForDate, type FacultyPeriodOnDate } from "@/lib/timetable/currentPeriod";
 import { getNoClassReason } from "@/lib/studentAttendance/classDay";
@@ -50,12 +51,10 @@ async function leaveRanges(db: Firestore, c: string, uid: string | undefined, da
   const out: { slotId: string; startTime: string; endTime: string; label: string }[] = [];
   for (const d of snap.docs) {
     if ((d.data() as { isLateAttendancePenalty?: boolean }).isLateAttendancePenalty) continue; // the late check-in CL deduction: not a day away
-    const r = d.data() as { fromDate?: { toDate?: () => Date }; toDate?: { toDate?: () => Date }; isHalfDay?: boolean; halfDaySession?: "FN" | "AN" };
-    const f = r.fromDate?.toDate?.(), t = r.toDate?.toDate?.();
-    if (!f || !t || istDateKey(f) > date || istDateKey(t) < date) continue;
-    const range = r.isHalfDay && r.halfDaySession
-      ? (r.halfDaySession === "FN" ? { startTime: "00:00", endTime: "13:00" } : { startTime: "13:00", endTime: "23:59" })
-      : { startTime: "00:00", endTime: "23:59" };
+    // The part of `date` the leave takes (a half day, or a range's half-day end - lib/leave/leaveDayParts.ts).
+    const part = leavePartOn(d.data() as LeaveSpan, date);
+    if (!part) continue;
+    const range = part === "FN" ? { startTime: "00:00", endTime: "13:00" } : part === "AN" ? { startTime: "13:00", endTime: "23:59" } : { startTime: "00:00", endTime: "23:59" };
     out.push({ slotId: `leave_${d.id}`, ...range, label: "on approved leave" });
   }
   return out;

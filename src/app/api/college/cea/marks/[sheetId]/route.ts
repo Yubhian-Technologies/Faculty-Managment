@@ -7,7 +7,7 @@ import { readJsonBody } from "@/lib/http/readJsonBody";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { applyCeaEntries, isEntered } from "@/lib/cea/marks";
-import { ceaMarksCol, ceaQuestionSheet, internalSubmitted, syncCeaIntoInternal } from "@/lib/cea/marksServer";
+import { ceaMarksCol, internalSubmitted, syncCeaIntoInternal } from "@/lib/cea/marksServer";
 import { midOf } from "@/lib/cea/rules";
 import { CeaError, ceaErrorResponse } from "@/lib/cea/server";
 import { editableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
@@ -48,7 +48,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sh
     if (first.facultyId !== (await resolveFacultyMemberId(db, session.collegeId, session.uid))) throw new CeaError("This isn't your section", 403);
     if (await internalSubmitted(db, session.collegeId, first.assignmentId)) throw new CeaError("The section's internal marks are already submitted - CIE marks can't change", 409);
     const mid = midOf(first.when);
-    const qSheet = mid && body.entries ? await ceaQuestionSheet(db, session.collegeId, { subjectId: first.subjectId, department: first.department, year: first.year, midNumber: mid }) : null;
+    // One total per student for every unit (with-Mid ones too) - no question-by-question entry.
+    const qSheet = null;
     const at = new Date().toISOString();
 
     const saved = await db.runTransaction(async (tx) => {

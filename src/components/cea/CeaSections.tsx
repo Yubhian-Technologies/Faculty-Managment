@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { whenLabel } from "@/lib/cea/rules";
+import { CeaUploadPanel } from "./CeaUploadPanel";
 import type { CeaMarksSheet, CeaWhen } from "@/types";
 
 // CEA marks by section (HOD: their departments; Exam Cell / Principal / VP: all): each section's units - submitted,
@@ -16,15 +17,18 @@ import type { CeaMarksSheet, CeaWhen } from "@/types";
 type Row = { assignmentId: string; subjectCode: string; subjectName: string; department: string; section: string; facultyName: string; unitMarks: number;
   units: { unit: number; when: CeaWhen; sheetId: string; status: "DRAFT" | "SUBMITTED" | null; enteredCount: number; totalStudents: number; heldOn: string | null }[] };
 
-export function CeaSections() {
+// `canUpload` (the Exam Cell): each section also gets Download Template / Upload Marks - e.g. with-Mid CIE scripts
+// collected and marked centrally. Uploaded units stay drafts for the faculty member to check and Submit.
+export function CeaSections({ canUpload = false }: { canUpload?: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [reload, setReload] = useState(0);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
   const [show, setShow] = useState<"" | "PENDING">("");
   const [open, setOpen] = useState<string | null>(null);
   useEffect(() => {
     fetch("/api/college/cea/sections").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Unable to load"); setRows(j.sections); }).catch((e: Error) => setError(e.message));
-  }, []);
+  }, [reload]);
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
     return (rows ?? []).filter((r) => (!show || r.units.some((u) => u.status !== "SUBMITTED")) && (!s || `${r.subjectCode} ${r.subjectName} ${r.department} ${r.section} ${r.facultyName}`.toLowerCase().includes(s)));
@@ -45,7 +49,7 @@ export function CeaSections() {
         <Card className="rounded-2xl"><CardContent className="overflow-x-auto p-0">
           <table className="w-full min-w-[46rem] text-sm">
             <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr><th className="px-3 py-2">Subject</th><th className="px-3 py-2">Section</th><th className="px-3 py-2">Faculty</th><th className="px-3 py-2">Units</th></tr>
+              <tr><th className="px-3 py-2">Subject</th><th className="px-3 py-2">Section</th><th className="px-3 py-2">Faculty</th><th className="px-3 py-2">Units</th>{canUpload && <th className="px-3 py-2">Marks</th>}</tr>
             </thead>
             <tbody>{list.map((r) => (
               <tr key={r.assignmentId} className="border-t">
@@ -58,6 +62,7 @@ export function CeaSections() {
                     U{u.unit} {u.status === "SUBMITTED" ? "done" : u.status ? `${u.enteredCount}/${u.totalStudents}` : "-"}
                   </button>
                 ))}</div></td>
+                {canUpload && <td className="px-3 py-2"><CeaUploadPanel assignmentId={r.assignmentId} onSaved={() => setReload((n) => n + 1)} /></td>}
               </tr>
             ))}</tbody>
           </table>

@@ -38,6 +38,7 @@ export async function GET(request: Request) {
     let fromDate: Date;
     let toDate: Date;
     let department: string | undefined;
+    let storedSpan: { isHalfDay?: boolean; halfDaySession?: "FN" | "AN"; firstDayHalf?: "AN"; lastDayHalf?: "FN" } | null = null;
 
     if (requestId) {
       const snap = await REQUESTS_COL(session.collegeId, db).doc(requestId).get();
@@ -60,6 +61,7 @@ export async function GET(request: Request) {
       department = req.department;
       fromDate = (req.fromDate as unknown as { toDate(): Date }).toDate();
       toDate = (req.toDate as unknown as { toDate(): Date }).toDate();
+      storedSpan = { isHalfDay: req.isHalfDay, halfDaySession: req.halfDaySession, firstDayHalf: req.firstDayHalf, lastDayHalf: req.lastDayHalf };
     } else {
       const fromDateStr = url.searchParams.get("fromDate");
       const toDateStr = url.searchParams.get("toDate");
@@ -82,9 +84,18 @@ export async function GET(request: Request) {
 
     const facultyMemberId = await resolveFacultyMemberId(db, session.collegeId, targetUid);
     const holidayDates = await getHolidayDateKeys(db, session.collegeId, fromDate, toDate);
+    // The leave's half days narrow the periods to cover: from the stored request, or the form's current choice
+    // (?halfDay=FN|AN for one date, ?firstDayHalf=AN / ?lastDayHalf=FN for a range).
+    const q = url.searchParams;
+    const span = storedSpan ?? {
+      isHalfDay: q.get("halfDay") === "FN" || q.get("halfDay") === "AN",
+      halfDaySession: (q.get("halfDay") === "AN" ? "AN" : "FN") as "FN" | "AN",
+      firstDayHalf: q.get("firstDayHalf") === "AN" ? "AN" as const : undefined,
+      lastDayHalf: q.get("lastDayHalf") === "FN" ? "FN" as const : undefined,
+    };
     const periods = await buildPeriodCoverage(
       db, session.collegeId, facultyMemberId, department, fromDate, toDate, holidayDates,
-      { excludeRequestId: requestId ?? undefined }
+      { excludeRequestId: requestId ?? undefined, span }
     );
 
     return NextResponse.json({ periods });

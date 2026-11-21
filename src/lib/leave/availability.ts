@@ -2,6 +2,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import { isoDateKey } from "@/lib/leave/dayCounter";
 import type { LeaveRequest, PeriodSubstitution, StaffAdjustment } from "@/types/leave";
 import { dmy } from "@/lib/utils";
+import { leavePartOn, partCovers, type LeaveSpan } from "@/lib/leave/leaveDayParts";
 
 // Everything that makes someone unavailable on a given date, beyond their own
 // timetable - shared by every "who can I name as a substitute / handover /
@@ -34,7 +35,11 @@ interface LiveLeave {
   fromISO: string;
   toISO: string;
   substitutions: PeriodSubstitution[];
+  employeeName?: string;
 }
+
+/** A class someone has agreed (or been asked) to take for a colleague - see coveringCommitments. */
+export interface CoverCommitment { date: string; periodNumber: number; startTime?: string; sectionName?: string; subjectName?: string; forName?: string }
 
 export interface Unavailability {
   /** On live leave, or the subject of an active adjustment, on this date. */
@@ -45,6 +50,9 @@ export interface Unavailability {
   unavailableUidsBetween(fromISO: string, toISO: string): Set<string>;
   /** FacultyMember ids already committed (live leave sub, or active adjustment) to cover ANY period within [fromISO, toISO] - so a covering commitment can be checked against the applicant themselves, not just the pool of candidates. */
   coveringFacultyIdsBetween(fromISO: string, toISO: string): Set<string>;
+  /** The classes one faculty member is down to cover for colleagues ON days within [fromISO, toISO] (by each
+   *  period's own date - not by the colleague's whole leave range). */
+  coveringCommitments(facultyId: string, fromISO: string, toISO: string): CoverCommitment[];
 }
 
 export interface SubstitutePick {
@@ -133,6 +141,7 @@ export async function loadUnavailability(
       requestId: doc.id, uid: r.uid, fromISO: from, toISO: to,
       // A proposal awaiting acceptance still reserves the slot.
       substitutions: [...(r.periodSubstitutions ?? []), ...(r.pendingPeriodSubstitutions ?? [])],
+      employeeName: r.employeeName,
     });
   }
 
@@ -164,16 +173,40 @@ export async function loadUnavailability(
       return out;
     },
     coveringFacultyIdsBetween(from, to) {
+      // By each covered period's OWN date: covering a colleague on the 20th says nothing about the 21st, even when
+      // the colleague's leave runs 20-21.
       const out = new Set<string>();
-      for (const l of leaves) {
-        if (l.toISO < from || l.fromISO > to) continue;
-        for (const p of l.substitutions) out.add(p.substituteFacultyId);
-      }
-      for (const a of adjustments) {
-        if (a.toDate < from || a.fromDate > to) continue;
-        for (const p of a.periodSubstitutions ?? []) out.add(p.substituteFacultyId);
-      }
+      for (const l of leaves) for (const p of l.substitutions) if (p.date >= from && p.date <= to) out.add(p.substituteFacultyId);
+      for (const a of adjustments) for (const p of a.periodSubstitutions ?? []) if (p.date >= from && p.date <= to) out.add(p.substituteFacultyId);
       return out;
     },
+    coveringCommitments(facultyId, from, to) {
+      const out: CoverCommitment[] = [];
+      const add = (p: PeriodSubstitution, forName?: string) => {
+        if (p.substituteFacultyId !== facultyId || p.date < from || p.date > to) return;
+        const x = p as PeriodSubstitution & { startTime?: string; sectionName?: string; subjectName?: string };
+        out.push({ date: p.date, periodNumber: p.periodNumber, startTime: x.startTime, sectionName: x.sectionName, subjectName: x.subjectName, forName });
+      };
+      for (const l of leaves) l.substitutions.forEach((p) => add(p, l.employeeName));
+      for (const a of adjustments) (a.periodSubstitutions ?? []).forEach((p) => add(p, (a as { subjectName?: string }).subjectName));
+      return out.sort((a, b) => a.date.localeCompare(b.date) || a.periodNumber - b.periodNumber);
+    },
   };
+}
+
+
+/**
+ * The classes a faculty member is down to cover for colleagues that a leave of their own would leave without their
+ * cover: on the leave's days, and on a half day only in the half they're away (lib/leave/leaveDayParts.ts).
+ */
+export function coverClashes(u: Unavailability, facultyId: string, span: LeaveSpan & { fromISO: string; toISO: string }): CoverCommitment[] {
+  const req = { ...span, fromDate: span.fromISO, toDate: span.toISO };
+  return u.coveringCommitments(facultyId, span.fromISO, span.toISO).filter((c) => partCovers(leavePartOn(req, c.date), c.startTime ?? null));
+}
+
+/** "You've agreed to cover P2 CSE-C (Maths) on 21/11/2026 for Dr X ..." - what to sort out before applying. */
+export function describeCoverClashes(list: CoverCommitment[]): string {
+  const items = list.slice(0, 4).map((c) => `P${c.periodNumber}${c.sectionName ? ` ${c.sectionName}` : ""}${c.subjectName ? ` (${c.subjectName})` : ""} on ${dmy(c.date)}${c.forName ? ` for ${c.forName}` : ""}`);
+  const more = list.length > 4 ? ` and ${list.length - 4} more` : "";
+  return `You're down to cover ${items.join("; ")}${more}. Ask them to choose someone else, or decline it in Work Adjustments, before applying for leave at that time.`;
 }
