@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { allowedFormats } from "@/lib/midBank/validateQuestion";
 import { NextResponse } from "next/server";
-import { partUnitSplit } from "@/lib/subjects/parts";
+import { partSplitForSections, partUnitSplit } from "@/lib/subjects/parts";
 import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
 import { loadSyllabus } from "@/lib/subjects/syllabusServer";
 import { syllabusOutcomesId } from "@/lib/subjects/syllabus";
@@ -118,12 +118,13 @@ export async function POST(request: Request) {
       loadSyllabus(db, session.collegeId, subjectId), ownerDepartmentNamesLive(db, session.collegeId, subject),
     ]);
     // "The HOD assigns": only an assigned setter starts it, for every section of the scope (a branch or all branches).
-    // Taught in parts (BEEE): a part's paper covers that part's units in this Mid, the other part the other Mid.
-    const exception = partUnitSplit(subject, branch, d.midNumber) ?? exception0;
     const hodMode = settings.midAssignment === "HOD";
     const assignmentId = assignmentIdFor(d.id, subjectId, branch);
     const assignment = hodMode ? ((await assignmentsCol(db, session.collegeId).doc(assignmentId).get()).data() as MidBankAssignment | undefined) : undefined;
     const available = hodMode ? sectionsForScope(rows, subjectId, branch) : sectionsOf(rows, subjectId, branch);
+    // Taught in parts (BEEE): a part's paper covers that part's units in this Mid, the other part the other Mid; a paper
+    // filed per branch whose sections all write one part in this Mid covers that part.
+    const exception = partUnitSplit(subject, branch, d.midNumber) ?? partSplitForSections(subject, available.map((s) => s.sectionId), d.midNumber) ?? exception0;
     if (hodMode) {
       if (!assignment?.facultyIds.includes(me)) return NextResponse.json({ error: "Your HOD hasn't assigned you to prepare this subject" }, { status: 403 });
       if (available.length === 0) return NextResponse.json({ error: "No section has this subject yet" }, { status: 400 });

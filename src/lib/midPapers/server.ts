@@ -41,8 +41,8 @@ export async function livePaperLayout(db: Db, collegeId: string, bank: import("@
   ]);
   if (!pattern) return null;
   // Taught in parts: a part's paper keeps that part's units.
-  const { partUnitSplit } = await import("@/lib/subjects/parts");
-  const split = partUnitSplit(subject, bank.branch, bank.midNumber) ?? exception;
+  const { partSplitForSections, partUnitSplit } = await import("@/lib/subjects/parts");
+  const split = partUnitSplit(subject, bank.branch, bank.midNumber) ?? partSplitForSections(subject, bank.sections.map((x) => x.sectionId), bank.midNumber) ?? exception;
   const setup = paperSetupIssues(subject, pattern, outcomes, outcomeSwitchesOf(bank), { midNumber: bank.midNumber, rules, exception: split, midCount: settings.midCount });
   const { ceaPartForMid } = await import("@/lib/cea/server");
   const { withCeaPart } = await import("@/lib/cea/paper");

@@ -166,3 +166,21 @@ export function partUnitSplit(subject: { parts?: SubjectPart[] | null } | null |
   const other = parts.find((p) => p.key !== part.key)!;
   return { [String(midNumber)]: part.units, [String(midNumber === 1 ? 2 : 1)]: other.units };
 }
+
+/**
+ * A paper filed per branch (a Mid prepared before the subject went into parts) whose sections ALL write the same part
+ * in this Mid: that part's split (so the paper covers the part they were taught). null otherwise.
+ */
+export function partSplitForSections(
+  subject: { parts?: SubjectPart[] | null; partFirst?: Record<string, PartKey> | null } | null | undefined,
+  sectionIds: string[],
+  midNumber: number,
+): Record<string, number[]> | null {
+  const parts = partsOf(subject);
+  if (!parts || sectionIds.length === 0 || (midNumber !== 1 && midNumber !== 2)) return null;
+  const keys = new Set(sectionIds.map((id) => sectionMidPart(subject!, id, midNumber)?.key));
+  if (keys.size !== 1) return null;
+  const part = parts.find((p) => p.key === [...keys][0]);
+  if (!part) return null;
+  return partUnitSplit(subject, partBranchLabel(part), midNumber);
+}

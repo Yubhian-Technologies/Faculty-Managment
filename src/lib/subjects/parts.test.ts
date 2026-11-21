@@ -85,3 +85,20 @@ describe("Mid papers per part", () => {
     expect(l.branch).toBe("CSE (CSE-A) · ECE (ECE-A)");
   });
 });
+
+describe("a per-branch paper of a parted subject", () => {
+  it("takes the part its sections write, and moves questions unit by position", async () => {
+    const { partSplitForSections } = await import("./parts");
+    const { parts } = cleanSubjectParts(beee, depts);
+    const subject = { parts, partFirst: { "ece-a": "B" as const, "ece-b": "B" as const } };
+    expect(partSplitForSections(subject, ["ece-a", "ece-b"], 1)).toEqual({ "1": [4, 5, 6], "2": [1, 2, 3] });
+    expect(partSplitForSections(subject, ["ece-a", "ece-c"], 1)).toBeNull(); // mixed: no single part
+    const { remapQuestions } = await import("@/lib/midPapers/pattern");
+    const part = { id: "MID", label: "MID", kind: "DESCRIPTIVE", questions: 6, marks: 5, perUnit: 2, unitLayout: [1, 1, 2, 2, 3, 3] };
+    const next = { ...part, unitLayout: [4, 4, 5, 5, 6, 6] };
+    const r = remapQuestions({ parts: [part], setsPerFaculty: 1 } as never, { parts: [next], setsPerFaculty: 1 } as never,
+      [{ id: "1_MID_1", set: 1, partId: "MID", no: 1, unit: 1 }, { id: "1_MID_3", set: 1, partId: "MID", no: 3, unit: 2 }], [1, 2, 3], [4, 5, 6]);
+    expect(r.dropped).toEqual([]);
+    expect(r.moves).toEqual([{ from: "1_MID_1", to: "1_MID_1", unit: 4 }, { from: "1_MID_3", to: "1_MID_3", unit: 5 }]);
+  });
+});
