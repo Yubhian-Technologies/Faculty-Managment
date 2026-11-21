@@ -6,7 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { cachedHodScope } from "@/lib/departments/cachedHodScope";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { sectionsOf } from "@/lib/midBank/sections";
-import { guardError, loadDeadline, MID_BANK_OVERSEERS, midBankRefs, teachingForCached } from "@/lib/midBank/server";
+import { guardError, loadDeadline, MID_BANK_OVERSEERS, midBankRefs, bankTeachingForCached } from "@/lib/midBank/server";
 import { departmentNamesById, ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
 import { reviewingDepartment, seesBranchProgress } from "@/lib/midBank/reviewer";
 import { loadMidSettings } from "@/lib/exams/midSettings";
@@ -31,7 +31,7 @@ export async function GET(_request: Request, { params }: Params) {
     // Everything that needs only the deadline id starts at once (each read is a trip to the database).
     const deadline = loadDeadline(db, session.collegeId, id);
     // "Who teaches what" starts as soon as the deadline is read, not after the HOD's scope.
-    const rowsP = deadline.then((x) => (x ? teachingForCached(db, session.collegeId, x) : []));
+    const rowsP = deadline.then((x) => (x ? bankTeachingForCached(db, session.collegeId, x) : []));
     rowsP.catch(() => undefined);
     const [d, bankSnap, scope, deptNames, settings, assignments] = await Promise.all([
       deadline,

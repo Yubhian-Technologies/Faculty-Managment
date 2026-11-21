@@ -4,6 +4,7 @@ import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
 import { ownBranchPaperNames, ownerDepartmentNames, reviewDepartmentsOf } from "@/lib/subjects/ownerDepartment";
 import { ALL_BRANCHES, branchesOf, isAllBranches, scopeBranches, sectionsForScope } from "./assignments";
 import { midBankRefs } from "./server";
+import { partOfBranch, partsOf } from "@/lib/subjects/parts";
 import { cachedValue } from "@/lib/firestore/sharedReads";
 import type { TeachingRow } from "./sections";
 import { isFacultyAvailable, type FacultyMember, type MidBankAssignment, type MidQuestionBank, type Subject } from "@/types";
@@ -21,7 +22,9 @@ export async function loadAssignments(db: Db, collegeId: string, deadlineId: str
 }
 
 /** The departments whose HOD assigns (and reviews) a scope: the Subject Department(s), else the branch(es). */
-export function reviewDepartmentsForScope(rows: TeachingRow[], subject: Pick<Subject, "ownerDepartments" | "ownerDepartmentId" | "ownerDepartmentName" | "ownBranchPapers">, branch: string, names: ReadonlyMap<string, string>): string[] {
+export function reviewDepartmentsForScope(rows: TeachingRow[], subject: Pick<Subject, "ownerDepartments" | "ownerDepartmentId" | "ownerDepartmentName" | "ownBranchPapers"> & Partial<Pick<Subject, "parts">>, branch: string, names: ReadonlyMap<string, string>): string[] {
+  // Taught in parts: one paper per part, by the part's department - never one for all branches or a group.
+  if (partsOf(subject)) return partOfBranch(subject, branch) ? reviewDepartmentsOf(branch, subject, names) : [];
   const owners = ownerDepartmentNames(subject, names);
   if (owners.length) {
     // A branch that handles its own papers (ownBranchPapers) can't share one paper for all branches with the rest:
@@ -69,7 +72,10 @@ export async function loadFacultyIndex(db: Db, collegeId: string): Promise<Facul
 /** Faculty teaching the subject in the scope, then faculty of the reviewing departments (available ones only). */
 export function candidatesFor(index: FacultyIndex, rows: TeachingRow[], subjectId: string, branch: string, departments: string[]): Candidate[] {
   const teachers = new Map<string, Candidate>();
-  for (const s of sectionsForScope(rows, subjectId, branch)) {
+  // A part's paper (taught in parts): faculty teaching the OTHER part in those sections aren't offered as teaching it.
+  const partKey = /\(Part ([AB])\)$/.exec(branch)?.[1];
+  const scoped = partKey ? rows.filter((r) => !(r.subjectId === subjectId && r.branch === branch && r.taughtPart && r.taughtPart !== partKey)) : rows;
+  for (const s of sectionsForScope(scoped, subjectId, branch)) {
     s.facultyIds.forEach((id, i) => { if (!teachers.has(id)) teachers.set(id, { facultyId: id, name: s.facultyNames[i] ?? "", department: "", teaches: true }); });
   }
   for (const [id, t] of [...teachers]) {

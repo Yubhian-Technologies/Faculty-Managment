@@ -6,7 +6,9 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { canHodEditDepartment, getHodDepartmentScope } from "@/lib/departments/scope";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { istDateKey } from "@/lib/attendance/istTime";
-import { guardError, midBankRefs } from "@/lib/midBank/server";
+import { guardError, loadSubject, midBankRefs } from "@/lib/midBank/server";
+import { loadPlan } from "@/lib/midTimetable/server";
+import { midPaperBranch, partOfBranch } from "@/lib/subjects/parts";
 import type { MidPaperFinal } from "@/types";
 
 // The finalized (printed) question paper of one exam (?choiceId), for entering marks against it:
@@ -30,11 +32,21 @@ export async function GET(request: Request) {
     if (!OVERSEERS.includes(session.role)) {
       if (c.date > istDateKey()) return NextResponse.json({ error: `The question paper can be viewed from the exam date (${c.date})` }, { status: 403 });
       let allowed = false;
-      if (session.role === "HOD") allowed = canHodEditDepartment(await getHodDepartmentScope(db, session.collegeId, session.uid), c.branch);
+      // A part's paper (subject taught in parts) is written by sections of several branches: its department's HOD, and
+      // faculty with a marks batch of a section that wrote that part in this Mid.
+      const subject = await loadSubject(db, session.collegeId, c.subjectId);
+      const part = partOfBranch(subject, c.branch);
+      const plan = part ? await loadPlan(db, session.collegeId, (c as { planId?: string }).planId ?? "") : null;
+      if (session.role === "HOD") {
+        const scope = await getHodDepartmentScope(db, session.collegeId, session.uid);
+        allowed = canHodEditDepartment(scope, part ? part.departmentName : c.branch);
+      }
       if (!allowed) {
         const facultyId = await resolveFacultyMemberId(db, session.collegeId, session.uid);
         const mine = await college.collection("internalExamMarks").where("subjectId", "==", c.subjectId).where("facultyId", "==", facultyId).get();
-        allowed = mine.docs.some((d) => d.get("department") === c.branch);
+        allowed = mine.docs.some((d) => (part && plan
+          ? midPaperBranch(subject, String(d.get("sectionId") ?? ""), String(d.get("department") ?? ""), plan.midNumber) === c.branch
+          : d.get("department") === c.branch));
       }
       if (!allowed) return NextResponse.json({ error: "Only faculty entering marks for this subject in this branch can view it" }, { status: 403 });
     }

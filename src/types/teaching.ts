@@ -136,6 +136,11 @@ export interface Subject {
   // Academics / Principal / VP (SubjectMasterService.setOwnBranchPapers); `ownBranchPaperIds` mirrors the ids.
   ownBranchPapers?: { id: string; name: string }[];
   ownBranchPaperIds?: string[];
+  // Taught in two parts by two departments (e.g. BEEE: Electrical units 1-3 by EEE, Electronics units 4-6 by ECE),
+  // set by Academics (lib/subjects/parts.ts). `partFirst` = per section, the part taught first (default "A"):
+  // Mid 1 covers that part's units, Mid 2 the other's. Absent = not taught in parts.
+  parts?: import("@/lib/subjects/parts").SubjectPart[];
+  partFirst?: Record<string, import("@/lib/subjects/parts").PartKey>;
   // The subject's syllabus document (Academics / Principal / VP or the subject department's HOD).
   syllabusUrl?: string;
   syllabusFileName?: string;
@@ -227,6 +232,8 @@ export interface TeachingAssignment {
   shortCode?: string; // Snapshot of Subject.shortCode at assignment-creation time - see its own doc-comment
   hoursPerWeek: number;
   totalHoursAllotted?: number;
+  // For a subject taught in parts: the part this faculty teaches in this section (set by Academics).
+  part?: import("@/lib/subjects/parts").PartKey;
   assignedBy: string;
   assignedByName: string;
   createdAt: Timestamp;

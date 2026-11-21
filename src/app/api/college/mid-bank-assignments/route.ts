@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { partsOf } from "@/lib/subjects/parts";
 import { reviewingDepartment } from "@/lib/midBank/reviewer";
 import { FieldValue } from "firebase-admin/firestore";
 import { checkSetShare, paperProgress, setNumbers } from "@/lib/midPapers/pattern";
@@ -16,7 +17,7 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { ALL_BRANCHES, assignmentIdFor, checkAssignment, planSetterChanges, groupBranchLabel, isAllBranches, isGroupBranch, scopeBranches, sectionsForScope } from "@/lib/midBank/assignments";
 import { assignmentsCol, branchesOf, candidatesFor, loadFacultyIndex, loadFacultyIndexCached, hodMayAssign, loadAssignments, reviewDepartmentsForScope, startedByAssignment } from "@/lib/midBank/assignmentsServer";
-import { actorName, guardError, loadDeadline, loginUidsOf, MID_BANK_OVERSEERS, midBankRefs, teachingFor, teachingForCached } from "@/lib/midBank/server";
+import { actorName, guardError, loadDeadline, loginUidsOf, MID_BANK_OVERSEERS, midBankRefs, bankTeachingFor, bankTeachingForCached, loadSubject } from "@/lib/midBank/server";
 import { departmentNamesById, ownerDepartmentNames } from "@/lib/subjects/ownerDepartment";
 import type { MidBankAssignment, MidBankDeadline, MidPaperQuestion, MidQuestionBank, Subject } from "@/types";
 
@@ -32,7 +33,7 @@ const VIEW_ROLES = ["HOD", ...MID_BANK_OVERSEERS];
 async function load(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBankDeadline, scope: Awaited<ReturnType<typeof getHodDepartmentScope>> | null, onlySubject?: string, fresh = false, newGroup?: string, papers = false) {
   // GET shows the card from the short server copies; a save (POST, fresh) re-reads everything it decides on.
   const [rows, assignments, bankSnap, names, faculty] = await Promise.all([
-    fresh ? teachingFor(db, collegeId, d) : teachingForCached(db, collegeId, d),
+    fresh ? bankTeachingFor(db, collegeId, d) : bankTeachingForCached(db, collegeId, d),
     loadAssignments(db, collegeId, d.id),
     midBankRefs(db, collegeId).banks.where("deadlineId", "==", d.id).get(),
     departmentNamesById(db, collegeId),
@@ -118,7 +119,7 @@ export async function GET(request: Request) {
     const db = getAdminDb();
     const deadline = loadDeadline(db, session.collegeId, new URL(request.url).searchParams.get("deadlineId") ?? "");
     // Warm the shared reads `load` uses while the HOD's scope is still being read (same cached promises, read once).
-    deadline.then((x) => x && teachingForCached(db, session.collegeId, x)).catch(() => undefined);
+    deadline.then((x) => x && bankTeachingForCached(db, session.collegeId, x)).catch(() => undefined);
     loadFacultyIndexCached(db, session.collegeId).catch(() => undefined);
     const [d, settings, scope] = await Promise.all([
       deadline,
@@ -161,6 +162,10 @@ export async function POST(request: Request) {
     if (!target) return NextResponse.json({ error: scopeKind === "SUBJECT" ? "One paper for all branches needs the subject's Subject Department set (Academics)" : "This subject isn't taught in that branch" }, { status: 400 });
     if (scopeKind === "GROUP" && !(scopeBranches(branch) ?? []).every((b) => subj.branches.some((x) => x.branch === b))) return NextResponse.json({ error: "Every branch of the paper must teach this subject" }, { status: 400 });
     if (!target.canAssign) return NextResponse.json({ error: "Only the HOD of this subject's department can assign it" }, { status: 403 });
+    // Taught in parts (BEEE: Electrical / Electronics): one paper per part, each by its own department.
+    if (scopeKind !== "BRANCH" && partsOf(await loadSubject(db, session.collegeId, subjectId))) {
+      return NextResponse.json({ error: "This subject is taught in parts - assign each part's paper on its own row." }, { status: 400 });
+    }
 
     const existing = [...subj.branches, ...subj.groups, ...(subj.whole ? [subj.whole] : [])].filter((x) => x.assignment && x.branch !== branch).map((x) => x.assignment!);
     const names = new Map(target.candidates.map((c) => [c.facultyId, c.name]));

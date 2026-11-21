@@ -9,7 +9,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { isDeadlineLocked } from "@/lib/midBank/deadline";
 import { cleanOutcomes, outcomeConflicts } from "@/lib/midBank/outcomes";
 import { outcomesIdFor, sectionsOf } from "@/lib/midBank/sections";
-import { actorName, guardError, loadDeadline, loadOutcomes, loadSubject, MID_BANK_READ_ROLES, MID_BANK_WRITE_ROLES, midBankRefs, teachingFor, usedOutcomeRefs } from "@/lib/midBank/server";
+import { actorName, guardError, loadDeadline, loadOutcomes, loadSubject, MID_BANK_READ_ROLES, MID_BANK_WRITE_ROLES, midBankRefs, bankTeachingFor, usedOutcomeRefs } from "@/lib/midBank/server";
 import { assignmentIdFor } from "@/lib/midBank/assignments";
 import { assignmentsCol } from "@/lib/midBank/assignmentsServer";
 import type { MidBankAssignment, SubjectOutcomes } from "@/types";
@@ -53,7 +53,7 @@ export async function PUT(request: Request, { params }: Params) {
     // "The HOD assigns": the assigned setters set it up (they may not teach it); otherwise whoever teaches it there.
     const allowed = mid.midAssignment === "HOD"
       ? Boolean(((await assignmentsCol(db, session.collegeId).doc(assignmentIdFor(d.id, subjectId, branch)).get()).data() as MidBankAssignment | undefined)?.facultyIds.includes(me))
-      : sectionsOf(await teachingFor(db, session.collegeId, d), subjectId, branch).some((s) => s.facultyIds.includes(me));
+      : sectionsOf(await bankTeachingFor(db, session.collegeId, d), subjectId, branch).some((s) => s.facultyIds.includes(me));
     if (!allowed) return NextResponse.json({ error: mid.midAssignment === "HOD" ? "Only the faculty your HOD assigned can set it up" : "Only faculty teaching this subject in this branch can set it up" }, { status: 403 });
 
     const { value, errors } = cleanOutcomes(body, mid.outcomes);

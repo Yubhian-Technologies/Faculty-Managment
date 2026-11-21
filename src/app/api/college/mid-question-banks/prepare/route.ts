@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { partUnitSplit } from "@/lib/subjects/parts";
 import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
 import { loadSyllabus } from "@/lib/subjects/syllabusServer";
 import { syllabusOutcomesId, syllabusSubjectOf } from "@/lib/subjects/syllabus";
@@ -17,7 +18,7 @@ import { bankIdFor, claimIdFor, sectionsOf } from "@/lib/midBank/sections";
 import { assignmentIdFor, sectionsForScope } from "@/lib/midBank/assignments";
 import { assignmentsCol } from "@/lib/midBank/assignmentsServer";
 import type { MidBankAssignment } from "@/types";
-import { guardError, subjectSplitFor, loadDeadline, loadOutcomes, loadSubject, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, teachingFor } from "@/lib/midBank/server";
+import { guardError, subjectSplitFor, loadDeadline, loadOutcomes, loadSubject, MID_BANK_WRITE_ROLES, midBankRefs, rulesForSubject, bankTeachingFor } from "@/lib/midBank/server";
 
 // What the setup screen needs before (or while changing) a bank for one
 // deadline + subject + branch: the subject, the Exam Cell rules, the branch's
@@ -39,7 +40,7 @@ export async function GET(request: Request) {
       resolveFacultyMemberId(db, session.collegeId, session.uid),
     ]);
     if (!d || !subject) return NextResponse.json({ error: "This question bank isn't open" }, { status: 404 });
-    const [rows, settings0] = await Promise.all([teachingFor(db, session.collegeId, d), loadMidSettings(db, session.collegeId)]);
+    const [rows, settings0] = await Promise.all([bankTeachingFor(db, session.collegeId, d), loadMidSettings(db, session.collegeId)]);
     // "The HOD assigns": only an assigned setter prepares it, for every section of the scope (a branch or all).
     const hodMode = settings0.midAssignment === "HOD";
     const assignment = hodMode
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
     // Units / COs / mapping: the subject's frozen syllabus (an older bank keeps the per-branch setup it started on).
     const myBankEarly = await refs.banks.doc(myBankId).get();
     const outcomesId = (myBankEarly.exists ? String(myBankEarly.get("outcomesId") ?? "") : "") || syllabusOutcomesId(subjectId);
-    const [rules, outcomes, claimSnaps, myBank, syllabus, exception, subjectDepartments] = await Promise.all([
+    const [rules, outcomes, claimSnaps, myBank, syllabus, exception0, subjectDepartments] = await Promise.all([
       rulesForSubject(db, session.collegeId, subject),
       loadOutcomes(db, session.collegeId, outcomesId),
       // Assigned setters don't claim sections (several may prepare for the same sections).
@@ -65,6 +66,8 @@ export async function GET(request: Request) {
       subjectSplitFor(db, session.collegeId, subjectId),
       ownerDepartmentNamesLive(db, session.collegeId, subject),
     ]);
+    // Taught in parts (BEEE): a part's paper covers that part's units in this Mid, the other part the other Mid.
+    const exception = partUnitSplit(subject, branch, d.midNumber) ?? exception0;
     const onSyllabus = syllabusSubjectOf(outcomesId) !== null;
     const settings = settings0;
     // A college that prepares question papers works to the Exam Cell's paper pattern instead of the bank rules.

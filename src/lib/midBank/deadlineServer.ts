@@ -5,7 +5,7 @@ import { branchesOf, reviewDepartmentsForScope } from "./assignmentsServer";
 import type { TeachingRow } from "./sections";
 import type { Subject } from "@/types";
 import { deadlineLabel } from "./deadline";
-import { loginUidsOf, midBankRefs, teachingFor } from "./server";
+import { loginUidsOf, midBankRefs, bankTeachingFor } from "./server";
 import type { ExamMidSchedule, MidBankDeadline } from "@/types";
 
 // Deadline helpers shared by the deadline routes: when a Mid starts (the
@@ -25,7 +25,7 @@ export async function midStartDate(db: FirebaseFirestore.Firestore, collegeId: s
  * tell each subject's reviewing HOD (Subject Department, else the branch) to assign the setters instead.
  */
 export async function notifyTeachers(db: FirebaseFirestore.Firestore, collegeId: string, d: MidBankDeadline, title: string): Promise<number> {
-  const rows = await teachingFor(db, collegeId, d);
+  const rows = await bankTeachingFor(db, collegeId, d);
   const settings = await loadMidSettings(db, collegeId);
   // The menu the person sees: "Mid Question Papers" in a question-papers college, else "Mid Question Bank".
   const menu = settings.midPreparation === "PAPERS" ? "Mid Question Papers" : "Mid Question Bank";

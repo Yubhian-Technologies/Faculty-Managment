@@ -52,7 +52,7 @@ export async function loadLayout(db: Db, c: string, subjectId: string, branch: s
  */
 export async function midEntryFor(
   db: Db, c: string,
-  batch: Pick<InternalExamMarksBatch, "subjectId" | "department" | "year"> & { examCellLocks?: Record<string, unknown>; assignmentId?: string; semester?: number },
+  batch: Pick<InternalExamMarksBatch, "subjectId" | "department" | "year"> & { sectionId?: string; examCellLocks?: Record<string, unknown>; assignmentId?: string; semester?: number },
   config: Pick<ExamConfiguration, "components">,
 ): Promise<{ sheets: Record<string, QuestionSheet>; states: Record<string, MidEntryState> }> {
   const linked = config.components.filter((x) => x.isActive && x.midNumber);

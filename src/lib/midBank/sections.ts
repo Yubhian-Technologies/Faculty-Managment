@@ -8,7 +8,11 @@ export interface TeachingRow {
   subjectId: string;
   subjectName: string;
   subjectCode: string;
-  branch: string; // the section's department
+  branch: string; // the section's department (for a subject taught in parts, in the Mid paper flow: the part's label)
+  /** The section's own department when `branch` is a part's label (lib/subjects/parts.ts). */
+  realBranch?: string;
+  /** The part this faculty row teaches (teachingAssignments.part), for a subject taught in parts. */
+  taughtPart?: "A" | "B";
   sectionId: string;
   sectionName: string;
   facultyId: string;
