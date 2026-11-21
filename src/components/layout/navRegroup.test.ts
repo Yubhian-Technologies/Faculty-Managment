@@ -183,10 +183,6 @@ describe("sidebar regrouping", () => {
 
   it("a saved legacy module hides the groups it was split into, and nothing else", () => {
     expect(migrateHiddenModules("HOD", ["Department"]).sort()).toEqual(["Academics", "Department"]);
-    expect(migrateHiddenModules("HOD", ["Approvals"]).sort()).toEqual(["Approvals", "Attendance & Leave"]);
-    expect(migrateHiddenModules("PRINCIPAL", ["Staff & HR Management"])).toEqual(expect.arrayContaining(["Staff & HR", "Leave & Attendance"]));
-    expect(migrateHiddenModules("PRINCIPAL", ["Staff & HR Management"])).not.toContain("Administration");
-    expect(migrateHiddenModules("PRINCIPAL", ["Payroll & Budget"])).toContain("Budget & Purchase");
     expect(migrateHiddenModules("PRINCIPAL", ["Academic Management"])).toContain("Academics");
     expect(migrateHiddenModules("PANEL_MEMBER", ["My Work"]).sort()).toEqual(["Academics", "Additional Duties", "My Work", "Students"]);
     // Renamed sections (Nov 2026): a college that hid the old name keeps it hidden under the new one.
@@ -196,6 +192,71 @@ describe("sidebar regrouping", () => {
     expect(migrateHiddenModules("HOD", ["Hiring"])).toContain("Recruitment");
     expect(migrateHiddenModules("HOD", ["Budget & Purchase"])).toContain("Budget & Purchases");
     expect(migrateHiddenModules("PRINCIPAL", ["Hiring Pipeline"])).toContain("Recruitment");
+    // The Dec 2026 regrouping mixes pages from several old groups, so it never hides a whole new group.
+    expect(migrateHiddenModules("HOD", ["Approvals"])).not.toContain("Students");
+    expect(migrateHiddenModules("PRINCIPAL", ["Staff & HR"])).not.toContain("Faculty & Staff");
     expect(migrateHiddenModules("HOD", [])).toEqual([]);
+  });
+});
+
+describe("regrouped by who a page is about (Dec 2026)", () => {
+  it("HOD: Students, Faculty, Academics, Department, then budget, recruitment, own work", async () => {
+    const { groupNavItems } = await import("./navGroups");
+    const titles = groupNavItems(getNavItemsForRole("HOD")).map((g) => g.title);
+    expect(titles).toEqual([null, "Students", "Faculty", "Academics", "Department", "Budget & Purchases", "Recruitment", "My Work", "Personal"]);
+  });
+
+  it("Principal / VP: Students, Faculty & Staff, Academics, Recruitment, Finance, Administration, My Work", async () => {
+    const { groupNavItems } = await import("./navGroups");
+    for (const role of ["PRINCIPAL", "VICE_PRINCIPAL"] as const) {
+      expect(groupNavItems(getNavItemsForRole(role)).map((g) => g.title))
+        .toEqual([null, "Students", "Faculty & Staff", "Academics", "Recruitment", "Finance", "Administration", "My Work"]);
+    }
+  });
+
+  it("a page a college hid by its old group stays hidden - only that page, never its new neighbours", async () => {
+    const { hiddenItemsFromMovedModules } = await import("./navConfig");
+    // HOD hid "Approvals": its pages stay hidden wherever they moved; the rest of Students / Faculty stays visible.
+    const hod = hiddenItemsFromMovedModules("HOD", ["Approvals"]).sort();
+    expect(hod).toEqual(expect.arrayContaining(["/hod/leave-approvals", "/hod/student-permissions", "/hod/certificate-requests", "/hod/incident-record"]));
+    expect(hod).not.toContain("/hod/students");
+    expect(hod).not.toContain("/hod/faculty");
+    // HOD hid "Department": Faculty / Students pages moved out of it stay hidden; Department's own setup stays hidden as a group.
+    expect(hiddenItemsFromMovedModules("HOD", ["Department"])).toEqual(expect.arrayContaining(["/hod/students", "/hod/mentoring", "/hod/faculty"]));
+    expect(migrateHiddenModules("HOD", ["Department"])).toContain("Department");
+    // Principal hid "Staff & HR": Faculty, Profile Completion and Circulars stay hidden; Role Assignments does not.
+    const pr = hiddenItemsFromMovedModules("PRINCIPAL", ["Staff & HR"]);
+    expect(pr).toEqual(expect.arrayContaining(["/principal/faculty", "/principal/faculty/profile-completion", "/principal/circulars"]));
+    expect(pr).not.toContain("/principal/role-assignments");
+    // Older names still carry through (Payroll & Budget -> Finance pages).
+    expect(hiddenItemsFromMovedModules("PRINCIPAL", ["Payroll & Budget"])).toEqual(expect.arrayContaining(["/principal/budget", "/principal/payroll"]));
+    expect(hiddenItemsFromMovedModules("HOD", [])).toEqual([]);
+  });
+
+  it("every page hidden through an old group before is still hidden after (HOD, Principal, VP)", async () => {
+    const { hiddenItemsFromMovedModules, isPathHidden } = await import("./navConfig");
+    const OLD: Record<string, Record<string, string[]>> = {
+      HOD: {
+        Department: ["/hod/faculty", "/hod/faculty/profile-completion", "/hod/sections", "/hod/students", "/hod/mentoring", "/hod/settings/sub-departments", "/hod/settings/designations", "/hod/settings", "/hod/settings/department-office"],
+        Approvals: ["/hod/leave-approvals", "/hod/leave-history", "/hod/student-permissions", "/hod/certificate-requests", "/hod/incident-record"],
+        "Attendance & Leave": ["/hod/faculty-attendance", "/hod/attendance-reports", "/hod/student-attendance-import", "/hod/leave/profiles"],
+      },
+      PRINCIPAL: {
+        "Staff & HR": ["/principal/faculty", "/principal/faculty/profile-completion", "/principal/circulars"],
+        "Leave & Attendance": ["/principal/leave-approvals", "/principal/leave-history", "/principal/student-permissions", "/principal/attendance-report", "/principal/attendance-reports"],
+        "Budget & Purchase": ["/principal/budget", "/principal/payroll", "/principal/budget/report", "/principal/purchase-clearance", "/principal/indents"],
+        Personal: ["/principal/attendance", "/principal/leave", "/principal/payslips", "/payslips"],
+      },
+    };
+    for (const [role, groups] of Object.entries(OLD)) {
+      for (const [group, hrefs] of Object.entries(groups)) {
+        const modules = migrateHiddenModules(role as UserRole, [group]);
+        const items = hiddenItemsFromMovedModules(role as UserRole, modules);
+        for (const h of hrefs) {
+          if (!getNavItemsForRole(role as UserRole).some((i) => i.href === h)) continue;
+          expect(isPathHidden(h, role as UserRole, modules, items), `${role} ${group} ${h}`).toBe(true);
+        }
+      }
+    }
   });
 });

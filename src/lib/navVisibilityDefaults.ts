@@ -1,5 +1,5 @@
 import type { NavVisibilitySettings, UserRole } from "@/types";
-import { migrateHiddenModules } from "@/components/layout/navConfig";
+import { hiddenItemsFromMovedModules, migrateHiddenModules } from "@/components/layout/navConfig";
 
 // These pages are still placeholder ("coming soon") screens across every role
 // that has one - hidden by default until each is actually built out, per college.
@@ -44,8 +44,11 @@ export function resolveNavVisibility(
   for (const role of Object.keys(hiddenModules) as UserRole[]) {
     hiddenModules[role] = migrateHiddenModules(role, hiddenModules[role] ?? []);
   }
-  return {
-    hiddenModules,
-    hiddenItems: mergePerRole(DEFAULT_NAV_VISIBILITY.hiddenItems, stored?.hiddenItems),
-  };
+  // Pages moved to another group (NavItem.movedFrom): an old group the college hid keeps those pages hidden one by one.
+  const hiddenItems = mergePerRole(DEFAULT_NAV_VISIBILITY.hiddenItems, stored?.hiddenItems);
+  for (const role of Object.keys(hiddenModules) as UserRole[]) {
+    const moved = hiddenItemsFromMovedModules(role, hiddenModules[role] ?? []);
+    if (moved.length) hiddenItems[role] = Array.from(new Set([...(hiddenItems[role] ?? []), ...moved]));
+  }
+  return { hiddenModules, hiddenItems };
 }

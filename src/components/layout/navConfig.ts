@@ -22,6 +22,11 @@ export interface NavItem {
   // moves to a differently-named section, its previous module name goes here so a
   // college's saved hidden-module list keeps hiding it (see migrateHiddenModules).
   legacyModule?: string | string[];
+  // Regrouped by WHO a page is about (Dec 2026: Students / Faculty / Academics / Department): the module names this
+  // item sat under before. Unlike legacyModule (which hides the whole new module), a college that hid any of these
+  // keeps THIS item hidden on its own (hiddenItemsFromMovedModules) - the new groups mix items from several old
+  // ones, so hiding a whole new group would also hide pages the college left visible.
+  movedFrom?: string[];
   // Hides this item for a login whose real, un-normalized role (FMSUser.realRole)
   // is one of these - even though `roles` above still matches its normalized
   // `role`. Exists for COLLEGE_ADMIN, which reads as "PRINCIPAL" in `role`
@@ -225,104 +230,87 @@ export const NAV_ITEMS: NavItem[] = [
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   // Grouped by functional domain (see PRINCIPAL_DASHBOARD.md), not by data location.
   { label: "Dashboard", href: "/principal", iconName: "LayoutDashboard", roles: ["PRINCIPAL"] },
-  { label: "Courses & Departments", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academics", legacyModule: "Academic Management" },
-  // Promotion and Graduated Students live as sub-tabs (top-right pills) inside
-  // the Students page itself now, rather than as separate sidebar entries -
-  // see PrincipalStudentsPage. /principal/promotions and /principal/graduates
-  // still work as direct routes for any existing bookmarks/links.
-  { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
-  { label: "Timetables", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
-  { label: "Academic Calendar", href: "/principal/holiday-calendar", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
-  { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
-  { label: "Results Analysis", href: "/principal/results-analysis", iconName: "BarChart3", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
-  { label: "Mid Timetable", href: "/principal/mid-timetable", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
-  { label: "Mentoring", href: "/principal/mentoring", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  // Grouped by who a page is about (Dec 2026, same layout as the HOD's): Students, Faculty & Staff, Academics,
+  // Recruitment, Finance, Administration, My Work. `movedFrom` keeps each moved page hidden for a college that hid
+  // its old group (see NavItem.movedFrom).
+  // Promotion and Graduated Students live as sub-tabs (top-right pills) inside the Students page itself - see
+  // PrincipalStudentsPage; /principal/promotions and /principal/graduates still work as direct routes.
+  { label: "Students", href: "/principal/students", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Students", movedFrom: ["Academics", "Academic Management"] },
+  // Was "Attendance Reports": every class-attendance report (Students / Faculty not posted / Edit Attendance tabs) -
+  // see principal/attendance-reports/page.tsx. The old routes still work standalone for existing links.
+  { label: "Student Attendance", href: "/principal/attendance-reports", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], movedFrom: ["Leave & Attendance", "Staff & HR Management"] },
+  { label: "Mentoring", href: "/principal/mentoring", iconName: "UserCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], movedFrom: ["Academics", "Academic Management"] },
+  { label: "Student Permissions", href: "/principal/student-permissions", iconName: "ShieldCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], movedFrom: ["Leave & Attendance", "Academic Management"] },
   // The shared certificate workspace (approve / issue / register / setup of the configurable certificates).
-  { label: "Certificates", href: "/certificates", iconName: "FileCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
-  { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Staff & HR", legacyModule: "Staff & HR Management" },
-  { label: "Profile Completion", href: "/principal/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
-  { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
+  { label: "Certificates", href: "/certificates", iconName: "FileCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], movedFrom: ["Academics", "Academic Management"] },
+  { label: "Faculty", href: "/principal/faculty", iconName: "UsersRound", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Faculty & Staff", movedFrom: ["Staff & HR", "Staff & HR Management"] },
+  { label: "Profile Completion", href: "/principal/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], movedFrom: ["Staff & HR", "Staff & HR Management"] },
+  // Was "Attendance": faculty / staff daily check-in / check-out (principal/attendance-report/page.tsx).
+  { label: "Faculty Attendance", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], movedFrom: ["Leave & Attendance", "Staff & HR Management"] },
   // Deciding a leave request is Principal/VP authority, not College Admin's -
   // see the matching guard in api/leave/applications/[id]/route.ts.
-  { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Leave & Attendance", hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Staff & HR Management" },
-  { label: "Leave Register", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Staff & HR Management" },
-  { label: "Student Permissions", href: "/principal/student-permissions", iconName: "ShieldCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
-  // Was 7 separate sidebar items (Student Attendance History, Attendance
-  // Report, Attendance Completion, Absent Report, Shortage Report, Faculty
-  // Not Posted, Import Attendance), all ungrouped. Now split into two:
-  // "Attendance" is daily check-in/out marking (see
-  // principal/attendance-report/page.tsx, Import reached via its own
-  // internal link); "Attendance Reports" is every report/history/completion
-  // view (see principal/attendance-reports/page.tsx). Attendance Completion
-  // is no longer its own nav item, but FacultyAttendanceCompletionView still
-  // redirects a COLLEGE_ADMIN login away client-side (and the API still
-  // 403s them) regardless of how the tab is reached - see that component's
-  // own guard. The old routes still work standalone (unlinked, not deleted)
-  // for any existing notification links/bookmarks.
-  { label: "Attendance", href: "/principal/attendance-report", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
-  { label: "Attendance Reports", href: "/principal/attendance-reports", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Staff & HR Management" },
-  // Panel Scoring and Appointment Letters are no longer separate tabs - both
-  // are folded into the Hiring Requests pipeline's own status badges/actions
-  // (see PrincipalPipelineBoard.tsx) since they're just later stages of the
-  // same hiring request, not independent destinations.
-  // Vacancy/interview/candidate decisions live here end-to-end - College Admin
-  // enters data and settings but never decides, so the whole board is Principal/
-  // Vice Principal only (see NavItem.hideForRealRoles and the matching API
-  // guards in vacancy-requests, hiring-batches, and candidate-applications).
+  { label: "Leave Approvals", href: "/principal/leave-approvals", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], movedFrom: ["Leave & Attendance", "Staff & HR Management"] },
+  { label: "Leave Register", href: "/principal/leave-history", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], movedFrom: ["Leave & Attendance", "Staff & HR Management"] },
+  { label: "Courses & Departments", href: "/principal/courses", iconName: "GraduationCap", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Academics", legacyModule: "Academic Management" },
+  { label: "Timetables", href: "/principal/timetable", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Academic Calendar", href: "/principal/holiday-calendar", iconName: "CalendarDays", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Mid Timetable", href: "/principal/mid-timetable", iconName: "CalendarRange", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Internal Marks", href: "/principal/internal-marks", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  { label: "Results Analysis", href: "/principal/results-analysis", iconName: "BarChart3", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Academic Management" },
+  // Panel Scoring and Appointment Letters are folded into the Hiring Requests pipeline's own status badges/actions
+  // (see PrincipalPipelineBoard.tsx). Vacancy/interview/candidate decisions are Principal / Vice Principal only -
+  // College Admin enters data but never decides (NavItem.hideForRealRoles + the vacancy / hiring API guards).
   { label: "Hiring Requests", href: "/principal/vacancies", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Recruitment", hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Hiring Pipeline" },
   { label: "General Admin Vacancies", href: "/principal/vacancies/general-admin", iconName: "ClipboardPlus", roles: ["VICE_PRINCIPAL"] },
-  // Budget-cycle and budget-request approval is Principal/VP decision
-  // authority, not College Admin's - see the matching guards in
-  // api/college/budget-cycles/[id] and api/college/budget-requests/[id].
-  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Budget & Purchase", hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Payroll & Budget" },
-  { label: "Payroll", href: "/principal/payroll", iconName: "Landmark", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], legacyModule: "Payroll & Budget" },
-  { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Payroll & Budget" },
-  // Only ever shows the Principal/VP's OWN emergency purchase requests - not
-  // something College Admin should be raising on the college's behalf either.
-  { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Payroll & Budget" },
-  { label: "Indents", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], legacyModule: "Payroll & Budget" },
-  // College Admin is a role-login, not one continuous employee (see
-  // administration/college-people): no personal HR profile, attendance, or
-  // leave to track, unlike every other seat here (a real Principal/VP is
-  // always an actual appointed person). Its Name/Phone/password live in
-  // CollegeAdminAccountMenu off the sidebar's account row instead. See
-  // NavItem.hideForRealRoles.
-  { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Personal", hideForRealRoles: ["COLLEGE_ADMIN"] },
-  { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
-  { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
-  { label: "My Payslips", href: "/payslips", iconName: "Wallet", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"] },
-  // The Principal is never named as anyone's substitute/handover, so only the
-  // Vice Principal has requests to accept or decline here.
-  { label: "Work Adjustments", href: "/leave/adjustments", iconName: "UserCheck", roles: ["VICE_PRINCIPAL"] },
-  { label: "Audit Logs", href: "/principal/audit-logs", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Administration" },
-  // Appoint people to seats (Principal, each HOD, Vice Principal, Academics, ...) -
-  // see types/roleSeats.ts.
-  { label: "Role Assignments", href: "/principal/role-assignments", iconName: "UserCog", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
-  // Read-only list of the incidents College Office / College Admin record (red dot = not opened yet).
-  // Also what a College Admin sees while working as Principal - they record
-  // incidents only from "My Work" (College Office's Incident Report item).
+  // Budget-cycle and budget-request approval is Principal/VP decision authority, not College Admin's - see the
+  // matching guards in api/college/budget-cycles/[id] and api/college/budget-requests/[id].
+  { label: "Budget", href: "/principal/budget", iconName: "PiggyBank", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Finance", hideForRealRoles: ["COLLEGE_ADMIN"], movedFrom: ["Budget & Purchase", "Payroll & Budget"] },
+  { label: "Budget Report", href: "/principal/budget/report", iconName: "FileText", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], movedFrom: ["Budget & Purchase", "Payroll & Budget"] },
+  { label: "Indents", href: "/principal/indents", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], movedFrom: ["Budget & Purchase", "Payroll & Budget"] },
+  // Only ever shows the Principal/VP's OWN emergency purchase requests - not something College Admin raises.
+  { label: "Purchase Clearance", href: "/principal/purchase-clearance", iconName: "Receipt", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], movedFrom: ["Budget & Purchase", "Payroll & Budget"] },
+  { label: "Payroll", href: "/principal/payroll", iconName: "Landmark", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], movedFrom: ["Budget & Purchase", "Payroll & Budget"] },
+  { label: "Circulars", href: "/principal/circulars", iconName: "Megaphone", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "Administration", movedFrom: ["Staff & HR", "Staff & HR Management"] },
+  // Read-only list of the incidents College Office / College Admin record (red dot = not opened yet). Also what a
+  // College Admin sees while working as Principal - they record incidents only from "My Work".
   { label: "Incident Record", href: "/principal/incident-record", iconName: "ClipboardList", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // Appoint people to seats (Principal, each HOD, Vice Principal, Academics, ...) - see types/roleSeats.ts.
+  { label: "Role Assignments", href: "/principal/role-assignments", iconName: "UserCog", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  { label: "Audit Logs", href: "/principal/audit-logs", iconName: "History", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
   { label: "Settings", href: "/principal/settings", iconName: "Settings2", roles: ["PRINCIPAL", "VICE_PRINCIPAL"] },
+  // College Admin is a role-login, not one continuous employee (see administration/college-people): no personal HR
+  // profile, attendance, or leave - its Name/Phone/password live in CollegeAdminAccountMenu. See hideForRealRoles.
+  { label: "My Attendance", href: "/principal/attendance", iconName: "ClipboardCheck", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], section: "My Work", hideForRealRoles: ["COLLEGE_ADMIN"], movedFrom: ["Personal"] },
+  { label: "My Leave", href: "/principal/leave", iconName: "CalendarClock", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], movedFrom: ["Personal"] },
+  // The Principal is never named as anyone's substitute/handover, so only the Vice Principal has requests here.
+  { label: "Work Adjustments", href: "/leave/adjustments", iconName: "UserCheck", roles: ["VICE_PRINCIPAL"], movedFrom: ["Personal"] },
+  { label: "My Payslips", href: "/payslips", iconName: "Wallet", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], movedFrom: ["Personal"] },
+  { label: "My Profile", href: "/principal/profile", iconName: "UserCircle", roles: ["PRINCIPAL", "VICE_PRINCIPAL"], hideForRealRoles: ["COLLEGE_ADMIN"], movedFrom: ["Personal"] },
 
   // HOD
   // Full module set — Super Admin controls which modules/items are actually
   // visible per college via the Nav Visibility settings (filterVisibleNavItems).
   { label: "Dashboard", href: "/hod", iconName: "LayoutDashboard", roles: ["HOD"] },
-  { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Department" },
-  { label: "Profile Completion", href: "/hod/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["HOD"] },
+  // Grouped by who a page is about (Dec 2026): Students, Faculty, Academics, Department (its own setup), then Budget,
+  // Recruitment, My Work. `movedFrom` keeps each moved page hidden for a college that hid its old group.
+  { label: "Students", href: "/hod/students", iconName: "GraduationCap", roles: ["HOD"], section: "Students", module: "students", movedFrom: ["Department"] },
+  // Was "Attendance Reports": every class-attendance report (Students / Faculty not posted / Edit Attendance tabs) -
+  // see hod/attendance-reports/page.tsx. The old report routes still work standalone for existing links.
+  { label: "Student Attendance", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"], module: "attendance", movedFrom: ["Attendance & Leave", "Approvals"] },
+  { label: "Import Student Attendance", href: "/hod/student-attendance-import", iconName: "Upload", roles: ["HOD"], module: "attendance", movedFrom: ["Attendance & Leave", "Approvals"] },
+  { label: "Mentoring", href: "/hod/mentoring", iconName: "UserCheck", roles: ["HOD"], module: "students", movedFrom: ["Department"] },
+  { label: "Student Permissions", href: "/hod/student-permissions", iconName: "ShieldCheck", roles: ["HOD"], movedFrom: ["Approvals"] },
+  { label: "Certificate Requests", href: "/hod/certificate-requests", iconName: "FileCheck", roles: ["HOD"], movedFrom: ["Approvals"] },
   // No separate "Supporting Staff" item: it is a tab on the Faculty page
   // (hod/faculty/page.tsx), and isNavItemActive keeps Faculty highlighted there.
-  { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"] },
-  { label: "Students", href: "/hod/students", iconName: "GraduationCap", roles: ["HOD"], module: "students" },
-  { label: "Mentoring", href: "/hod/mentoring", iconName: "UserCheck", roles: ["HOD"], module: "students" },
-  { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
-  { label: "Designations", href: "/hod/settings/designations", iconName: "Tags", roles: ["HOD"] },
-  { label: "Settings", href: "/hod/settings", iconName: "Settings2", roles: ["HOD"] },
-  // Hidden from a Department Office head, whose `role` also reads "HOD": they
-  // hold the same authority everywhere else, but appointing their own successor
-  // stays with the actual HOD. The API enforces that too - this only keeps a
-  // dead link out of their sidebar. See NavItem.hideForRealRoles.
-  { label: "Department Office", href: "/hod/settings/department-office", iconName: "UserCog", roles: ["HOD"], hideForRealRoles: ["DEPARTMENT_OFFICE"] },
+  { label: "Faculty", href: "/hod/faculty", iconName: "UsersRound", roles: ["HOD"], section: "Faculty", movedFrom: ["Department"] },
+  { label: "Profile Completion", href: "/hod/faculty/profile-completion", iconName: "ClipboardCheck", roles: ["HOD"], movedFrom: ["Department"] },
+  // Was "Attendance": the department's daily check-in / check-out (hod/faculty-attendance/page.tsx, Import reached
+  // via its own internal link).
+  { label: "Faculty Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"], module: "attendance", movedFrom: ["Attendance & Leave", "Approvals"] },
+  { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], module: "leave-approvals", movedFrom: ["Approvals"] },
+  { label: "Leave Register", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals", movedFrom: ["Approvals"] },
+  { label: "Leave Balances", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"], movedFrom: ["Attendance & Leave", "Approvals"] },
   { label: "Subjects", href: "/hod/subjects", iconName: "Library", roles: ["HOD"], section: "Academics", legacyModule: "Department" },
   { label: "Subject Allocation", href: "/hod/teaching-assignments", iconName: "BookOpen", roles: ["HOD"], module: "timetable-incharge", legacyModule: "Department" },
   // No separate "Assignment Requests" item: it is a button on the Teaching Assignments page.
@@ -331,27 +319,20 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Timetable", href: "/hod/timetable", iconName: "CalendarDays", roles: ["HOD"], module: "timetable-incharge", legacyModule: "Department" },
   // No separate "Timetable View" item: it is the Published mode of the Timetable page.
   { label: "Internal Marks", href: "/hod/internal-exam", iconName: "ClipboardCheck", roles: ["HOD"], legacyModule: "Department" },
-  { label: "Result Analysis", href: "/hod/results-analysis", iconName: "BarChart3", roles: ["HOD"], legacyModule: "Department" },
-  { label: "Mid Question Bank", href: "/hod/question-banks", iconName: "BookOpenCheck", roles: ["HOD"], legacyModule: "Department" },
   { label: "CIE", href: "/hod/cea", iconName: "ClipboardList", roles: ["HOD"], legacyModule: "Department" },
-  { label: "Leave Approvals", href: "/hod/leave-approvals", iconName: "CalendarClock", roles: ["HOD"], section: "Approvals", module: "leave-approvals" },
-  { label: "Leave Register", href: "/hod/leave-history", iconName: "History", roles: ["HOD"], module: "leave-approvals" },
-  { label: "Student Permissions", href: "/hod/student-permissions", iconName: "ShieldCheck", roles: ["HOD"] },
-  { label: "Certificate Requests", href: "/hod/certificate-requests", iconName: "FileCheck", roles: ["HOD"] },
-  { label: "Incident Record", href: "/hod/incident-record", iconName: "ClipboardList", roles: ["HOD"] },
-  // Was 8 separate sidebar items (Attendance Reports, Attendance History,
-  // Faculty Attendance, Attendance Completion, Absent Report, Shortage
-  // Report, Faculty Not Posted, Import Attendance), all ungrouped and, on
-  // mobile, buried in one long drawer list. Now split into two: "Attendance"
-  // is daily check-in/out marking (see hod/faculty-attendance/page.tsx,
-  // Import reached via its own internal link); "Attendance Reports" is
-  // every report/history/completion view (see
-  // hod/attendance-reports/page.tsx). The old routes still work standalone
-  // (unlinked, not deleted) for any existing notification links/bookmarks.
-  { label: "Attendance", href: "/hod/faculty-attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "Attendance & Leave", module: "attendance", legacyModule: "Approvals" },
-  { label: "Attendance Reports", href: "/hod/attendance-reports", iconName: "CalendarRange", roles: ["HOD"], module: "attendance", legacyModule: "Approvals" },
-  { label: "Import Student Attendance", href: "/hod/student-attendance-import", iconName: "Upload", roles: ["HOD"], module: "attendance", legacyModule: "Approvals" },
-  { label: "Leave Balances", href: "/hod/leave/profiles", iconName: "ClipboardList", roles: ["HOD"], legacyModule: "Approvals" },
+  { label: "Mid Question Bank", href: "/hod/question-banks", iconName: "BookOpenCheck", roles: ["HOD"], legacyModule: "Department" },
+  { label: "Result Analysis", href: "/hod/results-analysis", iconName: "BarChart3", roles: ["HOD"], legacyModule: "Department" },
+  // The department's own setup.
+  { label: "Sections", href: "/hod/sections", iconName: "BookMarked", roles: ["HOD"], section: "Department" },
+  { label: "Sub-Departments", href: "/hod/settings/sub-departments", iconName: "Settings2", roles: ["HOD"] },
+  { label: "Designations", href: "/hod/settings/designations", iconName: "Tags", roles: ["HOD"] },
+  // Hidden from a Department Office head, whose `role` also reads "HOD": they
+  // hold the same authority everywhere else, but appointing their own successor
+  // stays with the actual HOD. The API enforces that too - this only keeps a
+  // dead link out of their sidebar. See NavItem.hideForRealRoles.
+  { label: "Department Office", href: "/hod/settings/department-office", iconName: "UserCog", roles: ["HOD"], hideForRealRoles: ["DEPARTMENT_OFFICE"] },
+  { label: "Incident Record", href: "/hod/incident-record", iconName: "ClipboardList", roles: ["HOD"], movedFrom: ["Approvals"] },
+  { label: "Settings", href: "/hod/settings", iconName: "Settings2", roles: ["HOD"] },
   { label: "Budget", href: "/hod/budget", iconName: "PiggyBank", roles: ["HOD"], section: "Budget & Purchases", legacyModule: "Budget & Purchase" },
   { label: "Indents", href: "/hod/indents", iconName: "ShoppingCart", roles: ["HOD"], legacyModule: "Budget & Purchase" },
   { label: "Purchase Clearance", href: "/hod/purchase-clearance", iconName: "Receipt", roles: ["HOD"], legacyModule: "Budget & Purchase" },
@@ -360,11 +341,11 @@ export const NAV_ITEMS: NavItem[] = [
   // the same merge done for Principal/Vice Principal.
   { label: "Hiring Pipeline", href: "/hod/pipeline", iconName: "GitBranch", roles: ["HOD"], section: "Recruitment", legacyModule: "Hiring" },
   { label: "Candidates", href: "/hod/candidates", iconName: "Users", roles: ["HOD"], module: "students", legacyModule: "Hiring" },
-  { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"], section: "My Work" },
+  { label: "My Timetable", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"], section: "My Work", module: "teaching-load" },
+  { label: "My Attendance", href: "/hod/attendance", iconName: "ClipboardCheck", roles: ["HOD"] },
   { label: "My Leave", href: "/hod/leave", iconName: "CalendarClock", roles: ["HOD"] },
-  { label: "My Payslips", href: "/payslips", iconName: "Wallet", roles: ["HOD"] },
   { label: "Work Adjustments", href: "/leave/adjustments", iconName: "UserCheck", roles: ["HOD"] },
-  { label: "My Timetable", href: "/hod/teaching", iconName: "BookOpen", roles: ["HOD"], module: "teaching-load" },
+  { label: "My Payslips", href: "/payslips", iconName: "Wallet", roles: ["HOD"] },
   { label: "My Profile", href: "/hod/profile", iconName: "UserCircle", roles: ["HOD"], section: "Personal" },
 
   // College Office
@@ -800,6 +781,13 @@ export function migrateHiddenModules(role: UserRole, hidden: readonly string[]):
   return Array.from(out);
 }
 
+// Pages that moved between groups in the Dec 2026 regrouping (NavItem.movedFrom): a college that had hidden one of a
+// page's old groups keeps that one page hidden, without hiding the rest of its new group.
+export function hiddenItemsFromMovedModules(role: UserRole, hiddenModules: readonly string[]): string[] {
+  if (hiddenModules.length === 0) return [];
+  return getNavItemsForRole(role).filter((i) => i.movedFrom?.some((m) => hiddenModules.includes(m))).map((i) => i.href);
+}
+
 export interface NavModuleGroup {
   name: string;
   items: NavItem[];
@@ -920,7 +908,9 @@ export function getCollegeAdminNavItems(): NavItem[] {
   const office = keepWithHeadings(
     NAV_ITEMS.filter((i) => i.roles.includes("COLLEGE_OFFICE")),
     (i) => i.href !== "/college-office" && !isPersonalNavItem(i) && !isProfileNavItem(i) && !have.has(i.label),
-    (s) => (s === "My Work" || s === "Personal" ? "Administration" : s)
+    // The Office's own "Students" group (Semester Timings, Holidays) sits below the Principal's "Students" group
+    // here, so it gets a name of its own.
+    (s) => (s === "My Work" || s === "Personal" ? "Administration" : s === "Students" ? "College Office" : s)
   );
   const rnd = NAV_ITEMS
     .filter((i) => i.roles.includes("R_AND_D") && i.href.startsWith("/r-and-d") && !isProfileNavItem(i) && !/\/leave$/.test(i.href))
