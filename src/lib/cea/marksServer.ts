@@ -7,7 +7,6 @@ import { loadPlan } from "@/lib/midTimetable/server";
 import type { CeaMarksSheet, CeaPlan, CeaSettings, ExamConfiguration, InternalExamMarksBatch, MidPaperFinal, Section, TeachingAssignment } from "@/types";
 import { ceaPartOf } from "./paper";
 import { ceaComponentValues, ceaSheetId, isEntered, reconcileRoster } from "./marks";
-import { midOf } from "./rules";
 import { CeaError, ceaRefs, loadAllCeaSettings, settingsFor } from "./server";
 import { courseKeyForSubject, loadSubject } from "@/lib/midBank/server";
 
@@ -69,16 +68,15 @@ export async function ceaQuestionSheet(db: Db, collegeId: string, q: { subjectId
   return null;
 }
 
-/** Opens (creating or re-listing a draft) the faculty member's sheet for one unit. */
-export async function openCeaSheet(db: Db, collegeId: string, uid: string, byName: string, assignmentId: string, unit: number) {
+/** A section's CIE context: its teaching assignment, the subject's plan + settings, the section and its roster. */
+export async function ceaSectionContext(db: Db, collegeId: string, assignmentId: string) {
   const college = ceaRefs(db, collegeId).college;
   const aSnap = await college.collection("teachingAssignments").doc(assignmentId).get();
   if (!aSnap.exists) throw new CeaError("Teaching assignment not found", 404);
-  const a = aSnap.data() as TeachingAssignment;
-  if (a.facultyId !== (await resolveFacultyMemberId(db, collegeId, uid)) || a.isPast) throw new CeaError("You are not assigned to teach this subject", 403);
+  const a = { ...(aSnap.data() as TeachingAssignment), id: aSnap.id };
+  if (a.isPast) throw new CeaError("This teaching assignment is no longer current", 409);
   const ps = await planAndSettings(db, collegeId, a.subjectId);
-  const pu = ps?.plan.units.find((u) => u.unit === unit);
-  if (!ps || !pu) throw new CeaError("This unit has no CIE in the subject's plan", 404);
+  if (!ps) throw new CeaError("This subject has no CIE plan", 404);
   if (!a.courseId) throw new CeaError("This subject's section isn't linked to a course - ask the HOD", 409);
   let sectionName = a.section?.trim() || "Section", year: number | undefined;
   if (a.sectionId) {
@@ -87,28 +85,47 @@ export async function openCeaSheet(db: Db, collegeId: string, uid: string, byNam
     sectionName = (sec.data() as Section).name; year = (sec.data() as Section).year;
   }
   const roster = await sectionRoster(college, { department: a.department, sectionName, courseId: a.courseId, year });
-  const mid = midOf(pu.when);
-  const sheet = mid ? await ceaQuestionSheet(db, collegeId, { subjectId: a.subjectId, department: a.department, year, midNumber: mid }) : null;
-  const id = ceaSheetId(assignmentId, unit);
-  const ref = ceaMarksCol(db, collegeId).doc(id);
+  return { a, ps, sectionName, year, roster };
+}
+
+/** Whether this login may enter a section's CIE marks: the faculty member it belongs to, or the Exam Cell. */
+export async function assertCeaEditor(db: Db, collegeId: string, session: { uid: string; role: string }, a: Pick<TeachingAssignment, "facultyId">) {
+  if (session.role === "EXAM_CELL" || session.role === "SUPER_ADMIN") return;
+  if (a.facultyId !== (await resolveFacultyMemberId(db, collegeId, session.uid))) throw new CeaError("You are not assigned to teach this subject", 403);
+}
+
+/** The sheet as it stands, or (inside a transaction) a fresh / re-listed draft for that unit. */
+export function draftSheet(ctx: Awaited<ReturnType<typeof ceaSectionContext>>, unit: number, cur: CeaMarksSheet | null, byName: string, at: string): CeaMarksSheet {
+  const { a, ps, sectionName, year, roster } = ctx;
+  const pu = ps.plan.units.find((u) => u.unit === unit);
+  if (!pu) throw new CeaError("This unit has no CIE in the subject's plan", 404);
+  if (cur?.status === "SUBMITTED") return cur;
+  const entries = reconcileRoster(cur?.entries ?? [], roster);
+  return {
+    id: ceaSheetId(a.id, unit), assignmentId: a.id, subjectId: a.subjectId, subjectCode: a.subjectCode, subjectName: a.subjectName, department: a.department,
+    ...(a.sectionId ? { sectionId: a.sectionId } : {}), sectionName, courseId: a.courseId!, ...(year != null ? { year } : {}),
+    facultyId: a.facultyId, facultyName: a.facultyName ?? byName, unit, typeId: pu.typeId,
+    typeLabel: ps.settings.types.find((t) => t.id === pu.typeId)?.label ?? pu.typeId, when: pu.when, unitMarks: ps.settings.unitMarks,
+    ...(cur?.heldOn ? { heldOn: cur.heldOn } : {}), status: "DRAFT", entries, totalStudents: entries.length, enteredCount: entries.filter(isEntered).length,
+    rev: (cur?.rev ?? 0) + (cur ? 0 : 1), updatedAt: cur?.updatedAt ?? at, updatedByName: cur?.updatedByName ?? byName,
+  };
+}
+
+/** Opens (creating or re-listing a draft) a section's sheet for one unit - its faculty member or the Exam Cell.
+ *  CIE marks are one total per student for every unit (with-Mid ones too), so no question columns are sent. */
+export async function openCeaSheet(db: Db, collegeId: string, session: { uid: string; role: string }, byName: string, assignmentId: string, unit: number) {
+  const ctx = await ceaSectionContext(db, collegeId, assignmentId);
+  await assertCeaEditor(db, collegeId, session, ctx.a);
+  const ref = ceaMarksCol(db, collegeId).doc(ceaSheetId(assignmentId, unit));
   const at = new Date().toISOString();
   const saved = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const cur = snap.exists ? (snap.data() as CeaMarksSheet) : null;
-    if (cur?.status === "SUBMITTED") return cur;
-    const entries = reconcileRoster(cur?.entries ?? [], roster);
-    const next: CeaMarksSheet = {
-      id, assignmentId, subjectId: a.subjectId, subjectCode: a.subjectCode, subjectName: a.subjectName, department: a.department,
-      ...(a.sectionId ? { sectionId: a.sectionId } : {}), sectionName, courseId: a.courseId!, ...(year != null ? { year } : {}),
-      facultyId: a.facultyId, facultyName: a.facultyName ?? byName, unit, typeId: pu.typeId,
-      typeLabel: ps.settings.types.find((t) => t.id === pu.typeId)?.label ?? pu.typeId, when: pu.when, unitMarks: ps.settings.unitMarks,
-      ...(cur?.heldOn ? { heldOn: cur.heldOn } : {}), status: "DRAFT", entries, totalStudents: entries.length, enteredCount: entries.filter(isEntered).length,
-      rev: (cur?.rev ?? 0) + (cur ? 0 : 1), updatedAt: cur?.updatedAt ?? at, updatedByName: cur?.updatedByName ?? byName,
-    };
-    tx.set(ref, next);
+    const next = draftSheet(ctx, unit, cur, byName, at);
+    if (next !== cur) tx.set(ref, next);
     return next;
   });
-  return { sheet: saved, questionSheet: sheet };
+  return { sheet: saved, questionSheet: null };
 }
 
 /** The CEA component's value per student for an internal-marks batch (null when the config has no CEA component). */
