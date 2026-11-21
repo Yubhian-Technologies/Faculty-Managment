@@ -6,6 +6,7 @@ import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { AddStudentsImport } from "@/components/students/AddStudentsImport";
 import { RollNumberMappingImport } from "@/components/students/RollNumberMappingImport";
 import { StudentDataUpdateImport } from "@/components/students/StudentDataUpdateImport";
+import { FinalListSync } from "@/components/students/FinalListSync";
 
 // Three import modes on one page:
 //
@@ -18,12 +19,15 @@ import { StudentDataUpdateImport } from "@/components/students/StudentDataUpdate
 // They share nothing but this tab strip. Each owns its own file, its own
 // parsed rows and its own results, and switching tabs unmounts the other -
 // so a preview produced by one can never be applied by the other.
-type Mode = "add" | "map" | "update";
+//   Sync with final list - compares the college's final list for a year with the app: adds the new students, moves
+//                       section changes, marks those not in the list Discontinued (all reviewed first).
+type Mode = "add" | "map" | "update" | "sync";
 
 const TABS = [
   { key: "add", label: "Add students" },
   { key: "map", label: "Map Regd. Nos" },
   { key: "update", label: "Update student data" },
+  { key: "sync", label: "Sync with final list" },
 ];
 
 function ImportTabs() {
@@ -48,7 +52,7 @@ function ImportTabs() {
       {!isSectionLocked && (
         <SegmentedTabs options={TABS} value={active} onChange={(k) => setMode(k as Mode)} />
       )}
-      {active === "add" ? <AddStudentsImport /> : active === "map" ? <RollNumberMappingImport /> : <StudentDataUpdateImport />}
+      {active === "add" ? <AddStudentsImport /> : active === "map" ? <RollNumberMappingImport /> : active === "sync" ? <FinalListSync /> : <StudentDataUpdateImport />}
     </div>
   );
 }
