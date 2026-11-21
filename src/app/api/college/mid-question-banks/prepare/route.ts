@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { partUnitSplit } from "@/lib/subjects/parts";
+import { partSplitForSections, partUnitSplit } from "@/lib/subjects/parts";
 import { ownerDepartmentNamesLive } from "@/lib/subjects/ownerDepartment";
 import { loadSyllabus } from "@/lib/subjects/syllabusServer";
 import { syllabusOutcomesId, syllabusSubjectOf } from "@/lib/subjects/syllabus";
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
       ownerDepartmentNamesLive(db, session.collegeId, subject),
     ]);
     // Taught in parts (BEEE): a part's paper covers that part's units in this Mid, the other part the other Mid.
-    const exception = partUnitSplit(subject, branch, d.midNumber) ?? exception0;
+    const exception = partUnitSplit(subject, branch, d.midNumber) ?? partSplitForSections(subject, available.map((s) => s.sectionId), d.midNumber) ?? exception0;
     const onSyllabus = syllabusSubjectOf(outcomesId) !== null;
     const settings = settings0;
     // A college that prepares question papers works to the Exam Cell's paper pattern instead of the bank rules.

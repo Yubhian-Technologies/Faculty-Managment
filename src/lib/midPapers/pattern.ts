@@ -320,8 +320,13 @@ export const patternShape = (pat: Pick<MidPaperPattern, "parts" | "setsPerFacult
 export function remapQuestions(
   oldPat: Pick<MidPaperPattern, "parts" | "setsPerFaculty">, newPat: Pick<MidPaperPattern, "parts" | "setsPerFaculty">,
   questions: Pick<MidPaperQuestion, "id" | "set" | "partId" | "no" | "unit">[], units: number[],
-): { moves: { from: string; to: string }[]; dropped: string[]; reasons: Record<string, string> } {
-  const moves: { from: string; to: string }[] = [];
+  /** The new paper's units: when they replace the old ones whole (same count, none shared - a subject put into parts),
+   *  a question moves to the unit in the same position (Unit 1 -> 4 ...), its `unit` reported on the move. */
+  newUnits?: number[],
+): { moves: { from: string; to: string; unit?: number }[]; dropped: string[]; reasons: Record<string, string> } {
+  const moves: { from: string; to: string; unit?: number }[] = [];
+  const replaced = !!newUnits && newUnits.length === units.length && units.length > 0 && !units.some((u) => newUnits.includes(u));
+  const mapUnit = (u: number) => (replaced ? newUnits![units.indexOf(u)] ?? u : u);
   const dropped: string[] = [];
   const reasons: Record<string, string> = {};
   const drop = (id: string, why: string) => { dropped.push(id); reasons[id] = why; };
@@ -365,14 +370,15 @@ export function remapQuestions(
       continue;
     }
     if (np.perUnit) {
-      const unit = q.unit ?? (op ? unitOfQuestion(op, units, q.no) : undefined);
-      if (unit == null) { drop(q.id, `${np.label} now goes unit by unit - pick this question's unit`); continue; }
+      const oldUnit = q.unit ?? (op ? unitOfQuestion(op, units, q.no) : undefined);
+      if (oldUnit == null) { drop(q.id, `${np.label} now goes unit by unit - pick this question's unit`); continue; }
+      const unit = mapUnit(oldUnit);
       // Its place among the old part's questions of the same unit.
-      const oldNos = questions.filter((x) => x.set === q.set && x.partId === q.partId && (x.unit ?? (op ? unitOfQuestion(op, units, x.no) : undefined)) === unit).map((x) => x.no).sort((a, b) => a - b);
+      const oldNos = questions.filter((x) => x.set === q.set && x.partId === q.partId && (x.unit ?? (op ? unitOfQuestion(op, units, x.no) : undefined)) === oldUnit).map((x) => x.no).sort((a, b) => a - b);
       const k = oldNos.indexOf(q.no);
       const slots = (np.unitLayout ?? []).map((u, i) => (u === unit ? i + 1 : 0)).filter(Boolean);
       if (k < 0 || k >= slots.length) { drop(q.id, slots.length ? `${np.label} has ${slots.length} question${slots.length === 1 ? "" : "s"} on Unit ${unit} - this one is extra` : `${np.label} has no Unit ${unit} question now`); continue; }
-      moves.push({ from: q.id, to: questionId(q.set, np.id, slots[k]) });
+      moves.push({ from: q.id, to: questionId(q.set, np.id, slots[k]), ...(unit !== oldUnit ? { unit } : {}) });
       continue;
     }
     if (q.no > np.questions) { drop(q.id, `${np.label} now has ${np.questions} question${np.questions === 1 ? "" : "s"}`); continue; }

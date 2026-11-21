@@ -25,7 +25,7 @@ async function plan(db: FirebaseFirestore.Firestore, session: { uid: string; rol
   if (!live) return { error: "The Exam Cell has no question paper pattern for this subject now", status: 409 } as const;
   if (live.issues.length) return { error: live.issues[0].message, status: 409 } as const;
   const questions = await loadPaperQuestions(db, session.collegeId, id);
-  const remap = remapQuestions(access.bank.pattern, live.pattern, questions, access.bank.units ?? []);
+  const remap = remapQuestions(access.bank.pattern, live.pattern, questions, access.bank.units ?? [], live.units);
   return { access, live, questions, remap } as const;
 }
 
@@ -69,8 +69,10 @@ export async function POST(_request: Request, { params }: Params) {
         const no = Number(bits[bits.length - 1]);
         const partId = bits.slice(1, -1).join("_");
         const { id: _old, ...data } = q; void _old;
-        if (m.from !== m.to) tx.set(refs.questions(id).doc(m.to), { ...data, partId, no });
-        moved.push({ ...q, id: m.to, partId, no });
+        // Moved to another unit (the units were replaced - a subject put into parts): its COs are picked again.
+        const unitChange = m.unit != null ? { unit: m.unit, cos: [], state: "DRAFT" as const } : {};
+        if (m.from !== m.to || m.unit != null) tx.set(refs.questions(id).doc(m.to), { ...data, partId, no, ...unitChange });
+        moved.push({ ...q, id: m.to, partId, no, ...unitChange } as MidPaperQuestion);
       }
       for (const m of p.remap.moves) if (m.from !== m.to && !targets.has(m.from)) tx.delete(refs.questions(id).doc(m.from));
       // A setter writing only some papers (shared by the HOD) keeps that share.
