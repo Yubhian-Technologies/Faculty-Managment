@@ -811,9 +811,12 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
         const colCount = 3 + (subjectsView ? r.columns.length : 0) + tailCols;
         const th = "px-3 py-2.5 font-medium";
         // Regd. No and Name stay in view while the subject columns scroll sideways.
-        const stick1 = "sticky left-0 z-[1] w-12 min-w-12 bg-inherit";
-        const stick2 = "sticky left-12 z-[1] w-32 min-w-32 bg-inherit";
-        const stick3 = "sticky left-44 z-[1] min-w-44 bg-inherit shadow-[1px_0_0_0_hsl(var(--border))]";
+        // The pinned columns need a SOLID background (bg-inherit took the row's see-through hover tint, and the header
+        // row has none of its own), or the subject columns show through them while the table scrolls sideways.
+        const stick1 = "sticky left-0 z-[1] w-12 min-w-12 bg-background group-hover/row:bg-slate-50";
+        const stick2 = "sticky left-12 z-[1] w-32 min-w-32 bg-background group-hover/row:bg-slate-50";
+        const stick3 = "sticky left-44 z-[1] min-w-44 bg-background group-hover/row:bg-slate-50 shadow-[1px_0_0_0_hsl(var(--border))]";
+        const headStick = "!bg-muted z-[2]";
         return (
         <Card key={r.section.id} className="overflow-hidden">
           <CardHeader className="flex-row items-center justify-between gap-2 space-y-0 border-b bg-muted/30 py-3">
@@ -827,9 +830,9 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className={`${th} ${stick1}`}>S.No</th>
-                    <th className={`${th} ${stick2}`}>Regd. No</th>
-                    <th className={`${th} ${stick3}`}>Name</th>
+                    <th className={`${th} ${stick1} ${headStick}`}>S.No</th>
+                    <th className={`${th} ${stick2} ${headStick}`}>Regd. No</th>
+                    <th className={`${th} ${stick3} ${headStick}`}>Name</th>
                     {subjectsView && r.columns.map((sub) => (
                       <th key={sub.subjectId} title={`${sub.subjectName}${sub.subjectCode ? ` (${sub.subjectCode})` : ""}`} className={`${th} whitespace-nowrap text-center normal-case`}>{subjectLabel(sub)}</th>
                     ))}
@@ -856,7 +859,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
                         const low = st.shown.percentage != null && st.shown.percentage < SHORTAGE_PERCENT;
                         const needed = classesNeeded(st.shown.attended, st.shown.held, SHORTAGE_PERCENT);
                         return (
-                        <tr key={st.studentId} className="bg-background hover:bg-muted/40">
+                        <tr key={st.studentId} className="group/row bg-background hover:bg-slate-50">
                           <td className={`px-3 py-2 tabular-nums ${stick1}`}>{++serial}</td>
                           <td className={`whitespace-nowrap px-3 py-2 tabular-nums ${stick2}`}>{st.rollNumber}</td>
                           <td className={`px-3 py-2 ${stick3}`}>
