@@ -3,7 +3,9 @@
 import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Users } from "lucide-react";
+import { Search, Upload, Users } from "lucide-react";
+import Link from "next/link";
+import { useAuthStore } from "@/store/authStore";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -78,6 +80,7 @@ function PrincipalStudentsContent() {
     pageSize: readListInt(searchParams, "pageSize", DEFAULT_PAGE_SIZE, { allowed: PAGE_SIZES }),
   }));
   const [activeTab, setActiveTab] = useState<StudentTabKey>(restored.tab);
+  const isCollegeAdmin = useAuthStore((st) => st.user?.realRole === "COLLEGE_ADMIN");
   const [students, setStudents] = useState<StudentListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -318,7 +321,15 @@ function PrincipalStudentsContent() {
             : "Every student across the college"
         }
         actions={
-          <StudentsViewTabs tabs={STUDENT_TABS} value={activeTab} onChange={setActiveTab} />
+          <div className="flex flex-wrap items-center gap-2">
+            <StudentsViewTabs tabs={STUDENT_TABS} value={activeTab} onChange={setActiveTab} />
+            {/* The College Admin also runs the College Office's student import (add, map Regd. Nos, update, sync with the final list). */}
+            {isCollegeAdmin && activeTab === "roster" && (
+              <Button variant="outline" asChild>
+                <Link href="/college-office/students/import"><Upload className="h-4 w-4 mr-2" />Import</Link>
+              </Button>
+            )}
+          </div>
         }
       />
 
