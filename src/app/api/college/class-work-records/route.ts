@@ -133,10 +133,9 @@ export async function GET(request: Request) {
     }
 
     let facultyId: string;
-    if (session.role === "HOD") {
-      if (!requestedFacultyId) {
-        return NextResponse.json({ error: "facultyId is required" }, { status: 400 });
-      }
+    // An HOD looking at another faculty member's report names them; with no one named (or themselves) it is the HOD's
+    // own report - "My Work" > Attendance Register, the same as any faculty member.
+    if (session.role === "HOD" && requestedFacultyId && requestedFacultyId !== session.uid) {
       const facSnap = await collegeRef.collection("facultyMembers")
         .where("userUid", "==", requestedFacultyId).limit(1).get();
       if (facSnap.empty) {
