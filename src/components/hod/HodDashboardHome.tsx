@@ -85,7 +85,7 @@ function ClassGrid({ data, onMore }: { data: TodayData["classes"]; onMore?: () =
   // With many sections the grid scrolls inside the card (period row and section names stay in view), and the
   // HOD can narrow it to the sections with a period not posted yet.
   const [onlyOverdue, setOnlyOverdue] = useState(false);
-  if (data.total === 0) return <p className="py-6 text-center text-sm text-muted-foreground">No classes on the timetable today.</p>;
+  if (data.total === 0) return <p className="py-6 text-center text-sm text-muted-foreground">No Classes Scheduled Today</p>;
   const overdueIds = new Set(data.sections.filter((s) => data.periods.some((p) => data.cells[`${s.id}|${p}`]?.status === "OVERDUE")).map((s) => s.id));
   const rows = onlyOverdue ? data.sections.filter((s) => overdueIds.has(s.id)) : data.sections;
   const many = data.sections.length > 5;
@@ -244,11 +244,11 @@ export function HodDashboardHome() {
   const banksWaiting = (banks.data ?? []).reduce((n, b) => n + b.progress.banksSubmitted, 0);
   const uncovered = (day.data?.onLeave ?? []).reduce((n, l) => n + l.uncovered, 0);
   const waiting = [
-    { key: "leave", show: shown("/hod/leave-approvals"), label: "Leave Approvals", sub: "Waiting for your decision", href: "/hod/leave-approvals", count: leaveQ.data, hot: true, icon: CalendarCheck2 },
+    { key: "leave", show: shown("/hod/leave-approvals"), label: "Pending Leave Approvals", sub: "Awaiting Your Approval", href: "/hod/leave-approvals", count: leaveQ.data, hot: true, icon: CalendarCheck2 },
     { key: "banks", show: shown("/hod/question-banks"), label: "Question Papers to Approve", sub: banks.data?.[0] ? `Mid-${banks.data[0].deadline.midNumber ?? ""} · deadline ${shortDay(banks.data[0].deadline.deadline)}` : "Submitted by your faculty", href: "/hod/question-banks", count: banks.data ? banksWaiting : undefined, hot: true, icon: BookOpenCheck },
     { key: "uncovered", show: true, label: "Periods Without Cover", sub: "Faculty on leave today", href: "/hod/leave-approvals", count: day.data ? uncovered : undefined, hot: true, icon: AlertTriangle },
     { key: "perms", show: shown("/hod/student-permissions"), label: "Student Permissions", sub: "On duty requests", href: "/hod/student-permissions", count: permQ.data, hot: false, icon: ShieldCheck },
-    { key: "cover", show: true, label: "Cover Requests for You", sub: "Substitute or handover asked of you", href: "/leave/adjustments", count: coverQ.data, hot: false, icon: Repeat2 },
+    { key: "cover", show: true, label: "Class Substitution Requests", sub: "Requests Requiring Your Action", href: "/leave/adjustments", count: coverQ.data, hot: false, icon: Repeat2 },
     { key: "certs", show: shown("/hod/certificate-requests"), label: "Certificates", sub: "Waiting for your approval", href: "/hod/certificate-requests", count: certQ.data, hot: false, icon: FileCheck },
   ].filter((w) => w.show);
   const waitingTotal = waiting.reduce((n, w) => n + (w.count ?? 0), 0);
@@ -274,35 +274,35 @@ export function HodDashboardHome() {
             <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
               <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1">HOD</span>
               {exams.data?.[0] && <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1">Mid-{exams.data[0].mid} from {shortDay(exams.data[0].date)}</span>}
-              {sem.data?.since && <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1">Semester since {shortDay(sem.data.since)}</span>}
+              {sem.data?.since && <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1">Semester Commenced: {new Date(`${sem.data.since}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}</span>}
             </div>
           </div>
           <div className="min-w-[230px] rounded-xl border border-white/20 bg-white/10 px-4 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-white/75">{day.data?.current?.next ? "Next class" : "Right now"}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-white/75">{day.data?.current?.next ? "Next class" : "Current Academic Status"}</p>
             {day.isLoading ? <div className="mt-1 h-5 w-32 animate-pulse rounded bg-white/20" /> : day.data?.current ? (
               <>
                 <p className="mt-0.5 text-[15px] font-semibold">{hhmm12(day.data.current.start)} – {hhmm12(day.data.current.end)}</p>
                 <p className="text-xs text-white/85">{cls?.running ?? 0} classes running · {dueOverdue} not posted yet</p>
               </>
-            ) : <p className="mt-0.5 text-sm font-medium">No more classes today</p>}
+            ) : <p className="mt-0.5 text-sm font-medium">No Classes Scheduled for Today</p>}
           </div>
         </div>
       </section>
 
       {/* Key numbers */}
       <section aria-label="Key numbers" className="relative z-10 -mt-12 grid grid-cols-2 gap-3 px-0 sm:px-2 md:grid-cols-3 xl:grid-cols-6">
-        <Kpi icon={GraduationCap} label="Students" href="/hod/students" loading={strength.isLoading} error={strength.isError || !shown("/hod/students")}
+        <Kpi icon={GraduationCap} label="Total Student Strength" href="/hod/students" loading={strength.isLoading} error={strength.isError || !shown("/hod/students")}
           value={students ? students.total.toLocaleString("en-IN") : "-"}
           sub={students?.years.map((y) => `${["I", "II", "III", "IV", "V"][y.year - 1] ?? y.year} ${y.count}`).join(" · ")} />
-        <Kpi icon={ClipboardCheck} label="Student Attendance Today" onOpen={() => setDetail("students")} loading={day.isLoading} error={day.isError}
+        <Kpi icon={ClipboardCheck} label="Today's Student Attendance" onOpen={() => setDetail("students")} loading={day.isLoading} error={day.isError}
           value={day.data?.students.pct == null ? "-" : day.data.students.pct.toFixed(1)} unit={day.data?.students.pct == null ? undefined : "%"}
           meter={day.data?.students.pct != null ? [{ value: day.data.students.pct, color: day.data.students.pct < SHORT ? CRIT : "hsl(var(--primary))" }] : undefined}
           sub={day.data ? `${day.data.students.absentAllDay} absent all day` : undefined} />
-        <Kpi icon={CalendarDays} label="Classes Today" onOpen={() => setDetail("classes")} loading={day.isLoading} error={day.isError}
+        <Kpi icon={CalendarDays} label="Today's Class Status" onOpen={() => setDetail("classes")} loading={day.isLoading} error={day.isError}
           value={cls ? cls.posted : "-"} unit={cls ? ` / ${cls.due} posted` : undefined}
           meter={cls && cls.due ? [{ value: (cls.posted / cls.due) * 100, color: GOOD }, { value: (dueOverdue / cls.due) * 100, color: CRIT }] : undefined}
-          sub={cls ? (dueOverdue ? <Tag tone="crit">{dueOverdue} overdue</Tag> : <Tag tone="good">All posted</Tag>) : undefined} />
-        <Kpi icon={UserCheck} label="Faculty Present" onOpen={() => setDetail("faculty")} loading={roster.isLoading} error={roster.isError}
+          sub={cls ? (dueOverdue ? <Tag tone="crit">{dueOverdue} overdue</Tag> : <Tag tone="good">Attendance Fully Recorded</Tag>) : undefined} />
+        <Kpi icon={UserCheck} label="Faculty Attendance Status" onOpen={() => setDetail("faculty")} loading={roster.isLoading} error={roster.isError}
           value={faculty ? faculty.present + faculty.halfDay + faculty.onDuty : "-"} unit={faculty ? ` / ${faculty.total}` : undefined}
           meter={faculty && faculty.total ? [
             { value: ((faculty.present - faculty.late.length + faculty.halfDay + faculty.onDuty) / faculty.total) * 100, color: GOOD },
@@ -310,21 +310,21 @@ export function HodDashboardHome() {
             { value: (faculty.onLeave / faculty.total) * 100, color: "hsl(var(--primary))" },
             { value: ((faculty.notIn.length + faculty.absent) / faculty.total) * 100, color: CRIT },
           ] : undefined}
-          sub={faculty ? `${faculty.late.length} late · ${faculty.onLeave} on leave · ${faculty.notIn.length} not in` : undefined} />
-        <Kpi icon={AlertTriangle} tone="crit" label={`Below ${SHORT}%`} onOpen={() => setDetail("shortage")} loading={sem.isLoading} error={sem.isError}
+          sub={faculty ? `${faculty.late.length} late · ${faculty.onLeave} on leave · ${faculty.notIn.length} Not Yet Marked Present` : undefined} />
+        <Kpi icon={AlertTriangle} tone="crit" label={`Students Below ${SHORT}% Attendance`} onOpen={() => setDetail("shortage")} loading={sem.isLoading} error={sem.isError}
           value={sem.data ? sem.data.shortage.below : "-"}
           sub={sem.data && sem.data.shortage.students ? <>{((sem.data.shortage.below / sem.data.shortage.students) * 100).toFixed(1)}% of students{sem.data.shortage.critical > 0 && <> · <Tag tone="crit">{sem.data.shortage.critical} below 65%</Tag></>}</> : undefined} />
-        <Kpi icon={Inbox} label="Waiting for You" href="#waiting" loading={waitingLoading && waitingTotal === 0} error={false}
+        <Kpi icon={Inbox} label="Pending Actions" href="#waiting" loading={waitingLoading && waitingTotal === 0} error={false}
           value={waitingTotal} sub={waitingHot ? `${waitingHot} need you today` : "Nothing urgent"} />
       </section>
 
       {/* The number cards' full lists */}
-      <KpiDetailDialog open={detail === "students"} onClose={closeDetail} title="Student Attendance Today"
+      <KpiDetailDialog open={detail === "students"} onClose={closeDetail} title="Today's Student Attendance"
         sub={day.data ? `${fmtPct(day.data.students.pct)} so far · ${day.data.students.absentAllDay} absent all day` : undefined}
         pageHref="/hod/attendance-reports" pageLabel="Attendance Reports">
         {day.data && <StudentsTodayDetail sections={day.data.students.sections} absentees={day.data.students.absentees ?? []} />}
       </KpiDetailDialog>
-      <KpiDetailDialog open={detail === "classes"} onClose={closeDetail} title="Classes Today"
+      <KpiDetailDialog open={detail === "classes"} onClose={closeDetail} title="Today's Class Status"
         sub={cls ? `${cls.posted} of ${cls.due} posted · ${dueOverdue} not posted · ${cls.running} running now` : undefined}
         pageHref="/hod/attendance-reports" pageLabel="Attendance Reports">
         {cls && <ClassesTodayDetail sections={cls.sections} cells={cls.cells} />}
@@ -342,7 +342,7 @@ export function HodDashboardHome() {
 
       {/* Waiting */}
       <section id="waiting" className="scroll-mt-20 space-y-2.5 rounded-2xl">
-        <SectionTitle title="Waiting for You" sub="Each opens its own page" />
+        <SectionTitle title="Pending Actions" sub="Select an item to review and take action" />
         {activeWaiting.length === 0 && !waitingLoading ? (
           <Card className="flex items-center gap-3 p-4 text-sm text-muted-foreground"><ShieldCheck className="h-5 w-5 text-emerald-600" />Nothing is waiting for you right now.</Card>
         ) : (
@@ -366,15 +366,15 @@ export function HodDashboardHome() {
 
       {/* Today */}
       <section className="space-y-3">
-        <SectionTitle title="Today" sub={day.data ? `Updated ${hhmm12(day.data.now)} · refreshes every 5 minutes` : undefined} />
+        <SectionTitle title="Today's Academic Overview" sub={day.data ? `Updated: ${hhmm12(day.data.now)}` : undefined} />
         <div className="grid gap-3.5 lg:grid-cols-[2fr_1fr]">
-          <Panel id="classes" title="Classes" sub="Every section, period by period" href="/hod/attendance-reports" linkLabel="Attendance Reports"
+          <Panel id="classes" title="Today's Class Schedule" sub="Section-wise and Period-wise Schedule" href="/hod/attendance-reports" linkLabel="View Attendance Reports"
             loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
             {cls && <ClassGrid data={cls} onMore={() => setDetail("classes")} />}
           </Panel>
-          <Panel id="by-section" title="Student Attendance by Section" sub="Today so far · lowest first" loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
+          <Panel id="by-section" title="Section-wise Student Attendance" sub="Today's Attendance – Ascending Order" loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
             {day.data && (day.data.students.sections.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">No attendance posted yet today.</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">Attendance Not Yet Recorded</p>
             ) : (
               <>
                 <div className="space-y-2">
@@ -390,8 +390,8 @@ export function HodDashboardHome() {
         </div>
 
         <div className="grid gap-3.5 md:grid-cols-2">
-          <Panel id="faculty" title="Faculty Attendance" sub={faculty ? `${faculty.total} faculty${faculty.staff ? ` · ${faculty.staff} supporting staff` : ""}` : undefined}
-            href="/hod/faculty-attendance" linkLabel="Faculty Attendance" loading={roster.isLoading} error={roster.isError} onRetry={() => void roster.refetch()}>
+          <Panel id="faculty" title="Faculty Attendance Status" sub={faculty ? `Total Faculty: ${faculty.total}${faculty.staff ? ` · ${faculty.staff} supporting staff` : ""}` : undefined}
+            href="/hod/faculty-attendance" linkLabel="View Faculty Attendance" loading={roster.isLoading} error={roster.isError} onRetry={() => void roster.refetch()}>
             {faculty && (
               <>
                 <div className="flex h-3 gap-0.5 overflow-hidden rounded-full bg-muted">
@@ -401,13 +401,13 @@ export function HodDashboardHome() {
                   ].filter((s) => s.n > 0).map((s, i) => <i key={i} className="block h-full" style={{ flex: s.n, background: s.c }} />)}
                 </div>
                 <Legend items={[
-                  { color: GOOD, label: `Present ${faculty.present - faculty.late.length + faculty.halfDay + faculty.onDuty}` },
-                  { color: WARN, label: `Late ${faculty.late.length}` },
-                  { color: "hsl(var(--primary))", label: `On leave ${faculty.onLeave}` },
-                  { color: CRIT, label: `Not checked in ${faculty.notIn.length + faculty.absent}` },
+                  { color: GOOD, label: `Present: ${faculty.present - faculty.late.length + faculty.halfDay + faculty.onDuty}` },
+                  { color: WARN, label: `Late Arrivals: ${faculty.late.length}` },
+                  { color: "hsl(var(--primary))", label: `On Approved Leave: ${faculty.onLeave}` },
+                  { color: CRIT, label: `Attendance Not Marked: ${faculty.notIn.length + faculty.absent}` },
                 ]} />
                 <ul className="mt-3 space-y-2">
-                  {[...faculty.notIn.map((r) => ({ r, tag: <Tag tone="crit">Not checked in</Tag>, note: r.designation ?? "" })),
+                  {[...faculty.notIn.map((r) => ({ r, tag: <Tag tone="crit">Not Yet Checked In</Tag>, note: r.designation ?? "" })),
                     ...faculty.late.map((r) => ({ r, tag: <Tag tone="warn">Late</Tag>, note: r.checkIn ? `In at ${hhmm12(r.checkIn)}` : "" }))]
                     .slice(0, 6).map(({ r, tag, note }, i) => (
                       <li key={i} className="flex items-center gap-2.5 text-sm">
@@ -421,10 +421,10 @@ export function HodDashboardHome() {
               </>
             )}
           </Panel>
-          <Panel title="On Leave Today" sub="And who is handling their classes" href="/hod/leave-history" linkLabel="Leave Register"
+          <Panel title="Faculty on Leave Today" sub="Leave Details & Class Substitution Arrangements" href="/hod/leave-history" linkLabel="View Leave Register"
             loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
             {day.data && (day.data.onLeave.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Nobody in your department is on leave today.</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">No Faculty Members on Leave Today</p>
             ) : (
               <ul className="space-y-2.5">
                 {day.data.onLeave.map((l, i) => (
@@ -451,13 +451,13 @@ export function HodDashboardHome() {
 
       {/* This semester */}
       <section className="space-y-3">
-        <SectionTitle title="This Semester" sub={sem.data?.since ? `Since ${shortDay(sem.data.since)} · counted the same way as the reports` : "Counted the same way as the reports"} />
+        <SectionTitle title="Current Semester Overview" sub={sem.data?.since ? `Semester Commencement: ${new Date(`${sem.data.since}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long" })} ${sem.data.since.slice(0, 4)}` : undefined} />
         <div className="grid gap-3.5 lg:grid-cols-[2fr_1fr]">
-          <Panel title="Student Attendance Trend" sub="Department average, last 14 class days" href="/hod/attendance-reports" linkLabel="Reports"
+          <Panel title="Semester-wise Student Attendance Trends" sub="Department-wise Average Attendance for Last 14 Working Days" href="/hod/attendance-reports" linkLabel="View Detailed Reports"
             loading={sem.isLoading} error={sem.isError} onRetry={() => void sem.refetch()}>
             {sem.data && <TrendChart points={sem.data.trend} />}
           </Panel>
-          <Panel id="shortage" title="Shortage by Subject" sub={`Students below ${SHORT}% in each subject`} loading={sem.isLoading} error={sem.isError} onRetry={() => void sem.refetch()}>
+          <Panel id="shortage" title="Subject-wise Attendance Shortage" sub={`Number of Students Below ${SHORT}% Attendance in Each Subject`} loading={sem.isLoading} error={sem.isError} onRetry={() => void sem.refetch()}>
             {sem.data && (sem.data.shortage.bySubject.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">No subject has students below {SHORT}%.</p>
             ) : (
@@ -485,8 +485,8 @@ export function HodDashboardHome() {
           {shown("/hod/question-banks") && (
             <Panel title={firstBank ? `Mid-${firstBank.deadline.midNumber ?? ""} Question Papers` : "Mid Question Papers"}
               sub={firstBank ? `Deadline ${shortDay(firstBank.deadline.deadline)} · ${firstBank.progress.subjects} subjects` : undefined}
-              href="/hod/question-banks" linkLabel="Question Banks" loading={banks.isLoading} error={banks.isError} onRetry={() => void banks.refetch()}>
-              {!firstBank ? <p className="py-6 text-center text-sm text-muted-foreground">No open question paper deadline.</p> : (() => {
+              href="/hod/question-banks" linkLabel="View Question Banks" loading={banks.isLoading} error={banks.isError} onRetry={() => void banks.refetch()}>
+              {!firstBank ? <p className="py-6 text-center text-sm text-muted-foreground">No Pending Question Paper Submissions</p> : (() => {
                 const p = firstBank.progress;
                 const approved = p.subjectsApproved;
                 const submitted = Math.max(0, p.banksSubmitted);
@@ -511,8 +511,8 @@ export function HodDashboardHome() {
               })()}
             </Panel>
           )}
-          <Panel title="Coming Up" sub="Published Mid timetable" href="/panel/mid-timetable" linkLabel="Timetable" loading={exams.isLoading} error={exams.isError} onRetry={() => void exams.refetch()}>
-            {exams.data && (exams.data.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No upcoming Mid exams.</p> : (
+          <Panel title="Upcoming Examinations" sub="Published Mid-Semester Examination Schedule" href="/panel/mid-timetable" linkLabel="View Timetable" loading={exams.isLoading} error={exams.isError} onRetry={() => void exams.refetch()}>
+            {exams.data && (exams.data.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No Mid-Semester Examinations Scheduled</p> : (
               <ul className="divide-y">
                 {exams.data.map((e, i) => (
                   <li key={i} className="flex items-center gap-3 py-2 text-sm">
@@ -527,9 +527,9 @@ export function HodDashboardHome() {
             ))}
           </Panel>
           {shown("/hod/results-analysis") && (
-            <Panel title="Latest Results" sub="Regular · published · all subjects passed" href="/hod/results-analysis" linkLabel="Results Analysis"
+            <Panel title="Recent Examination Results" sub="Regular Examinations · Published Results · Overall Pass Status" href="/hod/results-analysis" linkLabel="View Result Analysis"
               loading={sem.isLoading} error={sem.isError} onRetry={() => void sem.refetch()}>
-              {sem.data && (sem.data.results.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No published results yet.</p> : (
+              {sem.data && (sem.data.results.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No Examination Results Published Yet</p> : (
                 <div className="space-y-2">
                   {sem.data.results.map((r) => <Bar key={r.year} label={r.label} value={r.pct ?? 0} text={fmtPct(r.pct)} sub={`${r.passed}/${r.students}`} />)}
                 </div>
@@ -541,12 +541,12 @@ export function HodDashboardHome() {
 
       {/* My day */}
       <section className="space-y-3">
-        <SectionTitle title="My Day" sub="Your own classes, attendance and leave" />
+        <SectionTitle title="My Academic Overview" sub="Personal Class Schedule, Attendance and Leave Details" />
         <Card className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1.2fr_1fr_1fr]">
           <div className="space-y-1.5">
-            <p className="text-sm font-semibold">My Classes</p>
+            <p className="text-sm font-semibold">My Teaching Schedule</p>
             {myDay.isLoading ? <div className="h-8 animate-pulse rounded-lg bg-muted" /> : (myDay.data ?? []).length === 0 ? (
-              <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">No classes for you today.</p>
+              <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">No Classes Assigned Today</p>
             ) : (() => {
               const list = myDay.data!;
               const next = list.find((p) => p.phase !== "ENDED" && p.sessionStatus !== "SUBMITTED");
@@ -560,18 +560,18 @@ export function HodDashboardHome() {
             })()}
           </div>
           <div className="space-y-1.5">
-            <p className="text-sm font-semibold">My Attendance</p>
+            <p className="text-sm font-semibold">My Attendance Status</p>
             <Link href="/hod/attendance" className="flex justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs">
-              <span>Today</span>
-              <span className="font-medium">{faculty?.me?.checkIn ? `Checked in ${hhmm12(faculty.me.checkIn)}` : faculty?.me?.status === "ON_LEAVE" ? "On leave" : "Not checked in"}</span>
+              <span>Today&apos;s Attendance</span>
+              <span className="font-medium">{faculty?.me?.checkIn ? `Checked in ${hhmm12(faculty.me.checkIn)}` : faculty?.me?.status === "ON_LEAVE" ? "On leave" : "Attendance Not Yet Marked"}</span>
             </Link>
-            <Link href="/hod/attendance" className="flex justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs"><span>Attendance records</span><span>Open →</span></Link>
+            <Link href="/hod/attendance" className="flex justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs"><span>My Attendance History</span><span>View Details →</span></Link>
           </div>
           <div className="space-y-1.5">
-            <p className="text-sm font-semibold">Quick Links</p>
-            <Link href="/hod/leave" className="flex justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs"><span>My Leave</span><span>Apply or view balance →</span></Link>
-            <Link href="/hod/pipeline" className="flex justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs"><span>Hiring</span><span>Pipeline →</span></Link>
-            <Link href="/hod/faculty" className="flex justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs"><span><UsersRound className="mr-1 inline h-3.5 w-3.5" />Faculty</span><span>Open →</span></Link>
+            <p className="text-sm font-semibold">Quick Access</p>
+            <Link href="/hod/leave" className="flex justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs"><span>Leave Management</span><span>Apply for Leave / View Balance →</span></Link>
+            <Link href="/hod/pipeline" className="flex justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs"><span>Faculty Recruitment</span><span>Recruitment Status →</span></Link>
+            <Link href="/hod/faculty" className="flex justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs"><span><UsersRound className="mr-1 inline h-3.5 w-3.5" />Faculty Directory</span><span>View Faculty Directory →</span></Link>
           </div>
         </Card>
       </section>

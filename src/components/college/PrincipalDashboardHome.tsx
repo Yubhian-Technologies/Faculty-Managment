@@ -226,35 +226,35 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
               <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1">{roleLabel}</span>
               {day.data && <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1">{day.data.departments.length} departments</span>}
               {exams.data?.[0] && <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1">Mid-{exams.data[0].mid} from {shortDay(exams.data[0].date)}</span>}
-              {sem.data?.since && <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1">Semester since {shortDay(sem.data.since)}</span>}
+              {sem.data?.since && <span className="rounded-full border border-white/25 bg-white/15 px-2.5 py-1">Semester Commenced: {new Date(`${sem.data.since}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}</span>}
             </div>
           </div>
           <div className="min-w-[230px] rounded-xl border border-white/20 bg-white/10 px-4 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-white/75">{day.data?.current?.next ? "Next class" : "Right now"}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-white/75">{day.data?.current?.next ? "Next class" : "Current Academic Status"}</p>
             {day.isLoading ? <div className="mt-1 h-5 w-32 animate-pulse rounded bg-white/20" /> : day.data?.current ? (
               <>
                 <p className="mt-0.5 text-[15px] font-semibold">{hhmm12(day.data.current.start)} – {hhmm12(day.data.current.end)}</p>
                 <p className="text-xs text-white/85">{cls?.running ?? 0} classes running · {cls?.overdue.length ?? 0} not posted yet</p>
               </>
-            ) : <p className="mt-0.5 text-sm font-medium">No more classes today</p>}
+            ) : <p className="mt-0.5 text-sm font-medium">No Classes Scheduled for Today</p>}
           </div>
         </div>
       </section>
 
       {/* Key numbers */}
       <section aria-label="Key numbers" className="relative z-10 -mt-12 grid grid-cols-2 gap-3 sm:px-2 md:grid-cols-3 xl:grid-cols-6">
-        <Kpi icon={GraduationCap} label="Students" href="/principal/students?tab=strength" loading={strength.isLoading} error={strength.isError || !shown("/principal/students")}
+        <Kpi icon={GraduationCap} label="Total Student Strength" href="/principal/students?tab=strength" loading={strength.isLoading} error={strength.isError || !shown("/principal/students")}
           value={students ? students.total.toLocaleString("en-IN") : "-"}
           sub={students?.years.map((y) => `${roman(y.year)} ${y.count.toLocaleString("en-IN")}`).join(" · ")} />
-        <Kpi icon={ClipboardCheck} label="Student Attendance Today" onOpen={() => setDetail("students")} loading={day.isLoading} error={day.isError}
+        <Kpi icon={ClipboardCheck} label="Today's Student Attendance" onOpen={() => setDetail("students")} loading={day.isLoading} error={day.isError}
           value={day.data?.students.pct == null ? "-" : day.data.students.pct.toFixed(1)} unit={day.data?.students.pct == null ? undefined : "%"}
           meter={day.data?.students.pct != null ? [{ value: day.data.students.pct, color: day.data.students.pct < SHORT ? CRIT : "hsl(var(--primary))" }] : undefined}
           sub={day.data ? `${day.data.students.absentAllDay} absent all day` : undefined} />
-        <Kpi icon={CalendarDays} label="Classes Today" onOpen={() => setDetail("classes")} loading={day.isLoading} error={day.isError}
+        <Kpi icon={CalendarDays} label="Today's Class Status" onOpen={() => setDetail("classes")} loading={day.isLoading} error={day.isError}
           value={cls ? cls.posted : "-"} unit={cls ? ` / ${cls.due} posted` : undefined}
           meter={cls && cls.due ? [{ value: (cls.posted / cls.due) * 100, color: GOOD }, { value: (cls.overdue.length / cls.due) * 100, color: CRIT }] : undefined}
-          sub={cls ? (cls.overdue.length ? <Tag tone="crit">{cls.overdue.length} overdue · {overdueFaculty} faculty</Tag> : <Tag tone="good">All posted</Tag>) : undefined} />
-        <Kpi icon={UserCheck} label="Faculty Present" onOpen={() => setDetail("faculty")} loading={roster.isLoading} error={roster.isError}
+          sub={cls ? (cls.overdue.length ? <Tag tone="crit">{cls.overdue.length} overdue · {overdueFaculty} faculty</Tag> : <Tag tone="good">Attendance Fully Recorded</Tag>) : undefined} />
+        <Kpi icon={UserCheck} label="Faculty Attendance Status" onOpen={() => setDetail("faculty")} loading={roster.isLoading} error={roster.isError}
           value={faculty ? faculty.present + faculty.halfDay + faculty.onDuty : "-"} unit={faculty ? ` / ${faculty.total}` : undefined}
           meter={faculty && faculty.total ? [
             { value: ((faculty.present - faculty.late + faculty.halfDay + faculty.onDuty) / faculty.total) * 100, color: GOOD },
@@ -262,22 +262,22 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
             { value: (faculty.onLeave / faculty.total) * 100, color: "hsl(var(--primary))" },
             { value: ((faculty.notIn + faculty.absent) / faculty.total) * 100, color: CRIT },
           ] : undefined}
-          sub={faculty ? `${faculty.late} late · ${faculty.onLeave} on leave · ${faculty.notIn + faculty.absent} not in` : undefined} />
-        <Kpi icon={AlertTriangle} tone="crit" label={`Below ${SHORT}%`} onOpen={() => setDetail("shortage")} loading={sem.isLoading} error={sem.isError}
+          sub={faculty ? `${faculty.late} late · ${faculty.onLeave} on leave · ${faculty.notIn + faculty.absent} Not Yet Marked Present` : undefined} />
+        <Kpi icon={AlertTriangle} tone="crit" label={`Students Below ${SHORT}% Attendance`} onOpen={() => setDetail("shortage")} loading={sem.isLoading} error={sem.isError}
           value={sem.data ? sem.data.shortage.below.toLocaleString("en-IN") : "-"}
           sub={sem.data && sem.data.shortage.students ? <>{((sem.data.shortage.below / sem.data.shortage.students) * 100).toFixed(1)}% of students{sem.data.shortage.critical > 0 && <> · <Tag tone="crit">{sem.data.shortage.critical} below 65%</Tag></>}</> : undefined} />
-        <Kpi icon={Inbox} label="Waiting for You" href="#waiting" loading={waitingLoading && waitingTotal === 0} error={false}
+        <Kpi icon={Inbox} label="Pending Actions" href="#waiting" loading={waitingLoading && waitingTotal === 0} error={false}
           value={waitingTotal} sub={waitingHot ? `${waitingHot} need you today` : "Nothing urgent"} />
       </section>
 
       {/* Waiting */}
       {/* The number cards' full lists (whole college, with the department) */}
-      <KpiDetailDialog open={detail === "students"} onClose={closeDetail} title="Student Attendance Today"
+      <KpiDetailDialog open={detail === "students"} onClose={closeDetail} title="Today's Student Attendance"
         sub={day.data ? `${fmtPct(day.data.students.pct)} so far · ${day.data.students.absentAllDay} absent all day` : undefined}
         pageHref="/principal/attendance-reports" pageLabel="Attendance Reports">
         {day.data && <StudentsTodayDetail showDepartment sections={day.data.students.sections ?? []} absentees={day.data.students.absentees ?? []} />}
       </KpiDetailDialog>
-      <KpiDetailDialog open={detail === "classes"} onClose={closeDetail} title="Classes Today"
+      <KpiDetailDialog open={detail === "classes"} onClose={closeDetail} title="Today's Class Status"
         sub={day.data ? `${day.data.classes.posted} of ${day.data.classes.due} posted · ${day.data.classes.overdue.length} not posted · ${day.data.classes.running} running now` : undefined}
         pageHref="/principal/faculty-not-posted" pageLabel="Faculty Not Posted">
         {day.data && <ClassesTodayDetail showDepartment sections={day.data.classes.sections ?? []} cells={day.data.classes.cells ?? {}} />}
@@ -294,7 +294,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
       </KpiDetailDialog>
 
       <section id="waiting" className="scroll-mt-20 space-y-2.5 rounded-2xl">
-        <SectionTitle title="Waiting for You" sub="Each opens its own page" />
+        <SectionTitle title="Pending Actions" sub="Select an item to review and take action" />
         {activeWaiting.length === 0 && !waitingLoading ? (
           <Card className="flex items-center gap-3 p-4 text-sm text-muted-foreground"><ShieldCheck className="h-5 w-5 text-emerald-600" />Nothing is waiting for you right now.</Card>
         ) : (
@@ -318,7 +318,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
 
       {/* Today */}
       <section className="space-y-3">
-        <SectionTitle title="Today" sub={day.data ? `Updated ${hhmm12(day.data.now)} · refreshes every 5 minutes` : undefined} />
+        <SectionTitle title="Today's Academic Overview" sub={day.data ? `Updated: ${hhmm12(day.data.now)}` : undefined} />
         <Panel id="departments" title="Departments Today" sub="Lowest student attendance first" href="/principal/attendance-reports" linkLabel="Attendance Reports"
           loading={day.isLoading} error={day.isError} onRetry={() => void day.refetch()}>
           {board.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No classes or attendance today.</p> : (
@@ -434,9 +434,9 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
 
       {/* This semester */}
       <section className="space-y-3">
-        <SectionTitle title="This Semester" sub={sem.data?.since ? `Since ${shortDay(sem.data.since)} · counted the same way as the reports` : "Counted the same way as the reports"} />
+        <SectionTitle title="Current Semester Overview" sub={sem.data?.since ? `Semester Commencement: ${new Date(`${sem.data.since}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long" })} ${sem.data.since.slice(0, 4)}` : undefined} />
         <div className="grid gap-3.5 lg:grid-cols-[2fr_1fr]">
-          <Panel title="Student Attendance Trend" sub="College average, last 14 class days" href="/principal/attendance-reports" linkLabel="Reports"
+          <Panel title="Semester-wise Student Attendance Trends" sub="College average, last 14 class days" href="/principal/attendance-reports" linkLabel="View Detailed Reports"
             loading={sem.isLoading} error={sem.isError} onRetry={() => void sem.refetch()}>
             {sem.data && <TrendChart points={sem.data.trend} />}
           </Panel>
@@ -456,7 +456,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
           <Panel title={banks.data ? `Mid-${banks.data.deadline.midNumber ?? ""} Question Papers` : "Mid Question Papers"}
             sub={banks.data ? `Deadline ${shortDay(banks.data.deadline.deadline)} · ${banks.data.progress.subjects} subjects` : undefined}
             loading={banks.isLoading} error={banks.isError} onRetry={() => void banks.refetch()}>
-            {!banks.data ? <p className="py-6 text-center text-sm text-muted-foreground">No open question paper deadline.</p> : (() => {
+            {!banks.data ? <p className="py-6 text-center text-sm text-muted-foreground">No Pending Question Paper Submissions</p> : (() => {
               const p = banks.data.progress;
               const approved = p.subjectsApproved;
               const submitted = Math.max(0, p.banksSubmitted);
@@ -482,8 +482,8 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
               );
             })()}
           </Panel>
-          <Panel title="Coming Up" sub="Published Mid timetable" href="/principal/mid-timetable" linkLabel="Mid Timetable" loading={exams.isLoading} error={exams.isError} onRetry={() => void exams.refetch()}>
-            {exams.data && (exams.data.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No upcoming Mid exams.</p> : (
+          <Panel title="Upcoming Examinations" sub="Published Mid-Semester Examination Schedule" href="/principal/mid-timetable" linkLabel="Mid Timetable" loading={exams.isLoading} error={exams.isError} onRetry={() => void exams.refetch()}>
+            {exams.data && (exams.data.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No Mid-Semester Examinations Scheduled</p> : (
               <ul className="divide-y">
                 {exams.data.map((e) => (
                   <li key={e.date} className="flex items-center gap-3 py-2 text-sm">
@@ -498,9 +498,9 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
             ))}
           </Panel>
           {shown("/principal/results-analysis") && (
-            <Panel title="Latest Results" sub="Regular · published · all subjects passed" href="/principal/results-analysis" linkLabel="Results Analysis"
+            <Panel title="Recent Examination Results" sub="Regular Examinations · Published Results · Overall Pass Status" href="/principal/results-analysis" linkLabel="View Result Analysis"
               loading={sem.isLoading} error={sem.isError} onRetry={() => void sem.refetch()}>
-              {sem.data && (sem.data.results.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No published results yet.</p> : (
+              {sem.data && (sem.data.results.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No Examination Results Published Yet</p> : (
                 <div className="space-y-2">
                   {sem.data.results.map((r) => <Bar key={r.year} label={r.label} value={r.pct ?? 0} text={fmtPct(r.pct)} sub={`${r.passed}/${r.students}`} />)}
                 </div>
