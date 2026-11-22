@@ -1,6 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { leavePartOn, partCovers } from "@/lib/leave/leaveDayParts";
 import { canHodEditDepartment, facultyManageableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
+import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { whereIn } from "@/lib/firestore/inQuery";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
@@ -42,13 +43,24 @@ async function scopedSections(db: Db, collegeId: string, who: DashScope) {
   const scope = who.kind === "hod" ? await getHodDepartmentScope(db, collegeId, who.uid) : null;
   const canSee = (department: string) => !scope || canHodEditDepartment(scope, department);
   const facultyDepts = scope ? facultyManageableDepartmentNames(scope) : null;
-  const snap = await db.collection("colleges").doc(collegeId).collection("sections").get();
+  const college = db.collection("colleges").doc(collegeId);
+  const [snap, deptSnap, courseSnap] = await Promise.all([
+    college.collection("sections").get(),
+    scope ? college.collection("departments").get() : null,
+    scope ? college.collection("courses").select("catalogId").get() : null,
+  ]);
+  // Year by year, like the reports: a 1st-year (shared year) HOD who manages branches sees only those branches' 1st
+  // year - the later years stay with each branch's own HOD (canHodEditDepartmentYear).
+  const depts = (deptSnap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() })) as unknown as DepartmentYearRow[];
+  const catalogOf = new Map((courseSnap?.docs ?? []).map((d) => [d.id, String(d.get("catalogId") ?? "") || undefined]));
+  const canSeeSection = (department: string, year: number, courseId: string) =>
+    !scope || canHodEditDepartmentYear(scope, depts, department, year, catalogOf.get(courseId));
   const sections: ScopedSection[] = snap.docs
     .map((d) => ({ ...(d.data() as Section), id: d.id }))
-    .filter((s) => s.department && canSee(s.department))
+    .filter((s) => s.department && canSee(s.department) && canSeeSection(s.department, Number(s.year), s.courseId))
     .map((s) => ({ id: s.id, name: s.name, label: `${yearRoman(Number(s.year))}-${s.name}`, department: s.department, year: Number(s.year), courseId: s.courseId }))
     .sort((a, b) => a.department.localeCompare(b.department) || a.year - b.year || a.name.localeCompare(b.name));
-  return { canSee, facultyDepts, sections };
+  return { canSee, canSeeSection, facultyDepts, sections };
 }
 
 const chunk = <T,>(list: T[], n: number) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, i * n + n));
@@ -294,7 +306,7 @@ export const loadHodSemester = (db: Db, collegeId: string, uid: string, fresh = 
 async function computeSemester(db: Db, collegeId: string, who: DashScope) {
   const today = nowInIndia().dateISO;
   const collegeRef = db.collection("colleges").doc(collegeId);
-  const { canSee, sections } = await scopedSections(db, collegeId, who);
+  const { canSee, canSeeSection, sections } = await scopedSections(db, collegeId, who);
   const cfg = await loadAcademicYearConfig(db, collegeId);
   const window = windowForAcademicYear(cfg.currentLabel, cfg);
 
@@ -371,7 +383,7 @@ async function computeSemester(db: Db, collegeId: string, who: DashScope) {
 
   // Latest published Regular results per year of study.
   const batchesSnap = await collegeRef.collection("semesterResultBatches").where("status", "==", "PUBLISHED").where("examType", "==", "REGULAR").get();
-  const batches = batchesSnap.docs.map((d) => ({ ...(d.data() as ExamResultBatch), id: d.id })).filter((b) => b.department && canSee(b.department));
+  const batches = batchesSnap.docs.map((d) => ({ ...(d.data() as ExamResultBatch), id: d.id })).filter((b) => b.department && canSee(b.department) && canSeeSection(b.department, Number(b.year), b.courseIds?.[0] ?? ""));
   const latestByYear = new Map<number, { examHeld: string; semester: number }>();
   for (const b of batches) {
     const cur = latestByYear.get(b.year);
