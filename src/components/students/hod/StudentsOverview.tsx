@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 // filters and - for a picked filter or section - its own focused list. The per-student figures (today, semester %,
 // mentor, mobile) also feed the main table's columns (onData). A row opens StudentQuickPanel.
 
-export interface OverviewStudent { r: string; n: string; s: string; t: "P" | "A" | "OD" | null; p: number | null; m: string | null; mob: string; adm: string; g: string }
+export interface OverviewStudent { r: string; n: string; s: string; /** undefined = not known here (the line is left out). */ t?: "P" | "A" | "OD" | null; p: number | null; m: string | null; mob: string; adm: string; g: string }
 interface OverviewSection { key: string; name: string; department: string; year: number; strength: number; mentored: number; todayPct: number | null; semesterPct: number | null; below: number; incharge: string }
 interface Overview {
   kpis: { total: number; boys: number; girls: number; admission: Record<string, number>; below75: number; below65: number; absentToday: number; onDutyToday: number; noMobile: number; noMentor: number; noSection: number };
@@ -245,11 +245,11 @@ export function StudentQuickPanel({ studentId, info, onClose, onOpenProfile, onO
           <div className="space-y-4 text-sm">
             <div className="flex flex-wrap gap-1.5">
               {info.p != null && <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", info.p < SHORT ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300")}>{info.p.toFixed(1)}% this semester</span>}
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{info.adm}</span>
+              {info.adm && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{info.adm}</span>}
               {info.g && <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold">{info.g === "F" ? "Female" : "Male"}</span>}
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-              <dt className="text-muted-foreground">Today</dt><dd>{info.t === "P" ? "Present" : info.t === "A" ? "Absent in every period so far" : info.t === "OD" ? "On duty" : "Not marked yet"}</dd>
+              {info.t !== undefined && <><dt className="text-muted-foreground">Today</dt><dd>{info.t === "P" ? "Present" : info.t === "A" ? "Absent in every period so far" : info.t === "OD" ? "On duty" : "Not marked yet"}</dd></>}
               <dt className="text-muted-foreground">Mentor</dt><dd>{info.m ?? "Not assigned"}</dd>
               <dt className="text-muted-foreground">Mobile</dt><dd className="tabular-nums">{info.mob || "Missing"}</dd>
             </dl>

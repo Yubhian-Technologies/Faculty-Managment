@@ -36,12 +36,12 @@ const CRITICAL = 65;
 // The longest list a number card's detail window carries (the whole college for the Principal).
 const MAX_DETAIL_ROWS = 3000;
 
-interface ScopedSection { id: string; name: string; label: string; department: string; year: number; courseId: string }
+export interface ScopedSection { id: string; name: string; label: string; department: string; year: number; courseId: string }
 
 /** Whose dashboard: an HOD's department tree, or the whole college (Principal / VP / College Admin). */
 export type DashScope = { kind: "hod"; uid: string } | { kind: "college" };
 
-async function scopedSections(db: Db, collegeId: string, who: DashScope) {
+export async function scopedSections(db: Db, collegeId: string, who: DashScope) {
   const scope = who.kind === "hod" ? await getHodDepartmentScope(db, collegeId, who.uid) : null;
   const canSee = (department: string) => !scope || canHodEditDepartment(scope, department);
   const facultyDepts = scope ? facultyManageableDepartmentNames(scope) : null;
@@ -73,7 +73,7 @@ const chunk = <T,>(list: T[], n: number) => Array.from({ length: Math.ceil(list.
 const todayCache = new Map<string, { at: number; value: Awaited<ReturnType<typeof computeToday>> }>();
 // An HOD's figures depend on the department picked in "Working as" (someone holding several HOD roles - the College
 // Admin): key by it too, so a switch never serves the previous department's numbers.
-async function cacheKey(collegeId: string, who: DashScope): Promise<string> {
+export async function cacheKey(collegeId: string, who: DashScope): Promise<string> {
   if (who.kind !== "hod") return `${collegeId}:college`;
   let picked = "";
   try {
