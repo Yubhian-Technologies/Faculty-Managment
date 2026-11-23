@@ -160,7 +160,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
       .map((y) => ({ year: y, count: totalFor(p.cells, { status: "ENROLLED", year: y }) }))
       .filter((y) => y.count > 0);
     // One year of study (a 1st-year HOD): its sections instead of a one-item year list.
-    const sections = new Set(p.cells.filter((c) => c.status === "ENROLLED" && c.count > 0 && c.section).map((c) => c.section)).size;
+    const sections = new Set(p.cells.filter((c) => c.count > 0 && c.section && totalFor([c], { status: "ENROLLED" }) > 0).map((c) => `${c.branch}|${c.year}|${c.section}`)).size;
     return { total: sum.total, years, sections };
   }, [strength.data]);
 
