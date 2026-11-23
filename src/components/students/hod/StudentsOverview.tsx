@@ -8,18 +8,18 @@ import { cn } from "@/lib/utils";
 
 // HOD Students page overview (GET /api/college/hod/students-overview): number cards, one card per section, quick
 // filters and - for a picked filter or section - its own focused list. The per-student figures (today, semester %,
-// mentor, mobile, login) also feed the main table's columns (onData). A row opens StudentQuickPanel.
+// mentor, mobile) also feed the main table's columns (onData). A row opens StudentQuickPanel.
 
-export interface OverviewStudent { r: string; n: string; s: string; t: "P" | "A" | "OD" | null; p: number | null; m: string | null; mob: boolean; login: boolean; adm: string; g: string }
+export interface OverviewStudent { r: string; n: string; s: string; t: "P" | "A" | "OD" | null; p: number | null; m: string | null; mob: string; adm: string; g: string }
 interface OverviewSection { key: string; name: string; department: string; year: number; strength: number; mentored: number; todayPct: number | null; semesterPct: number | null; below: number; incharge: string }
 interface Overview {
-  kpis: { total: number; boys: number; girls: number; admission: Record<string, number>; below75: number; below65: number; absentToday: number; onDutyToday: number; noMobile: number; noMentor: number; noLogin: number; noSection: number };
+  kpis: { total: number; boys: number; girls: number; admission: Record<string, number>; below75: number; below65: number; absentToday: number; onDutyToday: number; noMobile: number; noMentor: number; noSection: number };
   sections: OverviewSection[];
   students: Record<string, OverviewStudent>;
   order: string[];
 }
 
-type Chip = "low" | "absent" | "nomentor" | "nomobile" | "nologin" | "nosection" | `adm:${string}`;
+type Chip = "low" | "absent" | "nomentor" | "nomobile" | "nosection" | `adm:${string}`;
 const SHORT = 75;
 const fmt = (p: number | null) => (p == null ? "-" : `${p.toFixed(1)}%`);
 
@@ -93,7 +93,6 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
         case "absent": return s.t === "A";
         case "nomentor": return !s.m;
         case "nomobile": return !s.mob;
-        case "nologin": return !s.login;
         case "nosection": return !s.s;
         case null: return true;
         default: return chip.startsWith("adm:") ? s.adm === chip.slice(4) : true;
@@ -109,7 +108,7 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
   const toggle = (c: Chip) => setChip((cur) => (cur === c ? null : c));
   const chips: [Chip, string, number][] = [
     ["low", `Below ${SHORT}%`, k.below75], ["absent", "Absent Today", k.absentToday], ["nomentor", "No Mentor", k.noMentor],
-    ["nomobile", "No Mobile", k.noMobile], ["nologin", "No Login", k.noLogin], ...(k.noSection ? [["nosection", "No Section", k.noSection] as [Chip, string, number]] : []),
+    ["nomobile", "No Mobile", k.noMobile], ...(k.noSection ? [["nosection", "No Section", k.noSection] as [Chip, string, number]] : []),
     ...adm.map(([a, n]) => [`adm:${a}` as Chip, a, n] as [Chip, string, number]),
   ];
 
@@ -128,8 +127,8 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
           sub={k.total ? <>{((k.below75 / k.total) * 100).toFixed(1)}% · {k.below65} below 65%</> : undefined} />
         <Kpi icon={CalendarX2} label="Absent Today" value={k.absentToday} active={chip === "absent"} onClick={() => toggle("absent")}
           sub={`every period so far${k.onDutyToday ? ` · ${k.onDutyToday} on duty` : ""}`} />
-        <Kpi icon={UserX} tone={k.noMobile || k.noMentor || k.noLogin ? "warn" : undefined} label="Data Gaps" value={Math.max(k.noMobile, k.noMentor, k.noLogin, k.noSection)}
-          active={chip === "nomobile"} onClick={() => toggle("nomobile")} sub={`no mobile ${k.noMobile} · no mentor ${k.noMentor} · no login ${k.noLogin}`} />
+        <Kpi icon={UserX} tone={k.noMobile || k.noMentor ? "warn" : undefined} label="Data Gaps" value={Math.max(k.noMobile, k.noMentor, k.noSection)}
+          active={chip === "nomobile"} onClick={() => toggle("nomobile")} sub={`no mobile ${k.noMobile} · no mentor ${k.noMentor}`} />
       </section>
 
       {data.sections.length > 0 && (
@@ -167,7 +166,7 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
         <div className="overflow-hidden rounded-lg border">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50"><tr>{["Regd. No", "Name", "Section", "Today", "Attendance", "Mentor", "Mobile", "Login"].map((h) => <th key={h} className="whitespace-nowrap px-4 py-3 text-left font-medium text-muted-foreground">{h}</th>)}</tr></thead>
+              <thead className="bg-muted/50"><tr>{["Regd. No", "Name", "Section", "Today", "Attendance", "Mentor", "Mobile"].map((h) => <th key={h} className="whitespace-nowrap px-4 py-3 text-left font-medium text-muted-foreground">{h}</th>)}</tr></thead>
               <tbody className="divide-y">
                 {focused.length === 0 ? (
                   <tr><td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">No students match this filter.</td></tr>
@@ -182,8 +181,7 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
                       <td className="px-4 py-2.5"><TodayMark t={s.t} /></td>
                       <td className="px-4 py-2.5"><PctCell p={s.p} /></td>
                       <td className="whitespace-nowrap px-4 py-2.5">{s.m ?? <Missing>Not assigned</Missing>}</td>
-                      <td className="px-4 py-2.5">{s.mob ? "✓" : <Missing>Missing</Missing>}</td>
-                      <td className="px-4 py-2.5">{s.login ? "✓" : <span className="text-xs text-muted-foreground">Not created</span>}</td>
+                      <td className="px-4 py-2.5 tabular-nums">{s.mob || <Missing>Missing</Missing>}</td>
                     </tr>
                   );
                 })}
@@ -238,8 +236,7 @@ export function StudentQuickPanel({ studentId, info, onClose, onOpenProfile, onO
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
               <dt className="text-muted-foreground">Today</dt><dd>{info.t === "P" ? "Present" : info.t === "A" ? "Absent in every period so far" : info.t === "OD" ? "On duty" : "Not marked yet"}</dd>
               <dt className="text-muted-foreground">Mentor</dt><dd>{info.m ?? "Not assigned"}</dd>
-              <dt className="text-muted-foreground">Mobile</dt><dd>{info.mob ? "On record" : "Missing"}</dd>
-              <dt className="text-muted-foreground">Login</dt><dd>{info.login ? "Created" : "Not created"}</dd>
+              <dt className="text-muted-foreground">Mobile</dt><dd className="tabular-nums">{info.mob || "Missing"}</dd>
             </dl>
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Subject-wise attendance{total ? ` · ${total.attend}/${total.held} (${total.percent.toFixed(1)}%)` : ""}</p>

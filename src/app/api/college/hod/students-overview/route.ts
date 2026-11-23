@@ -10,7 +10,7 @@ import { ACTIVE_HOD_DEPT_COOKIE } from "@/lib/roles/activeHodDepartment";
 
 // The HOD Students page's overview, for the students its filters show (Department / branch / Course / Year - the same
 // roster as the list): number cards, one card per section, and per student today's mark, semester %, mentor, mobile
-// and login - for the table's columns and the quick filters. Attendance comes from the HOD dashboard's figures
+// - for the table's columns and the quick filters. Attendance comes from the HOD dashboard's figures
 // (today read fresh-ish, 60 s; semester kept 10 minutes), counted the same way as the reports.
 
 const LEFT = new Set(["DISCONTINUED", "GRADUATED", "TRANSFERRED", "PASSED_OUT"]);
@@ -50,9 +50,9 @@ export async function GET(request: Request) {
     const todayBy = att.today;
     const pctBy = att.pct;
 
-    const k = { total: students.length, boys: 0, girls: 0, admission: {} as Record<string, number>, below75: 0, below65: 0, absentToday: 0, onDutyToday: 0, noMobile: 0, noMentor: 0, noLogin: 0, noSection: 0 };
+    const k = { total: students.length, boys: 0, girls: 0, admission: {} as Record<string, number>, below75: 0, below65: 0, absentToday: 0, onDutyToday: 0, noMobile: 0, noMentor: 0, noSection: 0 };
     const bySection = new Map<string, { key: string; name: string; department: string; year: number; strength: number; mentored: number }>();
-    const rows: Record<string, { r: string; n: string; s: string; t: "P" | "A" | "OD" | null; p: number | null; m: string | null; mob: boolean; login: boolean; adm: string; g: string }> = {};
+    const rows: Record<string, { r: string; n: string; s: string; t: "P" | "A" | "OD" | null; p: number | null; m: string | null; mob: string; adm: string; g: string }> = {};
     for (const s of students) {
       const g = genderOf(s.gender);
       if (g === "M") k.boys += 1; else if (g === "F") k.girls += 1;
@@ -64,12 +64,10 @@ export async function GET(request: Request) {
       const t = todayBy[s.id] ?? null;
       if (t === "A") k.absentToday += 1;
       if (t === "OD") k.onDutyToday += 1;
-      const mob = !!String(s.mobileNo ?? "").trim();
-      const login = !!s.uid;
+      const mob = String(s.mobileNo ?? "").trim();
       const mentor = (s as { mentorUid?: string; mentorName?: string }).mentorUid ? String((s as { mentorName?: string }).mentorName ?? "Assigned") : null;
       if (!mob) k.noMobile += 1;
       if (!mentor) k.noMentor += 1;
-      if (!login) k.noLogin += 1;
       if (!s.section) k.noSection += 1;
       else {
         const key = `${s.department}|${Number(s.year)}|${s.section}`;
@@ -78,7 +76,7 @@ export async function GET(request: Request) {
         if (mentor) cur.mentored += 1;
         bySection.set(key, cur);
       }
-      rows[s.id] = { r: String(s.rollNumber ?? ""), n: String(s.name ?? ""), s: String(s.section ?? ""), t, p: pct, m: mentor, mob, login, adm, g };
+      rows[s.id] = { r: String(s.rollNumber ?? ""), n: String(s.name ?? ""), s: String(s.section ?? ""), t, p: pct, m: mentor, mob, adm, g };
     }
 
     const sections = [...bySection.values()]

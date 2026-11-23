@@ -1190,12 +1190,11 @@ function HodStudentsContent() {
           ? <span>{r.section}</span>
           : <Badge variant="outline" className="text-amber-600 border-amber-300">Unassigned</Badge>,
     },
-    // From the overview (the same figures as the HOD dashboard): today's mark, semester %, mentor, mobile, login.
+    // From the overview (the same figures as the HOD dashboard): today's mark, semester %, mentor, mobile.
     { key: "today", header: "Today", excludeFromCsv: true, render: (r) => <TodayMark t={overviewRows?.[r.id]?.t} /> },
     { key: "attendancePct", header: "Attendance", excludeFromCsv: true, render: (r) => <PctCell p={overviewRows?.[r.id]?.p} /> },
     { key: "mentor", header: "Mentor", hideOnMobile: true, excludeFromCsv: true, render: (r) => !overviewRows ? <span className="text-muted-foreground/40">-</span> : overviewRows[r.id]?.m ? <span className="text-sm">{overviewRows[r.id]!.m}</span> : <Missing>Not assigned</Missing> },
-    { key: "mobile", header: "Mobile", hideOnMobile: true, excludeFromCsv: true, render: (r) => !overviewRows ? <span className="text-muted-foreground/40">-</span> : overviewRows[r.id]?.mob ? "✓" : <Missing>Missing</Missing> },
-    { key: "login", header: "Login", hideOnMobile: true, excludeFromCsv: true, render: (r) => !overviewRows ? <span className="text-muted-foreground/40">-</span> : overviewRows[r.id]?.login ? "✓" : <span className="text-xs text-muted-foreground">Not created</span> },
+    { key: "mobile", header: "Mobile", hideOnMobile: true, excludeFromCsv: true, render: (r) => !overviewRows ? <span className="text-muted-foreground/40">-</span> : overviewRows[r.id]?.mob ? <span className="text-sm tabular-nums">{overviewRows[r.id]!.mob}</span> : <Missing>Missing</Missing> },
     {
       key: "status",
       header: "Status",
@@ -1241,7 +1240,7 @@ function HodStudentsContent() {
   // The read-only incoming list has no select / action columns.
   // Lab Batch only when someone in view has one; the overview's columns only on the department roster.
   const anyLabBatch = students.some((r) => !!r.labBatch);
-  const overviewKeys = new Set(["today", "attendancePct", "mentor", "mobile", "login"]);
+  const overviewKeys = new Set(["today", "attendancePct", "mentor", "mobile"]);
   const baseColumns = columns.filter((c) => (c.key !== "labBatch" || anyLabBatch) && (!isFreshmanView || !overviewKeys.has(c.key)));
   const visibleColumns = isFreshmanView ? baseColumns.filter((c) => c.key !== "actions" && c.key !== "select") : baseColumns;
 
