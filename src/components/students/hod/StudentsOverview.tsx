@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CalendarX2, GraduationCap, LayoutGrid, Tags, UserX } from "lucide-react";
+import { AlertTriangle, CalendarX2, GraduationCap, LayoutGrid, Tags } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,7 @@ interface Overview {
   order: string[];
 }
 
-type Chip = "low" | "absent" | "nomentor" | "nomobile" | "nosection" | `adm:${string}`;
+type Chip = "low" | "absent" | "nomentor" | "nosection" | `adm:${string}`;
 const SHORT = 75;
 const fmt = (p: number | null) => (p == null ? "-" : `${p.toFixed(1)}%`);
 
@@ -92,7 +92,6 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
         case "low": return s.p != null && s.p < SHORT;
         case "absent": return s.t === "A";
         case "nomentor": return !s.m;
-        case "nomobile": return !s.mob;
         case "nosection": return !s.s;
         case null: return true;
         default: return chip.startsWith("adm:") ? s.adm === chip.slice(4) : true;
@@ -101,20 +100,20 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
   }, [data, chip, section]);
 
   if (error) return <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>;
-  if (!data) return <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{Array.from({ length: 6 }, (_, i) => <div key={i} className="h-28 animate-pulse rounded-2xl bg-muted" />)}</div>;
+  if (!data) return <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">{Array.from({ length: 5 }, (_, i) => <div key={i} className="h-28 animate-pulse rounded-2xl bg-muted" />)}</div>;
 
   const k = data.kpis;
   const adm = Object.entries(k.admission).sort((a, b) => b[1] - a[1]);
   const toggle = (c: Chip) => setChip((cur) => (cur === c ? null : c));
   const chips: [Chip, string, number][] = [
     ["low", `Below ${SHORT}%`, k.below75], ["absent", "Absent Today", k.absentToday], ["nomentor", "No Mentor", k.noMentor],
-    ["nomobile", "No Mobile", k.noMobile], ...(k.noSection ? [["nosection", "No Section", k.noSection] as [Chip, string, number]] : []),
+    ...(k.noSection ? [["nosection", "No Section", k.noSection] as [Chip, string, number]] : []),
     ...adm.map(([a, n]) => [`adm:${a}` as Chip, a, n] as [Chip, string, number]),
   ];
 
   return (
     <div className="space-y-4">
-      <section aria-label="Key numbers" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <section aria-label="Key numbers" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Kpi icon={GraduationCap} label="Total Students" value={k.total} sub={`${k.boys} boys · ${k.girls} girls`}>
           <Bar parts={[{ n: k.boys, className: "bg-primary" }, { n: k.girls, className: "bg-pink-400" }]} />
         </Kpi>
@@ -127,8 +126,6 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
           sub={k.total ? <>{((k.below75 / k.total) * 100).toFixed(1)}% · {k.below65} below 65%</> : undefined} />
         <Kpi icon={CalendarX2} label="Absent Today" value={k.absentToday} active={chip === "absent"} onClick={() => toggle("absent")}
           sub={`every period so far${k.onDutyToday ? ` · ${k.onDutyToday} on duty` : ""}`} />
-        <Kpi icon={UserX} tone={k.noMobile || k.noMentor ? "warn" : undefined} label="Data Gaps" value={Math.max(k.noMobile, k.noMentor, k.noSection)}
-          active={chip === "nomobile"} onClick={() => toggle("nomobile")} sub={`no mobile ${k.noMobile} · no mentor ${k.noMentor}`} />
       </section>
 
       {data.sections.length > 0 && (
