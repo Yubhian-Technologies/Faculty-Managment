@@ -1,5 +1,6 @@
 "use client";
 
+import { compareRollNumbers } from "@/lib/students/listOrder";
 import { useState } from "react";
 import { Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,7 +44,7 @@ export function StudentAttendanceByStudentView({ title = "Student Attendance His
           (s.department === section.department || s.secondaryDepartment === section.department) &&
           (!section.courseId || !s.courseId || s.courseId === section.courseId)
       );
-      rows.sort((a, b) => String(a.rollNumber).localeCompare(String(b.rollNumber), undefined, { numeric: true }));
+      rows.sort((a, b) => compareRollNumbers(String(a.rollNumber ?? ""), String(b.rollNumber ?? "")));
       setStudents(rows);
       setLoadedSectionId(section.id);
     } catch {

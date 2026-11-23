@@ -1,3 +1,4 @@
+import { compareRollNumbers } from "@/lib/students/listOrder";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
@@ -44,7 +45,7 @@ export async function GET(_request: Request, { params }: Params) {
     const batch = snap.data() as ExamResultBatch;
     const list = records.docs
       .map((d) => ({ ...(d.data() as ExamResultRecord), id: d.id }))
-      .sort((a, b) => String(a.rollNumberUpper ?? "").localeCompare(String(b.rollNumberUpper ?? "")));
+      .sort((a, b) => compareRollNumbers(String(a.rollNumberUpper ?? ""), String(b.rollNumberUpper ?? "")));
 
     // Every result these students have: this sheet's own, plus published ones.
     const studentIds = [...new Set(list.map((r) => r.studentId))];
@@ -105,7 +106,7 @@ export async function GET(_request: Request, { params }: Params) {
         if (Number.isFinite(joinedYear) && batch.year < joinedYear) continue;
         missing.push({ rollNumber: st.rollNumber ?? "", name: st.name ?? "" });
       }
-      missing = missing.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber)).slice(0, 500);
+      missing = missing.sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber)).slice(0, 500);
     }
 
     return NextResponse.json({ batch: { ...batch, id: snap.id }, records: list, standings, rules, missing });

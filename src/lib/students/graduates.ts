@@ -1,3 +1,4 @@
+import { compareRollNumbers } from "@/lib/students/listOrder";
 // Shared by the server (students GET, `graduates=1`) and GraduatedStudentsView
 // so the two can't drift: the same "Unspecified" bucket labels, the same
 // Course -> Batch -> roll ordering, and the same notion of which course/batch a
@@ -34,7 +35,7 @@ export function compareGraduates(a: GraduateLike, b: GraduateLike): number {
   return (
     graduateCourseLabel(a).localeCompare(graduateCourseLabel(b))
     || graduateBatchLabel(b).localeCompare(graduateBatchLabel(a))
-    || (a.rollNumber ?? "").localeCompare(b.rollNumber ?? "")
+    || compareRollNumbers(a.rollNumber, b.rollNumber)
   );
 }
 

@@ -1,3 +1,4 @@
+import { compareRollNumbers } from "@/lib/students/listOrder";
 import type { Firestore } from "firebase-admin/firestore";
 import { leavePartOn, partCovers } from "@/lib/leave/leaveDayParts";
 import { canHodEditDepartment, facultyManageableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
@@ -178,7 +179,7 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
     }
     c.present ??= 0;
   }
-  for (const c of Object.values(cells)) c.absent?.sort((x, y) => x.rollNumber.localeCompare(y.rollNumber, undefined, { numeric: true }));
+  for (const c of Object.values(cells)) c.absent?.sort((x, y) => compareRollNumbers(x.rollNumber, y.rollNumber));
 
   const all = Object.values(cells);
   const periods = [...new Set(Object.keys(cells).map((k) => Number(k.split("|")[1])))].filter(Number.isFinite).sort((a, b) => a - b);
@@ -219,7 +220,7 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
         absentees.push({ name: v.name, rollNumber: v.rollNumber, section: sec?.label ?? "", department: sec?.department ?? "", periods: v.held });
       }
     }
-    absentees.sort((a, b) => a.section.localeCompare(b.section) || a.rollNumber.localeCompare(b.rollNumber));
+    absentees.sort((a, b) => a.section.localeCompare(b.section) || compareRollNumbers(a.rollNumber, b.rollNumber));
   }
   const counted = sectionRows.reduce((n, r) => n + r.counted, 0);
   const present = sectionRows.reduce((n, r) => n + r.present, 0);

@@ -1,5 +1,6 @@
 "use client";
 
+import { compareRollNumbers } from "@/lib/students/listOrder";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -128,7 +129,6 @@ function ImportSemesterResults() {
   const groups = useMemo(() => buildCourseGroups(courses), [courses]);
   const group = groups.find((g) => g.key === courseKey) ?? null;
 
-
   // The programme's year timings (for its semesters).
   useEffect(() => {
     if (!group) return;
@@ -239,7 +239,7 @@ function ImportSemesterResults() {
           if (!res.ok) throw new Error(json.error);
           prefilled.push(...(json.rows ?? []));
         }
-        prefilled.sort((x, y) => x.rollNumber.localeCompare(y.rollNumber));
+        prefilled.sort((x, y) => compareRollNumbers(x.rollNumber, y.rollNumber));
       }
       const ExcelJS = (await import("exceljs")).default;
       const wb = new ExcelJS.Workbook();

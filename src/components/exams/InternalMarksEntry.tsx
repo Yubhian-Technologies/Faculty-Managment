@@ -1,5 +1,6 @@
 "use client";
 
+import { compareStudentsForList } from "@/lib/students/listOrder";
 import { useEffect, useMemo, useState } from "react";
 import { Download, FileText, Info, Lock, Pencil, RefreshCw, Upload } from "lucide-react";
 import { istDateKey } from "@/lib/attendance/istTime";
@@ -195,7 +196,7 @@ export function InternalMarksEntry({ onBehalf = false }: { onBehalf?: boolean } 
         setLoadError(json.error ?? "Unable to load students");
         return;
       }
-      setBatch(json.batch);
+      setBatch(inRollOrder(json.batch));
       setConfiguration(json.configuration);
       const sh = json.sheets ?? {};
       setSheets(sh);
@@ -358,7 +359,7 @@ export function InternalMarksEntry({ onBehalf = false }: { onBehalf?: boolean } 
       });
       const json = (await res.json()) as { batch?: InternalExamMarksBatch; error?: string };
       if (!res.ok || !json.batch) throw new Error(json.error ?? "Unable to save");
-      setBatch(json.batch);
+      setBatch(inRollOrder(json.batch));
       toast({ variant: "success", title: "Marks saved as a draft" });
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to save" });
@@ -379,7 +380,7 @@ export function InternalMarksEntry({ onBehalf = false }: { onBehalf?: boolean } 
       });
       const json = (await res.json()) as { batch?: InternalExamMarksBatch; error?: string };
       if (!res.ok || !json.batch) throw new Error(json.error ?? "Unable to submit marks");
-      setBatch(json.batch);
+      setBatch(inRollOrder(json.batch));
       toast({ variant: "success", title: "Marks submitted" });
     } catch (err) {
       toast({ variant: "destructive", title: err instanceof Error ? err.message : "Unable to submit marks" });
@@ -647,4 +648,9 @@ export function InternalMarksEntry({ onBehalf = false }: { onBehalf?: boolean } 
       )}
     </div>
   );
+}
+
+/** The sheet's rows in Regd. No order (12A0 after 1299) - a sheet created before the order fix keeps its stored order. */
+function inRollOrder<T extends { entries: { studentId: string; rollNumber: string; studentName?: string; name?: string }[] }>(b: T): T {
+  return { ...b, entries: [...b.entries].sort((x, y) => compareStudentsForList({ id: x.studentId, rollNumber: x.rollNumber, name: x.studentName ?? x.name }, { id: y.studentId, rollNumber: y.rollNumber, name: y.studentName ?? y.name })) };
 }

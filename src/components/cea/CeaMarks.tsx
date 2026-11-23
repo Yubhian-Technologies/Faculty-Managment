@@ -1,5 +1,6 @@
 "use client";
 
+import { compareStudentsForList } from "@/lib/students/listOrder";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -93,7 +94,7 @@ function SheetView({ assignmentId, unit, onBack }: { assignmentId: string; unit:
   const [busy, setBusy] = useState(false);
 
   const take = (s: CeaMarksSheet) => {
-    setSheet(s); setHeldOn(s.heldOn ?? "");
+    setSheet({ ...s, entries: [...s.entries].sort((x, y) => compareStudentsForList({ id: x.studentId, rollNumber: x.rollNumber, name: x.name }, { id: y.studentId, rollNumber: y.rollNumber, name: y.name })) }); setHeldOn(s.heldOn ?? "");
     setDraft(Object.fromEntries(s.entries.map((e) => [e.studentId, { marks: e.marks == null || e.absent ? "" : String(e.marks), absent: !!e.absent }])));
   };
   useEffect(() => {
