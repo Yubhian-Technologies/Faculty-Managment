@@ -172,7 +172,7 @@ async function loadCandidates(
       if (classifyHodStudent(data, ctx) !== f.level) continue;
       // A discontinued student has no section by design - never part of the "unassigned" pool.
       if (f.unassignedOnly && data.status === "DISCONTINUED") continue;
-      if (f.coreDepartment && data.secondaryDepartment !== f.coreDepartment) continue;
+      if (f.coreDepartment && data.secondaryDepartment !== f.coreDepartment && data.department !== f.coreDepartment) continue;
       out.push({ id: d.id, ...data, accessLevel: f.level });
     }
   }
@@ -336,14 +336,21 @@ export async function handleHodStudentsRequest(
   }
 
   const department = (params.get("department") ?? "").trim();
+  const coreDepartment = (params.get("coreDepartment") ?? "").trim();
   const yearParam = params.get("year");
+  // A shared-year department (Basic Science - Chemistry) and a branch it groups (CS&BS): the students may be filed
+  // under the feeder with the branch as `secondaryDepartment` (VWU) or under the branch itself (VIT) - both count.
+  // The feeder picked alone also brings the branches it groups (their shared year; classifyHodStudent keeps the year).
+  let departmentNames: string[] | null = department
+    ? await resolveRollupDepartmentNames(db.collection("colleges").doc(session.collegeId), ctx.departments as DepartmentWithId[], department)
+    : null;
+  if (departmentNames && coreDepartment) departmentNames = [...new Set([...departmentNames, coreDepartment])];
+  else if (departmentNames && ctx.scope.ownDepartmentNames.includes(department)) departmentNames = [...new Set([...departmentNames, ...ctx.scope.managedDepartmentNames])];
   const filters: HodListFilters = {
     level,
     freshmanDept: incoming,
-    departmentNames: department
-      ? await resolveRollupDepartmentNames(db.collection("colleges").doc(session.collegeId), ctx.departments as DepartmentWithId[], department)
-      : null,
-    coreDepartment: (params.get("coreDepartment") ?? "").trim(),
+    departmentNames,
+    coreDepartment,
     course: (params.get("course") ?? "").trim(),
     year: yearParam && Number.isFinite(Number(yearParam)) ? Number(yearParam) : null,
     unassignedOnly: params.get("unassigned") === "1",
