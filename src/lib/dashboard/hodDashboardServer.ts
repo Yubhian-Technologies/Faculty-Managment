@@ -155,6 +155,20 @@ async function computeToday(db: Db, collegeId: string, who: DashScope) {
     if (!cells[key]) cells[key] = { status: "POSTED", covered: false, subject: s.subjectCode || s.subjectName || "", faculty: s.facultyName ?? "", start: "", end: "" };
   }
 
+  // Head-count of each posted period: present (on duty counts as there) / everyone marked, and who was absent.
+  for (const s of sessions) {
+    const c = cells[`${s.sectionId}|${s.periodNumber}`];
+    if (!c) continue;
+    for (const e of s.entries ?? []) {
+      c.total = (c.total ?? 0) + 1;
+      if (e.status === "PRESENT" || isOnDutyMark(e.status)) c.present = (c.present ?? 0) + 1;
+      // Names only on an HOD's own grid (the college-wide one would carry every section's list).
+      else if (!college) (c.absent ??= []).push({ name: e.name, rollNumber: e.rollNumber });
+    }
+    c.present ??= 0;
+  }
+  for (const c of Object.values(cells)) c.absent?.sort((x, y) => x.rollNumber.localeCompare(y.rollNumber, undefined, { numeric: true }));
+
   const all = Object.values(cells);
   const periods = [...new Set(Object.keys(cells).map((k) => Number(k.split("|")[1])))].filter(Number.isFinite).sort((a, b) => a - b);
   const gridSections = sections.filter((s) => periods.some((p) => cells[`${s.id}|${p}`]));

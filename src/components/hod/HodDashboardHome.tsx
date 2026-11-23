@@ -88,6 +88,8 @@ function ClassGrid({ data, onMore }: { data: TodayData["classes"]; onMore?: () =
   // With many sections the grid scrolls inside the card (period row and section names stay in view), and the
   // HOD can narrow it to the sections with a period not posted yet.
   const [onlyOverdue, setOnlyOverdue] = useState(false);
+  // A posted cell clicked: its absentees are listed under the grid.
+  const [picked, setPicked] = useState<string | null>(null);
   if (data.total === 0) return <p className="py-6 text-center text-sm text-muted-foreground">No Classes Scheduled Today</p>;
   const overdueIds = new Set(data.sections.filter((s) => data.periods.some((p) => data.cells[`${s.id}|${p}`]?.status === "OVERDUE")).map((s) => s.id));
   const rows = onlyOverdue ? data.sections.filter((s) => overdueIds.has(s.id)) : data.sections;
@@ -127,9 +129,26 @@ function ClassGrid({ data, onMore }: { data: TodayData["classes"]; onMore?: () =
                   if (!c) return <td key={p} className="h-7 min-w-10 text-center text-muted-foreground/60">–</td>;
                   const look = CELL[c.status];
                   const covered = c.covered && c.status !== "OVERDUE";
+                  // Posted: the head-count, present / marked (below 75% shown amber); click for the absentees.
+                  const counted = c.status === "POSTED" && !!c.total;
+                  const low = counted && (c.present ?? 0) / c.total! < SHORT / 100;
+                  const key = `${s.id}|${p}`;
+                  const title = `${s.label} · P${p}${c.start ? ` (${hhmm12(c.start)})` : ""} · ${c.subject} · ${c.faculty} · ${covered ? "Substitute / adjusted · " : ""}${counted ? `${c.present} present of ${c.total} · ${c.total! - c.present!} absent` : look.label}`;
+                  if (counted) {
+                    return (
+                      <td key={p} title={title} className="p-0">
+                        <button type="button" onClick={() => setPicked(picked === key ? null : key)}
+                          className={cn("h-7 w-full min-w-12 rounded-md px-1 text-center text-[11px] font-semibold tabular-nums",
+                            low ? "bg-amber-100 text-amber-900 ring-1 ring-inset ring-amber-300" : "bg-emerald-500 text-white",
+                            covered && "ring-2 ring-inset ring-amber-400", picked === key && "outline outline-2 outline-offset-1 outline-primary")}>
+                          {c.present}/{c.total}
+                        </button>
+                      </td>
+                    );
+                  }
                   return (
-                    <td key={p} title={`${s.label} · P${p}${c.start ? ` (${hhmm12(c.start)})` : ""} · ${c.subject} · ${c.faculty} · ${covered ? "Substitute / adjusted · " : ""}${look.label}`}
-                      className={cn("h-7 min-w-10 rounded-md text-center font-semibold", covered ? "bg-amber-400 text-amber-950" : look.cls)}>
+                    <td key={p} title={title}
+                      className={cn("h-7 min-w-12 rounded-md text-center font-semibold", covered ? "bg-amber-400 text-amber-950" : look.cls)}>
                       {covered ? "⇄" : look.mark}
                     </td>
                   );
@@ -137,11 +156,41 @@ function ClassGrid({ data, onMore }: { data: TodayData["classes"]; onMore?: () =
               </tr>
             ))}
           </tbody>
+          {/* Each period's head-count over every section posted so far. */}
+          <tfoot className="sticky bottom-0 bg-card">
+            <tr>
+              <th scope="row" className="sticky left-0 z-[1] bg-card pr-2 pt-1 text-left font-semibold">Total</th>
+              {data.periods.map((p) => {
+                const cs = data.sections.map((sec) => data.cells[`${sec.id}|${p}`]).filter((c) => c?.status === "POSTED" && c.total);
+                const pr = cs.reduce((n, c) => n + (c!.present ?? 0), 0), tot = cs.reduce((n, c) => n + (c!.total ?? 0), 0);
+                return <td key={p} className="pt-1 text-center text-[11px] font-semibold tabular-nums text-foreground/80" title={tot ? `${cs.length} section${cs.length === 1 ? "" : "s"} posted` : "Nothing posted yet"}>{tot ? `${pr}/${tot}` : "–"}</td>;
+              })}
+            </tr>
+          </tfoot>
         </table>
       </div>
       )}
+      {picked && data.cells[picked]?.total ? (() => {
+        const c = data.cells[picked];
+        const [sid, p] = picked.split("|");
+        const sec = data.sections.find((x) => x.id === sid);
+        const absent = c.absent ?? [];
+        return (
+          <div className="mt-2 rounded-lg border bg-muted/30 p-2.5 text-xs">
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold">{sec?.label} · P{p} · {c.subject} · {c.faculty} - {c.present} present of {c.total}, {absent.length} absent</p>
+              <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setPicked(null)}>Close</button>
+            </div>
+            {absent.length === 0 ? <p className="text-muted-foreground">Everyone was present.</p> : (
+              <ul className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-3">
+                {absent.map((a) => <li key={a.rollNumber + a.name} className="truncate"><span className="tabular-nums text-muted-foreground">{a.rollNumber}</span> {a.name}</li>)}
+              </ul>
+            )}
+          </div>
+        );
+      })() : null}
       <Legend items={[
-        { color: "#10b981", label: "Posted ✓" }, { color: "#2563eb", label: "Running now ●" },
+        { color: "#10b981", label: "Posted (present / marked)" }, { color: "#fcd34d", label: `Posted, below ${SHORT}%` }, { color: "#2563eb", label: "Running now ●" },
         { color: "#ef4444", label: "Not posted !" }, { color: "#fbbf24", label: "Substitute / adjusted ⇄" }, { color: "#cbd5e1", label: "Later today" },
       ]} />
       {data.overdue.length > 0 && (
