@@ -412,6 +412,60 @@ const PENDING_STATUSES: LeaveRequestStatus[] = ["PENDING_ACCEPTANCE", "PENDING_H
 // - cancelling something already lived through doesn't make sense. Pending
 // requests have no such restriction (the server enforces both the same way -
 // see applications/[id]/route.ts's CANCEL branch).
+/** Each substitute / handover asked for this leave and their answer, so the faculty member sees whose answer the
+ *  leave is waiting on (it goes for approval only once everyone has accepted). */
+function SubstituteStatus({ request }: { request: LeaveRequest }) {
+  const list = request.adjustmentRequests ?? [];
+  const waiting = list.filter((a) => a.status === "PENDING").length;
+  const declined = list.filter((a) => a.status === "DECLINED").length;
+  const pendingStage = request.status === "PENDING_ACCEPTANCE";
+  return (
+    <div className="mt-1.5 rounded-md border bg-muted/30 p-2 text-xs">
+      <p className="font-medium text-foreground/80">
+        Substitute Status
+        {pendingStage && (
+          <span className="font-normal text-muted-foreground">
+            {" "}&middot;{" "}
+            {declined > 0
+              ? `${declined} declined - pick another substitute for those periods`
+              : waiting > 0
+                ? `waiting for ${waiting} of ${list.length} to accept; goes for approval once all accept`
+                : "all accepted"}
+          </span>
+        )}
+      </p>
+      <ul className="mt-1 space-y-1">
+        {list.map((a) => {
+          const periods = a.periods ?? [];
+          const acc = periods.filter((x) => x.status === "ACCEPTED").length;
+          const dates = [...new Set(periods.map((x) => x.date).filter(Boolean))];
+          return (
+            <li key={`${a.kind}-${a.assigneeUid}`} className="flex flex-wrap items-center gap-1.5">
+              <Badge
+                variant={a.status === "ACCEPTED" ? "approved" : a.status === "DECLINED" ? "rejected" : "pending"}
+                className="text-[10px] px-1.5 py-0 font-normal"
+              >
+                {a.status === "ACCEPTED" ? "Accepted" : a.status === "DECLINED" ? "Declined" : "Waiting"}
+              </Badge>
+              <span className="text-foreground/90">{a.assigneeName}</span>
+              <span className="text-muted-foreground">
+                {a.kind === "HANDOVER" ? "Handover" : "Substitute"}
+                {periods.length > 0 && ` · ${periods.length} period${periods.length === 1 ? "" : "s"}`}
+                {periods.length > 1 && acc > 0 && acc < periods.length && ` (${acc} accepted)`}
+                {dates.length > 0 && ` · ${dates.map((d) => dmy(d)).join(", ")}`}
+                {a.respondedAt && a.status !== "PENDING" && ` · answered ${formatDate(a.respondedAt)}`}
+              </span>
+              {a.status === "DECLINED" && a.declineReason && (
+                <span className="w-full pl-1 text-muted-foreground">Reason: {a.declineReason}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function isCancellable(request: LeaveRequest): boolean {
   if (request.isLateAttendancePenalty) return false;
   if (PENDING_STATUSES.includes(request.status)) return true;
@@ -540,20 +594,7 @@ export function LeaveHistoryRow({
             <span className="font-medium text-foreground/80">Handover:</span> {request.handoverToName}
           </p>
         )}
-        {!!request.adjustmentRequests?.length && (
-          <p className="text-xs text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1">
-            <span className="font-medium text-foreground/80">Acceptance:</span>
-            {request.adjustmentRequests.map((a) => (
-              <Badge
-                key={a.assigneeUid}
-                variant={a.status === "ACCEPTED" ? "approved" : a.status === "DECLINED" ? "rejected" : "pending"}
-                className="text-[10px] px-1.5 py-0 font-normal"
-              >
-                {a.assigneeName} · {a.status.toLowerCase()}
-              </Badge>
-            ))}
-          </p>
-        )}
+        {!!request.adjustmentRequests?.length && <SubstituteStatus request={request} />}
         {request.status === "CANCELLED" && request.cancelReason && (
           <p className="text-xs text-muted-foreground mt-0.5">
             <span className="font-medium text-foreground/80">Cancellation reason:</span> {request.cancelReason}

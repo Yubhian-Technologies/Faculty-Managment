@@ -132,6 +132,27 @@ export async function GET(request: Request) {
       return NextResponse.json({ requests: [] });
     }
 
+    // Leaves of the HOD's department still waiting on substitutes / handovers to accept (status PENDING_ACCEPTANCE) -
+    // they reach the HOD's queue only once every one has accepted. Read-only, so the HOD can see who is holding one up.
+    if (url.searchParams.get("scope") === "awaiting-cover") {
+      if (session.role !== "HOD") return NextResponse.json({ requests: [] });
+      const depts = await resolveHodDepartments(db, session.collegeId, session.uid);
+      const snap = await REQUESTS_COL(session.collegeId, db).where("status", "==", "PENDING_ACCEPTANCE").get();
+      const iso = (v: unknown) => (v && typeof (v as { toDate?: () => Date }).toDate === "function" ? (v as { toDate: () => Date }).toDate().toISOString() : typeof v === "string" ? v : null);
+      const requests = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest & { adjustmentRequests?: { kind?: string; assigneeName?: string; status?: string; periods?: { date?: string }[] }[] })
+        .filter((r) => !!r.department && depts.includes(r.department))
+        .map((r) => ({
+          id: r.id, employeeName: r.employeeName, department: r.department, leaveTypeCode: r.leaveTypeCode,
+          fromDate: iso(r.fromDate), toDate: iso(r.toDate), totalDays: r.totalDays, createdAt: iso(r.createdAt),
+          cover: (r.adjustmentRequests ?? []).map((a) => ({
+            kind: a.kind === "HANDOVER" ? "Handover" : "Substitute", assigneeName: a.assigneeName ?? "", status: a.status ?? "PENDING",
+            periods: (a.periods ?? []).length, dates: [...new Set((a.periods ?? []).map((p) => p.date).filter(Boolean))] as string[],
+          })),
+        }));
+      return NextResponse.json({ requests: requests.sort((a, b) => String(a.fromDate ?? "").localeCompare(String(b.fromDate ?? ""))) });
+    }
+
     // On Duty proof queue: APPROVED ODs whose proof has been uploaded and is
     // waiting on this caller to verify it (see lib/leave/odProof.ts). Separate
     // from `approvals` above, which by definition only ever returns PENDING_*
