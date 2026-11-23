@@ -2,6 +2,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import { leavePartOn, partCovers } from "@/lib/leave/leaveDayParts";
 import { canHodEditDepartment, facultyManageableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
 import { canHodEditDepartmentYear, type DepartmentYearRow } from "@/lib/departments/managedBranches";
+import { ACTIVE_HOD_DEPT_COOKIE, decodeActiveHodDepartment } from "@/lib/roles/activeHodDepartment";
 import { getFacultyPeriodsForDate } from "@/lib/timetable/currentPeriod";
 import { whereIn } from "@/lib/firestore/inQuery";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
@@ -69,10 +70,20 @@ const chunk = <T,>(list: T[], n: number) => Array.from({ length: Math.ceil(list.
 
 // Today's figures are kept 60 seconds per viewer (the page refreshes every 5 minutes; several tabs share one read).
 const todayCache = new Map<string, { at: number; value: Awaited<ReturnType<typeof computeToday>> }>();
-const cacheKey = (collegeId: string, who: DashScope) => `${collegeId}:${who.kind === "hod" ? who.uid : "college"}`;
+// An HOD's figures depend on the department picked in "Working as" (someone holding several HOD roles - the College
+// Admin): key by it too, so a switch never serves the previous department's numbers.
+async function cacheKey(collegeId: string, who: DashScope): Promise<string> {
+  if (who.kind !== "hod") return `${collegeId}:college`;
+  let picked = "";
+  try {
+    const { cookies } = await import("next/headers");
+    picked = decodeActiveHodDepartment((await cookies()).get(ACTIVE_HOD_DEPT_COOKIE)?.value, who.uid) ?? "";
+  } catch { /* outside a request - no pick */ }
+  return `${collegeId}:${who.uid}:${picked}`;
+}
 
 export async function loadDashToday(db: Db, collegeId: string, who: DashScope) {
-  const key = cacheKey(collegeId, who);
+  const key = await cacheKey(collegeId, who);
   const hit = todayCache.get(key);
   if (hit && Date.now() - hit.at < 60_000 && !process.env.FIRESTORE_EMULATOR_HOST) return hit.value;
   const value = await computeToday(db, collegeId, who);
@@ -308,7 +319,7 @@ const semesterCache = new Map<string, { at: number; value: Awaited<ReturnType<ty
 const TEN_MINUTES = 10 * 60_000;
 
 export async function loadDashSemester(db: Db, collegeId: string, who: DashScope, fresh = false) {
-  const key = cacheKey(collegeId, who);
+  const key = await cacheKey(collegeId, who);
   const hit = semesterCache.get(key);
   if (!fresh && hit && Date.now() - hit.at < TEN_MINUTES && !process.env.FIRESTORE_EMULATOR_HOST) return hit.value;
   const value = await computeSemester(db, collegeId, who);
