@@ -19,7 +19,19 @@ interface Overview {
   order: string[];
 }
 
-type Chip = "low" | "absent" | "nomentor" | "nosection" | `adm:${string}`;
+// Branch colours for the section cards: a left bar, a light tint and the branch name in the same hue (fixed order).
+const BRANCH_TONES = [
+  { card: "border-l-blue-500 bg-blue-50/60 dark:bg-blue-950/20", text: "text-blue-700 dark:text-blue-300" },
+  { card: "border-l-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/20", text: "text-emerald-700 dark:text-emerald-300" },
+  { card: "border-l-violet-500 bg-violet-50/60 dark:bg-violet-950/20", text: "text-violet-700 dark:text-violet-300" },
+  { card: "border-l-amber-500 bg-amber-50/60 dark:bg-amber-950/20", text: "text-amber-700 dark:text-amber-300" },
+  { card: "border-l-cyan-500 bg-cyan-50/60 dark:bg-cyan-950/20", text: "text-cyan-700 dark:text-cyan-300" },
+  { card: "border-l-rose-500 bg-rose-50/60 dark:bg-rose-950/20", text: "text-rose-700 dark:text-rose-300" },
+  { card: "border-l-teal-500 bg-teal-50/60 dark:bg-teal-950/20", text: "text-teal-700 dark:text-teal-300" },
+  { card: "border-l-orange-500 bg-orange-50/60 dark:bg-orange-950/20", text: "text-orange-700 dark:text-orange-300" },
+];
+
+type Chip = "low" | "absent" | "nosection" | `adm:${string}`;
 const SHORT = 75;
 const fmt = (p: number | null) => (p == null ? "-" : `${p.toFixed(1)}%`);
 
@@ -91,7 +103,6 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
       switch (chip) {
         case "low": return s.p != null && s.p < SHORT;
         case "absent": return s.t === "A";
-        case "nomentor": return !s.m;
         case "nosection": return !s.s;
         case null: return true;
         default: return chip.startsWith("adm:") ? s.adm === chip.slice(4) : true;
@@ -104,9 +115,12 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
 
   const k = data.kpis;
   const adm = Object.entries(k.admission).sort((a, b) => b[1] - a[1]);
+  // One colour per branch (department), in the order the cards list them, so sections of a branch read as a group.
+  const branchIndex = new Map<string, number>();
+  for (const sec of data.sections) if (!branchIndex.has(sec.department)) branchIndex.set(sec.department, branchIndex.size);
   const toggle = (c: Chip) => setChip((cur) => (cur === c ? null : c));
   const chips: [Chip, string, number][] = [
-    ["low", `Below ${SHORT}%`, k.below75], ["absent", "Absent Today", k.absentToday], ["nomentor", "No Mentor", k.noMentor],
+    ["low", `Below ${SHORT}%`, k.below75], ["absent", "Absent Today", k.absentToday],
     ...(k.noSection ? [["nosection", "No Section", k.noSection] as [Chip, string, number]] : []),
     ...adm.map(([a, n]) => [`adm:${a}` as Chip, a, n] as [Chip, string, number]),
   ];
@@ -130,10 +144,13 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
 
       {data.sections.length > 0 && (
         <section aria-label="Sections" className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
-          {data.sections.map((s) => (
+          {data.sections.map((s) => {
+            const tone = BRANCH_TONES[branchIndex.get(s.department)! % BRANCH_TONES.length];
+            return (
             <button key={s.key} type="button" onClick={() => setSection((cur) => (cur === s.name ? null : s.name))}
-              className={cn("flex flex-col gap-2 rounded-2xl border bg-card p-3.5 text-left shadow-sm transition hover:border-primary", section === s.name && "border-primary ring-1 ring-primary")}>
+              className={cn("flex flex-col gap-2 rounded-2xl border border-l-4 p-3.5 text-left shadow-sm transition hover:border-primary", tone.card, section === s.name && "border-primary ring-1 ring-primary")}>
               <span className="flex items-baseline justify-between gap-2"><span className="font-semibold">{s.name}</span><span className="text-xs text-muted-foreground">{s.strength} students</span></span>
+              <span className={cn("-mt-1 truncate text-[11px] font-medium", tone.text)} title={s.department}>{s.department}</span>
               <span className="grid grid-cols-3 gap-1 text-[11px] text-muted-foreground">
                 <span>Today<b className="block text-sm text-foreground tabular-nums">{fmt(s.todayPct)}</b></span>
                 <span>Semester<b className={cn("block text-sm tabular-nums", s.semesterPct != null && s.semesterPct < SHORT ? "text-red-600" : "text-foreground")}>{fmt(s.semesterPct)}</b></span>
@@ -141,7 +158,8 @@ export function StudentsOverview({ query, reloadKey, onData, onFocusChange, onOp
               </span>
               <span className="text-[11px] text-muted-foreground">{s.incharge ? `Class in-charge: ${s.incharge}` : "No class in-charge set"} · Mentors for {s.mentored} of {s.strength}</span>
             </button>
-          ))}
+            );
+          })}
         </section>
       )}
 

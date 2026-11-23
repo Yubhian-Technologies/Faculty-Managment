@@ -327,19 +327,20 @@ function getDepartmentTallies(
 // Turns per-subject tallies (from the scan or the rollup - same shape) into the
 // rows every caller gets: short codes joined, % computed, sorted, with a total.
 async function assemble(db: Firestore, collegeId: string, tallies: SubjectTally[]): Promise<StudentAttendanceHistory> {
-  const shortCodes = await loadShortCodes(db, collegeId, tallies.map((t) => t.subjectId));
+  const meta = await loadSubjectMeta(db, collegeId, tallies.map((t) => t.subjectId));
 
   const subjects: StudentAttendanceSubjectRow[] = tallies
     .map((t) => ({
       subjectId: t.subjectId,
       subjectName: t.subjectName,
       subjectCode: t.subjectCode,
-      ...(shortCodes.get(t.subjectId) ? { shortCode: shortCodes.get(t.subjectId) } : {}),
+      ...(meta.get(t.subjectId)?.shortCode ? { shortCode: meta.get(t.subjectId)!.shortCode } : {}),
       held: t.held,
       attend: t.attended,
       percent: calcPercent(t.attended, t.held) ?? 0,
     }))
-    .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
+    .sort((a, b) => subjectRank(meta.get(a.subjectId), a.subjectName) - subjectRank(meta.get(b.subjectId), b.subjectName)
+      || a.subjectName.localeCompare(b.subjectName));
 
   const totalHeld = subjects.reduce((a, s) => a + s.held, 0);
   const totalAttend = subjects.reduce((a, s) => a + s.attend, 0);
@@ -350,22 +351,35 @@ async function assemble(db: Firestore, collegeId: string, tallies: SubjectTally[
   };
 }
 
-// Sessions only snapshot subjectName/subjectCode, so the mnemonic short code
-// ("CHE") is joined from the Subject doc at read time. A subject without one
-// (or one that has since been deleted) simply has no entry - callers fall back
-// to subjectCode.
-async function loadShortCodes(db: Firestore, collegeId: string, subjectIds: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+interface SubjectMeta { shortCode?: string; type?: string; nonTeachingLoad?: boolean }
+
+/** Subject order on every subject-wise attendance list: theory, then labs, then tutorials / projects, then the
+ *  co-curricular ones (Counselling, Library, Sports ... - type Non-teaching or "Don't include in teaching load");
+ *  A-Z inside each. A subject whose record is gone is placed by its name ("... Lab" with the labs). */
+export function subjectRank(meta: SubjectMeta | undefined, name: string): number {
+  if (meta?.nonTeachingLoad || meta?.type === "NON_TEACHING") return 3;
+  const type = meta?.type ?? (/\blab(oratory)?\b/i.test(name) ? "PRACTICAL" : "THEORY");
+  if (type === "THEORY") return 0;
+  if (type === "PRACTICAL") return 1;
+  return 2;
+}
+
+// Sessions only snapshot subjectName/subjectCode, so the mnemonic short code ("CHE") and the subject's type (for the
+// order) are joined from the Subject doc at read time. A subject without one (or one that has since been deleted)
+// simply has no entry - callers fall back to subjectCode.
+async function loadSubjectMeta(db: Firestore, collegeId: string, subjectIds: string[]): Promise<Map<string, SubjectMeta>> {
+  const out = new Map<string, SubjectMeta>();
   if (subjectIds.length === 0) return out;
   try {
     const col = db.collection("colleges").doc(collegeId).collection("subjects");
     const snaps = await db.getAll(...subjectIds.map((id) => col.doc(id)));
     for (const s of snaps) {
-      const code = (s.data() as { shortCode?: string } | undefined)?.shortCode?.trim();
-      if (s.exists && code) out.set(s.id, code);
+      if (!s.exists) continue;
+      const d = s.data() as { shortCode?: string; type?: string; isNonTeachingLoad?: boolean };
+      out.set(s.id, { shortCode: d.shortCode?.trim() || undefined, type: d.type, nonTeachingLoad: d.isNonTeachingLoad === true });
     }
   } catch (err) {
-    console.error("[studentAttendance/history shortCodes]", err);
+    console.error("[studentAttendance/history subjects]", err);
   }
   return out;
 }
