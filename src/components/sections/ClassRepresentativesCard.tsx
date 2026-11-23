@@ -1,5 +1,6 @@
 "use client";
 
+import { compareRollNumbers } from "@/lib/students/listOrder";
 import { useEffect, useMemo, useState } from "react";
 import { Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +34,7 @@ export function ClassRepresentativesCard({ section, students, canSetCount, onSav
 
   const roster = useMemo(
     () => students.filter((s): s is RosterStudent & { id: string } => !!s.id)
-      .sort((a, b) => (a.rollNumber ?? "").localeCompare(b.rollNumber ?? "", undefined, { numeric: true }) || a.name.localeCompare(b.name)),
+      .sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber) || a.name.localeCompare(b.name)),
     [students],
   );
   const label = (s: RosterStudent) => (s.rollNumber ? `${s.rollNumber} - ${s.name}` : s.name);

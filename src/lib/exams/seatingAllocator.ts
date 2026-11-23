@@ -1,3 +1,4 @@
+import { compareRollNumbers } from "@/lib/students/listOrder";
 import type {
   ExamRoom, SeatingRoomAllocation, SeatingStudent,
 } from "@/types/examSeating";
@@ -15,7 +16,7 @@ export function sortRoomsForSeating<T extends Pick<ExamRoom, "name" | "block" | 
 }
 
 export function sortByRoll<T extends { rollNumber: string }>(students: T[]): T[] {
-  return [...students].sort((a, b) => naturalCompare(a.rollNumber, b.rollNumber));
+  return [...students].sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber));
 }
 
 export interface AllocatorSection {

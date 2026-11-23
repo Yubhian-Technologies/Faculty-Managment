@@ -1,3 +1,4 @@
+import { compareStudentsForList } from "@/lib/students/listOrder";
 import type { StudentRecord } from "@/types";
 
 // A section's students for marks entry (internal marks, CEA), in Regd. No order. Section-scoped teaching
@@ -24,5 +25,5 @@ export async function sectionRoster(
     seen.add(d.id);
     students.push({ id: d.id, ...d.data() } as StudentRecord);
   }
-  return students.sort((x, y) => x.rollNumber.localeCompare(y.rollNumber, undefined, { numeric: true }));
+  return students.sort((x, y) => compareStudentsForList({ id: x.id, rollNumber: x.rollNumber, name: x.name }, { id: y.id, rollNumber: y.rollNumber, name: y.name }));
 }

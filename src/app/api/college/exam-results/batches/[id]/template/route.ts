@@ -1,3 +1,4 @@
+import { compareRollNumbers } from "@/lib/students/listOrder";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
@@ -48,7 +49,7 @@ export async function GET(request: Request, { params }: Params) {
         for (const s of finals) if (!s.isPass) rows.push({ rollNumber: r.rollNumber, name: r.name, subjectCode: s.subjectCode, subjectName: s.subjectName });
       }
     }
-    rows.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber));
+    rows.sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber));
     return NextResponse.json({ rows });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) {

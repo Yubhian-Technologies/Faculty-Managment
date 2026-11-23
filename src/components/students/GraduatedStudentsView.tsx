@@ -1,5 +1,6 @@
 "use client";
 
+import { compareRollNumbers } from "@/lib/students/listOrder";
 import { useAppliedFilters } from "@/hooks/useAppliedFilters";
 import { LoadButton } from "@/components/shared/LoadButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -156,7 +157,7 @@ export function GraduatedStudentsView({ showHeader = true, studentDetailHref }: 
           .sort((a, b) => b[0].localeCompare(a[0]))
           .map(([batch, list]) => ({
             batch,
-            students: list.sort((a, b) => (a.rollNumber ?? "").localeCompare(b.rollNumber ?? "")),
+            students: list.sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber)),
           })),
       }));
   }, [students]);

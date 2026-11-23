@@ -1,3 +1,4 @@
+import { compareRollNumbers } from "@/lib/students/listOrder";
 export const dynamic = "force-dynamic";
 
 import { loadEffectiveTiming } from "@/lib/college/semester";
@@ -214,7 +215,7 @@ export async function GET(request: Request) {
           }
           return { id: stu.id, rollNumber: stu.rollNumber, name: stu.name, bySubject };
         })
-        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+        .sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber));
 
       return NextResponse.json({ subjects, students, availableSemesters: semesterOptions });
     }
@@ -308,7 +309,7 @@ export async function GET(request: Request) {
         }
       }
       const students = [...studentMap.values()]
-        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true }));
+        .sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber));
 
       // Subject-wise attendance percentage - one group per distinct
       // assignmentId among today's periods (== one per subject, since a

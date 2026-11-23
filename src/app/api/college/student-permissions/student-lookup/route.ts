@@ -1,3 +1,4 @@
+import { compareRollNumbers } from "@/lib/students/listOrder";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
       const sec = secSnap.data() as Section;
       const roster = await fetchSectionStudents(collegeRef, { department: sec.department, sectionName: sec.name, year: sec.year, courseId: sec.courseId });
       const students = roster.filter((s) => s.status === "REGULAR").slice(0, MAX_ROSTER)
-        .sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true })).map((s) => pick(s.id, s));
+        .sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber)).map((s) => pick(s.id, s));
       return NextResponse.json({ students });
     }
 

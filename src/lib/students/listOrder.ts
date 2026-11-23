@@ -136,6 +136,15 @@ export function compareStudentsBySectionThenRoll(a: SectionOrderableStudent, b: 
   return (a.id ?? "").localeCompare(b.id ?? "");
 }
 
+/** Two Regd. Nos in the list order (prefix, branch code, serial - 12A0 after 1299); a blank one last. Use this
+ *  wherever only the Regd. No is at hand, so every list of students reads in the same order. */
+export function compareRollNumbers(a: string | null | undefined, b: string | null | undefined): number {
+  const ra = (a ?? "").trim(), rb = (b ?? "").trim();
+  if (ra && !rb) return -1;
+  if (!ra && rb) return 1;
+  return ra && rb ? compareRolls(ra, rb) : 0;
+}
+
 export function sortStudentsForList<T extends OrderableStudent>(students: T[]): T[] {
   return students.sort(compareStudentsForList);
 }
