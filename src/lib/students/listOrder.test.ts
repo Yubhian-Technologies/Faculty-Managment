@@ -135,3 +135,11 @@ describe("compareStudentsBySectionThenRoll", () => {
   });
 });
 
+
+describe("list order: serials past 99", () => {
+  it("puts 12A0 after 1299, not before 1201 (VIT IT)", async () => {
+    const { sortStudentsForList } = await import("./listOrder");
+    const rows = ["26PA1A12A0", "26PA1A1201", "26PA1A1299", "26PA1A12B1", "26PA1A1265"].map((rollNumber, i) => ({ id: String(i), rollNumber }));
+    expect(sortStudentsForList(rows).map((r) => r.rollNumber)).toEqual(["26PA1A1201", "26PA1A1265", "26PA1A1299", "26PA1A12A0", "26PA1A12B1"]);
+  });
+});

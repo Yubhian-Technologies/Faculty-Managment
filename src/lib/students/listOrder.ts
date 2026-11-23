@@ -26,7 +26,8 @@ export function compareStudentsForList(a: OrderableStudent, b: OrderableStudent)
   if (rollA && !rollB) return -1;
   if (!rollA && rollB) return 1;
   if (rollA && rollB) {
-    const byRoll = collator.compare(rollA, rollB);
+    // Prefix, branch code, then serial - so 26PA1A1299 is followed by 12A0, not preceded by it (compareRolls).
+    const byRoll = compareRolls(rollA, rollB);
     if (byRoll !== 0) return byRoll;
   }
 
