@@ -72,10 +72,12 @@ const SELECT_CHECKBOX_CLASS =
   "data-[state=checked]:border-primary data-[state=indeterminate]:border-primary " +
   "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground";
 
-// Roster (the original page) vs the live Strength report - see
-// components/students/StudentStrengthDashboard.tsx.
+// Students (view: cards, attendance, mentor, mobile - no allocation tools), Students Allocation (Distribute, select,
+// Move / Assign, the incoming lists - a plain list) and the live Strength report
+// (components/students/StudentStrengthDashboard.tsx).
 const HOD_VIEWS = [
-  { key: "roster", label: "Students Allocation" },
+  { key: "roster", label: "Students" },
+  { key: "allocation", label: "Students Allocation" },
   { key: "strength", label: "Students Strength" },
 ] as const;
 
@@ -92,7 +94,6 @@ function HodStudentsContent() {
     const s = parseHodStudentsListState(searchParams);
     return s.load ? s : { ...s, load: true };
   });
-  const [view, setView] = useState<(typeof HOD_VIEWS)[number]["key"]>("roster");
   // Only the CURRENT PAGE of the roster (or of the read-only incoming list) is
   // ever held here - never the whole department. The list is fetched on Load
   // and paged on the server (see lib/students/hodPagedList.ts); everything that
@@ -100,6 +101,9 @@ function HodStudentsContent() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [total, setTotal] = useState(0);
   const [unassignedTotal, setUnassignedTotal] = useState(0);
+  // A list restored on an incoming (pre-registered) department opens on the Allocation view, where that picker lives.
+  const [view, setView] = useState<(typeof HOD_VIEWS)[number]["key"]>(restored.freshmanView !== "none" ? "allocation" : "roster");
+  const allocating = view === "allocation";
   const [page, setPage] = useState(restored.page);
   const [pageSize, setPageSize] = useState(restored.pageSize);
   // A restored list loads itself on arrival (no second press of Load), so it
@@ -1226,9 +1230,11 @@ function HodStudentsContent() {
           >
             <CalendarCheck className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
-            <ArrowRightLeft className="h-3.5 w-3.5" />
-          </Button>
+          {allocating && (
+            <Button variant="ghost" size="sm" onClick={() => openAssign(r)} title={r.section ? "Move to a different section" : "Assign to a section"}>
+              <ArrowRightLeft className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Set Regd. No, status and lab batch">
             <Pencil className="h-3.5 w-3.5" />
           </Button>
@@ -1242,7 +1248,18 @@ function HodStudentsContent() {
   const anyLabBatch = students.some((r) => !!r.labBatch);
   const overviewKeys = new Set(["today", "attendancePct", "mentor", "mobile"]);
   const baseColumns = columns.filter((c) => (c.key !== "labBatch" || anyLabBatch) && (!isFreshmanView || !overviewKeys.has(c.key)));
-  const visibleColumns = isFreshmanView ? baseColumns.filter((c) => c.key !== "actions" && c.key !== "select") : baseColumns;
+  // Students view: no tick boxes (selecting is for allocation); Allocation view: a plain list without the overview's
+  // attendance / mentor / mobile columns.
+  const viewColumns = allocating ? baseColumns.filter((c) => !overviewKeys.has(c.key)) : baseColumns.filter((c) => c.key !== "select");
+  const visibleColumns = isFreshmanView ? viewColumns.filter((c) => c.key !== "actions" && c.key !== "select") : viewColumns;
+
+  // Leaving Allocation: the incoming (pre-registered) list and any ticked students belong to it.
+  function changeView(next: (typeof HOD_VIEWS)[number]["key"]) {
+    setView(next);
+    if (next === "allocation") return;
+    setSelectedRows(new Map());
+    if (freshmanView !== "none") setFreshmanView("none");
+  }
 
   // Same header - title, description and tab strip - for both views, so
   // switching tabs moves and resizes nothing; only the active pill changes.
@@ -1250,7 +1267,7 @@ function HodStudentsContent() {
     <PageHeader
       title="Students"
       description="View and manage the student records of your department and its associated branches."
-      actions={<StudentsViewTabs tabs={HOD_VIEWS} value={view} onChange={setView} />}
+      actions={<StudentsViewTabs tabs={HOD_VIEWS} value={view} onChange={changeView} />}
     />
   );
 
@@ -1269,7 +1286,7 @@ function HodStudentsContent() {
 
       {/* Distribute lives in the body, not the header, so the header above is
           identical to the Strength view's. */}
-        {!isFreshmanView && (
+        {allocating && !isFreshmanView && (
         <div className="flex justify-end">
         <Dialog
           open={distributeOpen}
@@ -1434,7 +1451,7 @@ function HodStudentsContent() {
           the table below to a read-only preview of just that department's
           held students; "My Students" returns to the normal, manageable
           roster. */}
-      {freshmanDeptOptions.length > 0 && (
+      {allocating && freshmanDeptOptions.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-3">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Freshman&apos;s Department:</span>
           <Select value={freshmanView} onValueChange={setFreshmanView}>
@@ -1452,7 +1469,7 @@ function HodStudentsContent() {
         </div>
       )}
 
-      {!isFreshmanView && (
+      {allocating && !isFreshmanView && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3" data-testid="bulk-action-bar">
           {selectedStudents.length > 0 ? (
             <>
@@ -1572,12 +1589,12 @@ function HodStudentsContent() {
           </div>
         </div>
 
-        {hasLoaded && overviewQuery !== null && appliedView === "none" && (
+        {!allocating && hasLoaded && overviewQuery !== null && appliedView === "none" && (
           // Keyed by the filters: a new filter starts from the full list (no quick filter / section picked).
           <StudentsOverview key={overviewQuery} query={overviewQuery} reloadKey={applied} onData={setOverviewRows} onFocusChange={setOverviewFocus} onOpen={setPanelId} />
         )}
 
-        {overviewFocus && appliedView === "none" ? null : !hasLoaded ? (
+        {overviewFocus && !allocating && appliedView === "none" ? null : !hasLoaded ? (
           <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
             <Users className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="font-medium text-base">No Student Records Loaded</p>
@@ -1656,7 +1673,7 @@ function HodStudentsContent() {
           onMove={(() => { const row = panelId ? students.find((r) => r.id === panelId) : undefined; return row ? () => { setPanelId(null); openAssign(row); } : undefined; })()}
         />
 
-        {hasLoaded && total > 10 && !(overviewFocus && appliedView === "none") && (
+        {hasLoaded && total > 10 && !(overviewFocus && !allocating && appliedView === "none") && (
           <Pagination
             page={page}
             pageSize={pageSize}
