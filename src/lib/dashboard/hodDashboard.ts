@@ -16,6 +16,11 @@ export interface ClassCell {
   facultyDepartment?: string;
   start: string;
   end: string;
+  /** A posted period: students present / marked (on duty counts as present; the "/" number is everyone marked). */
+  present?: number;
+  total?: number;
+  /** Those marked absent in it (for the cell's detail). */
+  absent?: { name: string; rollNumber: string }[];
 }
 
 const RANK: Record<ClassStatus, number> = { POSTED: 3, NOW: 2, OVERDUE: 1, UPCOMING: 0 };
