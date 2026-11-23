@@ -1,5 +1,6 @@
 "use client";
 
+import { sortStudentsForList } from "@/lib/students/listOrder";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, Info, Lock, Pencil, RefreshCw, Clock, CloudOff, CloudUpload, Check, X } from "lucide-react";
 import { OnDutyTag } from "@/components/attendance/OnDutyDetailsDialog";
@@ -502,8 +503,9 @@ export default function MarkAttendancePage() {
       setClassNotes(notes);
 
       const firstSession = Object.values(fetchedSessions)[0];
+      // Sorted here as well as on the server: a sheet opened before the Regd. No order fix keeps its stored order.
       const roster = firstSession
-        ? firstSession.entries.map((e) => ({ studentId: e.studentId, name: e.name, rollNumber: e.rollNumber }))
+        ? sortStudentsForList(firstSession.entries.map((e) => ({ studentId: e.studentId, name: e.name, rollNumber: e.rollNumber })))
         : [];
       setStudentRoster(roster);
 

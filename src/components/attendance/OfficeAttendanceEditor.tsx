@@ -1,5 +1,6 @@
 "use client";
 
+import { sortStudentsForList } from "@/lib/students/listOrder";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Lock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -73,7 +74,7 @@ export function OfficeAttendanceEditor({ facultyId, date, subjectName, sectionLa
           }
         }
         setSessions(byPeriod);
-        setRoster(first.entries.map((e) => ({ studentId: e.studentId, name: e.name, rollNumber: e.rollNumber })));
+        setRoster(sortStudentsForList(first.entries.map((e) => ({ studentId: e.studentId, name: e.name, rollNumber: e.rollNumber }))));
         setDraft(nextDraft);
         setClassNotes(first.classNotes ?? "");
       } catch (err) {
