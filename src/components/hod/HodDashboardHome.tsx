@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -70,6 +70,9 @@ interface SemesterData {
   computedAt: string;
 }
 type Roster = (RosterRow & { uid?: string; name?: string; designation?: string })[];
+/** India time now as "HH:MM" (every college is IST). */
+const istHHMM = () => new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
+
 interface MyPeriod { periodNumber: number; startTime: string; endTime: string; sectionName: string; subjectName: string; phase: string; sessionStatus: string | null }
 
 // ── Class grid ──────────────────────────────────────────────────────────────
@@ -213,7 +216,10 @@ export function HodDashboardHome() {
       return rows.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)).slice(0, 4);
     }),
   });
-  const myDay = useQuery({ queryKey: ["hdash", "mine", today], queryFn: () => getJson<{ periods?: MyPeriod[] }>("/api/college/student-attendance/today-periods").then((d) => d.periods ?? []), staleTime: 2 * 60_000 });
+  const myDay = useQuery({ queryKey: ["hdash", "mine", today], queryFn: () => getJson<{ periods?: MyPeriod[] }>("/api/college/student-attendance/today-periods").then((d) => d.periods ?? []), staleTime: 2 * 60_000, refetchInterval: 2 * 60_000 });
+  // India time now ("HH:MM"), ticking every minute - My Teaching Schedule's Now / Next follows the clock, not the load.
+  const [nowHM, setNowHM] = useState(istHHMM);
+  useEffect(() => { const t = setInterval(() => setNowHM(istHHMM()), 30_000); return () => clearInterval(t); }, []);
 
   // Which number card's full list is open.
   const [detail, setDetail] = useState<KpiDetailKey | null>(null);
@@ -238,7 +244,9 @@ export function HodDashboardHome() {
     const years = Array.from({ length: p.meta.maxYear || 0 }, (_, i) => i + 1)
       .map((y) => ({ year: y, count: totalFor(p.cells, { status: "ENROLLED", year: y }) }))
       .filter((y) => y.count > 0);
-    return { total: sum.total, years };
+    // One year of study (a 1st-year HOD): its sections instead of a one-item year list.
+    const sections = new Set(p.cells.filter((c) => c.status === "ENROLLED" && c.count > 0 && c.section).map((c) => c.section)).size;
+    return { total: sum.total, years, sections };
   }, [strength.data]);
 
   const banksWaiting = (banks.data ?? []).reduce((n, b) => n + b.progress.banksSubmitted, 0);
@@ -293,15 +301,19 @@ export function HodDashboardHome() {
       <section aria-label="Key numbers" className="relative z-10 -mt-12 grid grid-cols-2 gap-3 px-0 sm:px-2 md:grid-cols-3 xl:grid-cols-6">
         <Kpi icon={GraduationCap} label="Total Student Strength" href="/hod/students" loading={strength.isLoading} error={strength.isError || !shown("/hod/students")}
           value={students ? students.total.toLocaleString("en-IN") : "-"}
-          sub={students?.years.map((y) => `${["I", "II", "III", "IV", "V"][y.year - 1] ?? y.year} ${y.count}`).join(" · ")} />
+          sub={students ? (students.years.length > 1 ? students.years.map((y) => `${["I", "II", "III", "IV", "V"][y.year - 1] ?? y.year} ${y.count}`).join(" · ") : `${students.sections} section${students.sections === 1 ? "" : "s"}`) : undefined} />
         <Kpi icon={ClipboardCheck} label="Today's Student Attendance" onOpen={() => setDetail("students")} loading={day.isLoading} error={day.isError}
-          value={day.data?.students.pct == null ? "-" : day.data.students.pct.toFixed(1)} unit={day.data?.students.pct == null ? undefined : "%"}
+          value={day.data?.students.pct == null ? <span className="text-base font-semibold text-muted-foreground">Not yet recorded</span> : day.data.students.pct.toFixed(1)} unit={day.data?.students.pct == null ? undefined : "%"}
           meter={day.data?.students.pct != null ? [{ value: day.data.students.pct, color: day.data.students.pct < SHORT ? CRIT : "hsl(var(--primary))" }] : undefined}
-          sub={day.data ? `${day.data.students.absentAllDay} absent all day` : undefined} />
+          sub={day.data?.students.pct != null ? `${day.data.students.absentAllDay} absent all day` : undefined} />
         <Kpi icon={CalendarDays} label="Today's Class Status" onOpen={() => setDetail("classes")} loading={day.isLoading} error={day.isError}
           value={cls ? cls.posted : "-"} unit={cls ? ` / ${cls.due} posted` : undefined}
           meter={cls && cls.due ? [{ value: (cls.posted / cls.due) * 100, color: GOOD }, { value: (dueOverdue / cls.due) * 100, color: CRIT }] : undefined}
-          sub={cls ? (dueOverdue ? <Tag tone="crit">{dueOverdue} overdue</Tag> : <Tag tone="good">Attendance Fully Recorded</Tag>) : undefined} />
+          sub={cls ? (dueOverdue ? <Tag tone="crit">{dueOverdue} overdue</Tag>
+            // "Fully recorded" only once every period that has started is posted; before any is due, say so.
+            : cls.due > 0 && cls.posted >= cls.due ? <Tag tone="good">Attendance Fully Recorded</Tag>
+            : cls.due === 0 ? <Tag tone="info">None due yet</Tag>
+            : <Tag tone="info">{cls.due - cls.posted} in progress</Tag>) : undefined} />
         <Kpi icon={UserCheck} label="Faculty Attendance Status" onOpen={() => setDetail("faculty")} loading={roster.isLoading} error={roster.isError}
           value={faculty ? faculty.present + faculty.halfDay + faculty.onDuty : "-"} unit={faculty ? ` / ${faculty.total}` : undefined}
           meter={faculty && faculty.total ? [
@@ -341,6 +353,8 @@ export function HodDashboardHome() {
       </KpiDetailDialog>
 
       {/* Waiting */}
+      {/* Nothing waiting: the Pending Actions card already says "0 · Nothing urgent" - no second, empty section. */}
+      {!(activeWaiting.length === 0 && !waitingLoading) && (
       <section id="waiting" className="scroll-mt-20 space-y-2.5 rounded-2xl">
         <SectionTitle title="Pending Actions" sub="Select an item to review and take action" />
         {activeWaiting.length === 0 && !waitingLoading ? (
@@ -363,6 +377,7 @@ export function HodDashboardHome() {
           </div>
         )}
       </section>
+      )}
 
       {/* Today */}
       <section className="space-y-3">
@@ -486,7 +501,7 @@ export function HodDashboardHome() {
             <Panel title={firstBank ? `Mid-${firstBank.deadline.midNumber ?? ""} Question Papers` : "Mid Question Papers"}
               sub={firstBank ? `Deadline ${shortDay(firstBank.deadline.deadline)} · ${firstBank.progress.subjects} subjects` : undefined}
               href="/hod/question-banks" linkLabel="View Question Banks" loading={banks.isLoading} error={banks.isError} onRetry={() => void banks.refetch()}>
-              {!firstBank ? <p className="py-6 text-center text-sm text-muted-foreground">No Pending Question Paper Submissions</p> : (() => {
+              {!firstBank ? <p className="py-1 text-sm text-muted-foreground">No Pending Question Paper Submissions</p> : (() => {
                 const p = firstBank.progress;
                 const approved = p.subjectsApproved;
                 const submitted = Math.max(0, p.banksSubmitted);
@@ -512,7 +527,7 @@ export function HodDashboardHome() {
             </Panel>
           )}
           <Panel title="Upcoming Examinations" sub="Published Mid-Semester Examination Schedule" href="/panel/mid-timetable" linkLabel="View Timetable" loading={exams.isLoading} error={exams.isError} onRetry={() => void exams.refetch()}>
-            {exams.data && (exams.data.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No Mid-Semester Examinations Scheduled</p> : (
+            {exams.data && (exams.data.length === 0 ? <p className="py-1 text-sm text-muted-foreground">No Mid-Semester Examinations Scheduled</p> : (
               <ul className="divide-y">
                 {exams.data.map((e, i) => (
                   <li key={i} className="flex items-center gap-3 py-2 text-sm">
@@ -529,7 +544,7 @@ export function HodDashboardHome() {
           {shown("/hod/results-analysis") && (
             <Panel title="Recent Examination Results" sub="Regular Examinations · Published Results · Overall Pass Status" href="/hod/results-analysis" linkLabel="View Result Analysis"
               loading={sem.isLoading} error={sem.isError} onRetry={() => void sem.refetch()}>
-              {sem.data && (sem.data.results.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No Examination Results Published Yet</p> : (
+              {sem.data && (sem.data.results.length === 0 ? <p className="py-1 text-sm text-muted-foreground">No Examination Results Published Yet</p> : (
                 <div className="space-y-2">
                   {sem.data.results.map((r) => <Bar key={r.year} label={r.label} value={r.pct ?? 0} text={fmtPct(r.pct)} sub={`${r.passed}/${r.students}`} />)}
                 </div>
@@ -549,12 +564,19 @@ export function HodDashboardHome() {
               <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">No Classes Assigned Today</p>
             ) : (() => {
               const list = myDay.data!;
-              const next = list.find((p) => p.phase !== "ENDED" && p.sessionStatus !== "SUBMITTED");
+              const posted = (p: MyPeriod) => p.sessionStatus === "SUBMITTED";
+              const running = (p: MyPeriod) => p.startTime <= nowHM && nowHM < p.endTime;
+              const ended = (p: MyPeriod) => p.endTime <= nowHM;
+              // Highlighted: the class running now, else the next one to start.
+              const now = list.find((p) => running(p));
+              const next = now ? undefined : list.find((p) => p.startTime > nowHM);
               return list.map((p) => (
                 <Link key={`${p.periodNumber}-${p.sectionName}`} href="/panel/mark-attendance"
-                  className={cn("flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs", p === next ? "bg-primary/10 font-semibold text-primary" : "bg-muted/50")}>
+                  className={cn("flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs", p === now || p === next ? "bg-primary/10 font-semibold text-primary" : "bg-muted/50")}>
                   <span className="truncate">P{p.periodNumber} · {p.sectionName} · {p.subjectName}</span>
-                  <span className="shrink-0">{p.sessionStatus === "SUBMITTED" ? "✓ Posted" : p === next ? `Next · ${hhmm12(p.startTime)}` : p.phase === "ENDED" ? "Not posted" : hhmm12(p.startTime)}</span>
+                  <span className={cn("shrink-0", !posted(p) && ended(p) && "font-medium text-red-600")}>
+                    {posted(p) ? "✓ Posted" : p === now ? `Now · till ${hhmm12(p.endTime)}` : p === next ? `Next · ${hhmm12(p.startTime)}` : ended(p) ? "Not posted" : hhmm12(p.startTime)}
+                  </span>
                 </Link>
               ));
             })()}
