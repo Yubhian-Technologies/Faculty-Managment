@@ -562,6 +562,8 @@ export async function POST(request: Request) {
     const overlapsApprovedLeave = existingSnap.docs.some((d) => {
       const r = d.data() as LeaveRequest;
       if (r.status !== "APPROVED") return false;
+      // The automatic late check-in CL deduction is never a day away, so it never blocks a real leave that day.
+      if (r.isLateAttendancePenalty) return false;
       const rFrom = (r.fromDate as unknown as { toDate(): Date }).toDate();
       const rTo = (r.toDate as unknown as { toDate(): Date }).toDate();
       return fromDate <= rTo && rFrom <= toDate;
