@@ -6,8 +6,9 @@ import { SegmentedTabs } from "@/components/shared/SegmentedTabs";
 import { StudentAttendanceReportView } from "@/components/attendance/StudentAttendanceReportView";
 import { FacultyNotPostedView } from "@/components/attendance/FacultyNotPostedView";
 import { FacultyAttendanceCompletionView } from "@/components/attendance/FacultyAttendanceCompletionView";
+import { StudentAttendanceDashboard } from "@/components/attendance/StudentAttendanceDashboard";
 
-type Person = "faculty" | "students" | "edit";
+type Person = "dashboard" | "faculty" | "students" | "edit";
 
 // Every attendance REPORT module in one place - was 6 separate sidebar
 // items (Attendance Reports, Attendance History, Attendance Completion,
@@ -18,7 +19,7 @@ type Person = "faculty" | "students" | "edit";
 // changes how it's reached. Old routes still work standalone (unlinked,
 // not deleted) for any existing notification links/bookmarks.
 export default function HodAttendanceReportsPage() {
-  const [person, setPerson] = useState<Person>("students");
+  const [person, setPerson] = useState<Person>("dashboard");
 
   // The HOD can always correct their department's student attendance; the Department
   // Office head only if their HOD switched it on (the server enforces this too).
@@ -41,13 +42,16 @@ export default function HodAttendanceReportsPage() {
         value={active}
         onChange={(k) => setPerson(k as Person)}
         options={[
+          { key: "dashboard", label: "Dashboard" },
           { key: "students", label: "Students" },
           { key: "faculty", label: "Faculty" },
           ...(canEdit ? [{ key: "edit", label: "Edit Attendance" }] : []),
         ]}
       />
 
-      {active === "faculty" ? (
+      {active === "dashboard" ? (
+        <StudentAttendanceDashboard scope="hod" />
+      ) : active === "faculty" ? (
         <FacultyNotPostedView hodScoped />
       ) : active === "edit" ? (
         <FacultyAttendanceCompletionView
