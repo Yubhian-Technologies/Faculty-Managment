@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { findUsersSnapshot } from "@/lib/roles/findUsersByRoles";
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
+import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { isCollegeAdmin, requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import type { Firestore } from "firebase-admin/firestore";
@@ -23,7 +25,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE", "ACCOUNTS");
+    const session = await requireCollegeMember("HOD", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "PANEL_MEMBER", "COLLEGE_OFFICE", "ACCOUNTS", "HR");
     const { id } = await params;
     const body = (await readJsonBody(request)) as {
       isShortlisted?: boolean;
@@ -39,6 +41,9 @@ export async function PATCH(
       termsAndConditions?: string[];
       committeeRecommendation?: string;
       notifyPrincipalDocsReady?: boolean;
+      /** HR / HOD / Principal screening of an application: Shortlist, or Not Suitable with a reason (never the
+       *  Principal's decision - `status` stays as it is). null clears it. */
+      screening?: { result: "SHORTLISTED" | "NOT_SUITABLE"; reason?: string } | null;
     };
 
     const db = getAdminDb();
@@ -55,19 +60,40 @@ export async function PATCH(
     const isPrincipalRole = session.role === "PRINCIPAL" || session.role === "VICE_PRINCIPAL" || session.role === "SUPER_ADMIN";
     const isHodRole = session.role === "HOD";
     const isCollegeOfficeRole = session.role === "COLLEGE_OFFICE";
+    const isHrRole = session.role === "HR";
     // College Admin's login reads as "PRINCIPAL" too (see isCollegeAdmin), but
     // the final hiring decision and its negotiated terms are Principal/VP
     // decision authority, not College Admin's - narrower than isPrincipalRole,
     // which everything else above still uses unchanged.
     const isPrincipalDecider = isPrincipalRole && !isCollegeAdmin(session);
 
-    const { isShortlisted, hasArrived, status, stage, batchId, documentVerification, joiningLetterUrl, expectedSalary, negotiatedSalary, dateOfJoining, termsAndConditions, committeeRecommendation, notifyPrincipalDocsReady } = body;
+    const { isShortlisted, hasArrived, status, stage, batchId, documentVerification, joiningLetterUrl, expectedSalary, negotiatedSalary, dateOfJoining, termsAndConditions, committeeRecommendation, notifyPrincipalDocsReady, screening } = body;
 
     // Field-level role gating - each field group is only ever written by one
     // stage's UI, so an unrelated role sending it (by mistake or a crafted
     // request) is rejected outright rather than silently accepted.
-    if (isShortlisted !== undefined && !isHodRole && !isPrincipalRole) {
-      return NextResponse.json({ error: "Only the HOD or Principal can update the shortlist" }, { status: 403 });
+    if (isShortlisted !== undefined && !isHodRole && !isPrincipalRole && !isHrRole) {
+      return NextResponse.json({ error: "Only HR, the HOD or the Principal can update the shortlist." }, { status: 403 });
+    }
+    // HR's screening: Shortlist (also ticks the shortlist) or Not Suitable with a reason (also unticks it). Only
+    // while the Principal has not decided, and never on a candidate already placed in an interview batch.
+    if (screening !== undefined) {
+      if (!isHrRole && !isHodRole && !isPrincipalRole) {
+        return NextResponse.json({ error: "Only HR, the HOD or the Principal can screen an application." }, { status: 403 });
+      }
+      const cur = applicationSnap.data() as { status?: string; batchId?: string };
+      if (cur.status === "APPROVED" || cur.status === "REJECTED") {
+        return NextResponse.json({ error: "The Principal has already decided on this candidate." }, { status: 409 });
+      }
+      if (screening && screening.result === "NOT_SUITABLE" && cur.batchId) {
+        return NextResponse.json({ error: "This candidate is already in an interview batch. Remove them from the batch first." }, { status: 409 });
+      }
+      if (screening && !["SHORTLISTED", "NOT_SUITABLE"].includes(screening.result)) {
+        return NextResponse.json({ error: "Select Shortlist or Not Suitable." }, { status: 400 });
+      }
+      if (screening?.result === "NOT_SUITABLE" && !screening.reason?.trim()) {
+        return NextResponse.json({ error: "Enter the reason the candidate is not suitable." }, { status: 400 });
+      }
     }
     if (hasArrived !== undefined && session.role !== "HOD" && session.role !== "PANEL_MEMBER" && !isCollegeOfficeRole && !isPrincipalRole) {
       return NextResponse.json({ error: "Only the HOD, panel, or College Office can mark a candidate as arrived" }, { status: 403 });
@@ -123,6 +149,14 @@ export async function PATCH(
     const updates: Record<string, unknown> = { updatedAt: now };
 
     if (isShortlisted !== undefined) updates.isShortlisted = isShortlisted;
+    if (screening !== undefined) {
+      if (screening === null) {
+        updates.screening = FieldValue.delete();
+      } else {
+        updates.screening = { result: screening.result, reason: screening.reason?.trim() ?? "", byUid: session.uid, byName: actorName, at: now };
+        updates.isShortlisted = screening.result === "SHORTLISTED";
+      }
+    }
     if (hasArrived !== undefined) {
       updates.hasArrived = hasArrived;
       if (hasArrived) {
@@ -174,6 +208,12 @@ export async function PATCH(
     if (notifyPrincipalDocsReady) updates["documentVerification.notifiedPrincipalAt"] = now;
 
     await collegeRef.collection("candidateApplications").doc(id).update(updates);
+    if (screening !== undefined) {
+      await writeAuditLogSafe(db, session.collegeId, {
+        action: "CANDIDATE_SCREENED", performedBy: session.uid, performedByName: actorName, targetId: id,
+        details: screening ? { result: screening.result, ...(screening.reason ? { reason: screening.reason.trim() } : {}) } : { result: "CLEARED" },
+      });
+    }
 
     const applicationData = applicationSnap.data() as { candidateId?: string; batchId?: string; vacancyRequestId?: string };
     const candidateSnap = applicationData.candidateId

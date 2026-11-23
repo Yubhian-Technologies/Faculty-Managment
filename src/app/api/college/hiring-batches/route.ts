@@ -21,7 +21,7 @@ async function getUserName(db: Firestore, collegeId: string, uid: string): Promi
 export async function GET(request: Request) {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS", "COLLEGE_ACCOUNTS"
+      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS", "COLLEGE_ACCOUNTS", "HR"
     );
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("HOD", "SUPER_ADMIN");
+    const session = await requireCollegeMember("HOD", "SUPER_ADMIN", "HR");
     const body = (await readJsonBody(request)) as {
       vacancyId: string;
       department: string;
@@ -105,12 +105,34 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
-    const hodName = await getUserName(db, session.collegeId, session.uid);
+    const actorName = await getUserName(db, session.collegeId, session.uid);
     const now = new Date();
     const collegeRef = db.collection("colleges").doc(session.collegeId);
 
     const vacancySnap = await collegeRef.collection("vacancyRequests").doc(vacancyId).get();
-    const positionCategory = (vacancySnap.data() as { positionCategory?: string } | undefined)?.positionCategory ?? "TEACHING";
+    const vacancyData = vacancySnap.data() as { positionCategory?: string; status?: string; hodUid?: string; hodName?: string; department?: string; position?: string } | undefined;
+    const positionCategory = vacancyData?.positionCategory ?? "TEACHING";
+
+    // HR schedules on behalf of the department: the batch belongs to the HOD who raised the request (the HOD's pages,
+    // final setup and phase steps all key on `hodUid`), HR is recorded as the one who scheduled it. The request must be
+    // approved, the HOD must sit on the panel, and every candidate must be a shortlisted applicant of that request.
+    const byHr = session.role === "HR";
+    if (byHr) {
+      if (!vacancySnap.exists || vacancyData?.status !== "APPROVED") {
+        return NextResponse.json({ error: "Interviews can be scheduled only for an approved hiring request." }, { status: 409 });
+      }
+      if (!vacancyData?.hodUid) {
+        return NextResponse.json({ error: "This hiring request has no HOD on record. Ask the Principal to check it." }, { status: 409 });
+      }
+      if (!panelMemberUids.includes(vacancyData.hodUid)) {
+        return NextResponse.json({ error: "The department's HOD must be on the interview panel." }, { status: 400 });
+      }
+      if (panelMemberUids.length < 2) {
+        return NextResponse.json({ error: "Select at least 2 panel members." }, { status: 400 });
+      }
+    }
+    const hodUid = byHr ? vacancyData!.hodUid! : session.uid;
+    const hodName = byHr ? (vacancyData?.hodName || await getUserName(db, session.collegeId, hodUid)) : actorName;
 
     const batchRef = collegeRef.collection("hiringBatches").doc();
     const appRefs = applicationIds.map((aid) => collegeRef.collection("candidateApplications").doc(aid));
@@ -126,9 +148,12 @@ export async function POST(request: Request) {
           if (!appSnaps[i].exists) {
             throw new Error(`APPLICATION_NOT_FOUND:${applicationIds[i]}`);
           }
-          const existingBatchId = (appSnaps[i].data() as { batchId?: string }).batchId;
-          if (existingBatchId) {
+          const app = appSnaps[i].data() as { batchId?: string; vacancyRequestId?: string; isShortlisted?: boolean; status?: string };
+          if (app.batchId) {
             throw new Error(`ALREADY_BATCHED:${applicationIds[i]}`);
+          }
+          if (byHr && (app.vacancyRequestId !== vacancyId || !app.isShortlisted || app.status === "APPROVED" || app.status === "REJECTED")) {
+            throw new Error(`NOT_SHORTLISTED:${applicationIds[i]}`);
           }
         }
 
@@ -137,8 +162,9 @@ export async function POST(request: Request) {
           vacancyId,
           department,
           position,
-          hodUid: session.uid,
+          hodUid,
           hodName,
+          ...(byHr ? { scheduledByUid: session.uid, scheduledByName: actorName, scheduledByRole: "HR" } : {}),
           positionCategory,
           panelMemberUids,
           applicationIds,
@@ -166,6 +192,9 @@ export async function POST(request: Request) {
       if (txErr instanceof Error && txErr.message.startsWith("ALREADY_BATCHED:")) {
         return NextResponse.json({ error: "One or more candidates have already been added to another interview batch" }, { status: 409 });
       }
+      if (txErr instanceof Error && txErr.message.startsWith("NOT_SHORTLISTED:")) {
+        return NextResponse.json({ error: "Every candidate must be shortlisted for this hiring request." }, { status: 409 });
+      }
       if (txErr instanceof Error && txErr.message.startsWith("APPLICATION_NOT_FOUND:")) {
         return NextResponse.json({ error: "One or more selected candidates could not be found" }, { status: 404 });
       }
@@ -177,6 +206,14 @@ export async function POST(request: Request) {
     // Notify Principal and Vice Principal (both can decide the proposal) and
     // College Admin, who mirrors Principal's authority
     const principalsSnap = await findUsersSnapshot(db, session.collegeId, ["PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_ADMIN"]);
+    // Scheduled by HR: the HOD is told too (they set up the demo room and coordinator once the Principal approves).
+    if (byHr) {
+      await db.collection("colleges").doc(session.collegeId).collection("notifications").add({
+        collegeId: session.collegeId, toUid: hodUid, type: "GENERAL", title: "Interview Scheduled by HR",
+        message: `${actorName} (HR) scheduled the interview for ${position} on ${interviewDate}. It goes to the Principal for approval; then set up the demo room and coordinator.`,
+        link: "/hod/batches", read: false, createdAt: now,
+      });
+    }
 
     const notifBatch = db.batch();
     for (const p of principalsSnap.docs) {
@@ -186,7 +223,9 @@ export async function POST(request: Request) {
         toUid: p.id,
         type: "GENERAL",
         title: "Interview Panel Proposal",
-        message: `${hodName} submitted an interview panel proposal for ${position} in ${department}.`,
+        message: byHr
+          ? `${actorName} (HR) scheduled an interview for ${position} in ${department} - approve the panel and plan.`
+          : `${hodName} submitted an interview panel proposal for ${position} in ${department}.`,
         link: `/principal/interviews`,
         read: false,
         createdAt: now,
@@ -194,7 +233,7 @@ export async function POST(request: Request) {
     }
     await notifBatch.commit();
 
-    await writeAuditLogSafe(db, session.collegeId, { action: "HIRING_BATCH_CREATED", performedBy: session.uid, performedByName: hodName, targetId: ref.id, details: { position, department, candidateCount: applicationIds.length } });
+    await writeAuditLogSafe(db, session.collegeId, { action: "HIRING_BATCH_CREATED", performedBy: session.uid, performedByName: actorName, targetId: ref.id, details: { position, department, candidateCount: applicationIds.length, ...(byHr ? { scheduledBy: "HR", hodName } : {}) } });
 
     return NextResponse.json({ id: ref.id }, { status: 201 });
   } catch (err) {

@@ -8,7 +8,7 @@ import { resolveOfferLetterCcEmails } from "@/lib/firestore/offerLetterCc";
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "WEBMASTER", "HOD", "ACCOUNTS", "COLLEGE_ACCOUNTS");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "COLLEGE_OFFICE", "WEBMASTER", "HOD", "ACCOUNTS", "COLLEGE_ACCOUNTS", "HR");
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get("batchId");
     const candidateId = searchParams.get("candidateId");
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACCOUNTS");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "ACCOUNTS", "HR");
     const body = (await readJsonBody(request)) as {
       candidateId: string;
       batchId: string;

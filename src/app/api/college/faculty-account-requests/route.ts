@@ -10,7 +10,7 @@ import { EMPLOYEE_CATEGORY_VALUES, EMPLOYEE_CATEGORY_ERROR_MESSAGE } from "@/typ
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "WEBMASTER", "SUPER_ADMIN", "ACCOUNTS", "COLLEGE_ACCOUNTS", "HOD");
+    const session = await requireCollegeMember("PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "WEBMASTER", "SUPER_ADMIN", "ACCOUNTS", "COLLEGE_ACCOUNTS", "HOD", "HR");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
 
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN");
+    const session = await requireCollegeMember("COLLEGE_OFFICE", "PRINCIPAL", "VICE_PRINCIPAL", "SUPER_ADMIN", "HR");
     const body = (await readJsonBody(request)) as {
       offerId?: string;
       officialEmail?: string;

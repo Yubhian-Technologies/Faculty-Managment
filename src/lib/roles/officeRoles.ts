@@ -11,15 +11,15 @@ import type { CollegeType, UserRole } from "@/types/core";
 // administration; Polytechnic (Diploma-level) colleges are simpler still
 // (Placement + Library only); School has none of these at all.
 const ALL_OFFICE_ROLES: UserRole[] = [
-  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER",
+  "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "WEBMASTER", "HR",
 ];
 
 const OFFICE_ROLES_BY_COLLEGE_TYPE: Record<CollegeType, UserRole[]> = {
   ENGINEERING: ALL_OFFICE_ROLES,
   PHARMACY: ALL_OFFICE_ROLES,
   DENTAL: ALL_OFFICE_ROLES,
-  DEGREE: ["IQAC_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"],
-  POLYTECHNIC: ["PLACEMENT_DEPT", "LIBRARY"],
+  DEGREE: ["IQAC_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL", "HR"],
+  POLYTECHNIC: ["PLACEMENT_DEPT", "LIBRARY", "HR"],
   SCHOOL: [],
 };
 

@@ -557,6 +557,17 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Profile", href: "/student/profile", iconName: "UserCircle", roles: ["STUDENT"] },
 
   // Webmaster
+  // HR - the college's recruitment desk (a seat like Exam Cell / Webmaster). Decisions stay with the Principal / VP.
+  { label: "Dashboard", href: "/hr", iconName: "LayoutDashboard", roles: ["HR"] },
+  { label: "Hiring Requests", href: "/hr/vacancies", iconName: "ClipboardList", roles: ["HR"], section: "Recruitment" },
+  { label: "Candidates", href: "/hr/candidates", iconName: "Users", roles: ["HR"] },
+  { label: "Applications", href: "/hr/applications", iconName: "UserPlus", roles: ["HR"] },
+  { label: "Interviews", href: "/hr/interviews", iconName: "CalendarCheck", roles: ["HR"] },
+  { label: "Offer Letters", href: "/hr/offers", iconName: "FileCheck", roles: ["HR"] },
+  { label: "My Profile", href: "/hr/profile", iconName: "UserCircle", roles: ["HR"], section: "Personal" },
+  { label: "My Leave", href: "/hr/leave", iconName: "CalendarClock", roles: ["HR"] },
+  { label: "My Payslips", href: "/payslips", iconName: "Wallet", roles: ["HR"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["HR"] },
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
   { label: "Credential Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"], section: "Hiring" },
   { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"], section: "Accounts" },
@@ -1203,6 +1214,12 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Browse", href: "/purchase/browse", iconName: "MapPin", roles: ["PURCHASE_DEPT"] },
     { label: "Indents", href: "/purchase/indents", iconName: "ClipboardList", roles: ["PURCHASE_DEPT"] },
     { label: "Profile", href: "/purchase/profile", iconName: "UserCircle", roles: ["PURCHASE_DEPT"] },
+  ],
+  HR: [
+    { label: "Home", href: "/hr", iconName: "LayoutDashboard", roles: ["HR"] },
+    { label: "Candidates", href: "/hr/candidates", iconName: "Users", roles: ["HR"] },
+    { label: "Requests", href: "/hr/vacancies", iconName: "ClipboardList", roles: ["HR"] },
+    { label: "Profile", href: "/hr/profile", iconName: "UserCircle", roles: ["HR"] },
   ],
   WEBMASTER: [
     { label: "Home", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },

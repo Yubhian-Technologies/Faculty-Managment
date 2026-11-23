@@ -9,6 +9,8 @@ import type { Firestore } from "firebase-admin/firestore";
 
 export const COLLEGE_ADMIN_EXTRA_ROLES = [
   "HOD", "EXAM_CELL", "ACADEMICS", "LIBRARY", "T_AND_P", "PLACEMENT_DEPT", "IQAC_COORDINATOR", "HOSTEL",
+  // HR: the recruitment desk (candidates, interview scheduling, offer letters, joining).
+  "HR",
   // The College Office too: adding / importing students and the other Office-only work ("Working as" > College Office).
   "COLLEGE_OFFICE",
 ] as const;
