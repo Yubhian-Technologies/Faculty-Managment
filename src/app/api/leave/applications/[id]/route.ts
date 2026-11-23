@@ -490,6 +490,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (d.id === id) return false; // this request's own prior dates, being replaced
         const r = d.data() as LeaveRequest;
         if (r.status !== "APPROVED") return false;
+        if (r.isLateAttendancePenalty) return false; // the automatic late check-in deduction is never a day away
         const rFrom = (r.fromDate as unknown as { toDate(): Date }).toDate();
         const rTo = (r.toDate as unknown as { toDate(): Date }).toDate();
         return fromDate <= rTo && rFrom <= toDate;

@@ -118,6 +118,9 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
   const today = new Date();
   const unfinishedApprovedLeaves = requests.filter((r) => {
     if (r.status !== "APPROVED") return false;
+    // The automatic late check-in CL deduction is dated the day it happened but is never a day away - it must not
+    // show "On leave" or turn Apply for Leave into a disabled "Leave Scheduled" button.
+    if (r.isLateAttendancePenalty) return false;
     const to = toDate(r.toDate);
     if (!to) return false;
     const toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);

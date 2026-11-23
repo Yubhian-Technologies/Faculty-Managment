@@ -90,6 +90,7 @@ async function loadMonthInputs(db: Firestore, collegeId: string, month: string):
 function coveredDates(requests: LeaveRequest[], first: string, last: string): Set<string> {
   const out = new Set<string>();
   for (const r of requests) {
+    if (r.isLateAttendancePenalty) continue; // a CL balance cut only - never a day away, so it excuses no Absent mark
     const from = toDate(r.fromDate), to = toDate(r.toDate ?? r.fromDate);
     if (!from || !to) continue;
     for (let t = from.getTime(); t <= to.getTime() + 1000; t += 86400000) {

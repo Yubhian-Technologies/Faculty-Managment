@@ -78,24 +78,16 @@ export async function recordLateCheckIn(
   });
 }
 
-// Reverses recordLateCheckIn's effect for one specific late check-in date -
-// used when an HOD retroactively grants check-in permission for a day that
-// already has a late check-in recorded (see check-in-permission/route.ts) -
-// the live check-in route only ever resolves a permission AT THE MOMENT of
-// check-in, so a permission granted afterward (the common real flow: HOD
-// sees someone arrived late, then excuses it) would otherwise leave the
-// record's counter/deduction stuck as if it were still late.
+// Reverses recordLateCheckIn's effect for one specific late check-in date - used when an HOD retroactively grants
+// check-in permission for a day that already has a late check-in recorded (check-in-permission/route.ts), and when a
+// forenoon leave is approved after the person already checked in that day (attendanceSync.ts) - the live check-in
+// route only judges lateness AT THE MOMENT of check-in.
 //
-// Decrements the running per-year counter by one (this date no longer counts
-// toward any future 3rd/6th/9th... grouping) - and if THIS exact date was
-// the one that actually triggered a 0.5 CL deduction (a matching
-// isLateAttendancePenalty leaveRequest exists dated that day), reverses that
-// too: restores the balance and removes the record so leave history doesn't
-// keep showing a penalty that no longer applies. Deliberately NOT a full
-// renumbering of every later date's grouping (e.g. a later date that became
-// "the" 3rd late check-in only because this one was excused first still
-// keeps whatever it was originally assigned) - a rare, accepted imprecision
-// in exchange for staying simple and safe to run as one isolated correction.
+// Decrements the per-year counter by one, then keeps the deductions in step with it: there should be exactly
+// floor(count / 3) automatic deductions for the year. If there are now more, one is removed (balance restored, the
+// record deleted so leave history stops showing it) - the one dated this day when this day triggered it, else the
+// latest. E.g. 6 late check-ins (deductions at the 3rd and 6th), the 5th excused -> 5 -> the 6th's deduction goes,
+// so the next late check-in (the 6th again) deducts once, not a second time.
 export async function reverseLateCheckIn(
   db: Firestore,
   collegeId: string,
@@ -105,43 +97,42 @@ export async function reverseLateCheckIn(
   const year = date.getFullYear();
   const counterRef = LATE_COUNTERS_COL(collegeId, db).doc(counterDocId(uid, year));
   const balanceRef = BALANCES_COL(collegeId, db).doc(balanceDocId(uid, "CL", year));
-
-  // fromDate on the penalty doc is always the same zero-time-of-day
-  // construction recordLateCheckIn's caller uses (see check-in/route.ts's
-  // todayDocDate / import route's date), so an equality match on that same
-  // construction is exact - no range query (and its composite-index
-  // requirement) needed.
-  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const penaltySnap = await REQUESTS_COL(collegeId, db)
+  const penaltiesQuery = REQUESTS_COL(collegeId, db)
     .where("uid", "==", uid)
-    .where("isLateAttendancePenalty", "==", true)
-    .where("fromDate", "==", dayStart)
-    .limit(1)
-    .get();
-  const penaltyRef = penaltySnap.empty ? null : penaltySnap.docs[0].ref;
+    .where("isLateAttendancePenalty", "==", true);
+  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const timeOf = (v: unknown) => {
+    const d = v && typeof (v as { toDate?: () => Date }).toDate === "function" ? (v as { toDate: () => Date }).toDate() : v instanceof Date ? v : null;
+    return d ? d.getTime() : 0;
+  };
 
   const now = new Date();
   await db.runTransaction(async (tx) => {
-    const [counterSnap, balanceSnap, penaltySnapshot] = await Promise.all([
+    const [counterSnap, balanceSnap, penaltiesSnap] = await Promise.all([
       tx.get(counterRef),
       tx.get(balanceRef),
-      penaltyRef ? tx.get(penaltyRef) : Promise.resolve(null),
+      tx.get(penaltiesQuery),
     ]);
     const count = Math.max(0, ((counterSnap.data()?.count as number | undefined) ?? 0) - 1);
     tx.set(counterRef, { collegeId, uid, year, count, updatedAt: now }, { merge: true });
 
-    if (penaltyRef && penaltySnapshot?.exists) {
-      const balanceData = balanceSnap.data() ?? {};
-      tx.set(
-        balanceRef,
-        {
-          collegeId, uid, leaveTypeCode: "CL", year,
-          used: Math.max(0, (balanceData.used as number | undefined ?? 0) - PENALTY_DAYS),
-          updatedAt: now,
-        },
-        { merge: true },
-      );
-      tx.delete(penaltyRef);
-    }
+    const penalties = penaltiesSnap.docs.filter((d) => {
+      const t = timeOf(d.get("fromDate"));
+      return t && new Date(t).getFullYear() === year;
+    });
+    if (penalties.length <= Math.floor(count / LATE_CHECKINS_PER_PENALTY)) return;
+    const thisDay = penalties.find((d) => timeOf(d.get("fromDate")) === dayStart.getTime());
+    const drop = thisDay ?? [...penalties].sort((a, b) => timeOf(b.get("fromDate")) - timeOf(a.get("fromDate")) || timeOf(b.get("createdAt")) - timeOf(a.get("createdAt")))[0];
+    const balanceData = balanceSnap.data() ?? {};
+    tx.set(
+      balanceRef,
+      {
+        collegeId, uid, leaveTypeCode: "CL", year,
+        used: Math.max(0, (balanceData.used as number | undefined ?? 0) - PENALTY_DAYS),
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    tx.delete(drop.ref);
   });
 }
