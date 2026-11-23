@@ -38,6 +38,7 @@ import {
   buildDepartmentPickOptions, departmentPickValue, parseDepartmentPick,
 } from "@/lib/departments/departmentPickTree";
 import { useSectionDepartmentState } from "@/hooks/useSectionDepartments";
+import { Missing, PctCell, StudentQuickPanel, StudentsOverview, TodayMark, type OverviewStudent } from "@/components/students/hod/StudentsOverview";
 import {
   HOD_STUDENTS_LIST_PATH,
   buildHodStudentsListUrl,
@@ -118,6 +119,19 @@ function HodStudentsContent() {
       : null
   );
   const hasLoaded = applied !== null;
+  // Overview (number cards, section cards, quick filters) and the per-student figures it brings for the table.
+  const [overviewRows, setOverviewRows] = useState<Record<string, OverviewStudent> | null>(null);
+  const [overviewFocus, setOverviewFocus] = useState(false);
+  const [panelId, setPanelId] = useState<string | null>(null);
+  const overviewQuery = useMemo(() => {
+    const q = new URLSearchParams();
+    if (!applied || applied.view !== "none") return "";
+    if (applied.dept !== "all") q.set("department", applied.dept);
+    if (applied.core !== "all") q.set("coreDepartment", applied.core);
+    if (applied.course !== "all") q.set("course", applied.course);
+    if (applied.year !== "all") q.set("year", applied.year);
+    return q.toString();
+  }, [applied]);
   const appliedView = applied?.view ?? "none";
   // The list request returns every matching id (signed, in display order) plus
   // one page; later pages are fetched by id, so paging reads only that page's
@@ -1169,19 +1183,6 @@ function HodStudentsContent() {
     { key: "name", header: "Name" },
     { key: "department", header: "Department", hideOnMobile: true, render: (r) => <span className="text-sm text-muted-foreground">{r.department}</span> },
     {
-      key: "course",
-      header: "Course",
-      hideOnMobile: true,
-      // Kept in sync with whichever section a student is actually placed
-      // into (see StudentRecord.courseId's doc-comment) - a department can
-      // run more than one course, so this is the only reliable way to tell,
-      // at a glance, which one a given row belongs to (the same section name
-      // can exist under two different courses).
-      render: (r) => r.course
-        ? <span className="text-sm text-muted-foreground">{r.course}</span>
-        : <span className="text-sm text-muted-foreground/40">—</span>,
-    },
-    {
       key: "section",
       header: "Section",
       render: (r) =>
@@ -1189,7 +1190,12 @@ function HodStudentsContent() {
           ? <span>{r.section}</span>
           : <Badge variant="outline" className="text-amber-600 border-amber-300">Unassigned</Badge>,
     },
-    { key: "year", header: "Year", hideOnMobile: true, render: (r) => <span>{r.year}</span> },
+    // From the overview (the same figures as the HOD dashboard): today's mark, semester %, mentor, mobile, login.
+    { key: "today", header: "Today", excludeFromCsv: true, render: (r) => <TodayMark t={overviewRows?.[r.id]?.t} /> },
+    { key: "attendancePct", header: "Attendance", excludeFromCsv: true, render: (r) => <PctCell p={overviewRows?.[r.id]?.p} /> },
+    { key: "mentor", header: "Mentor", hideOnMobile: true, excludeFromCsv: true, render: (r) => !overviewRows ? <span className="text-muted-foreground/40">-</span> : overviewRows[r.id]?.m ? <span className="text-sm">{overviewRows[r.id]!.m}</span> : <Missing>Not assigned</Missing> },
+    { key: "mobile", header: "Mobile", hideOnMobile: true, excludeFromCsv: true, render: (r) => !overviewRows ? <span className="text-muted-foreground/40">-</span> : overviewRows[r.id]?.mob ? "✓" : <Missing>Missing</Missing> },
+    { key: "login", header: "Login", hideOnMobile: true, excludeFromCsv: true, render: (r) => !overviewRows ? <span className="text-muted-foreground/40">-</span> : overviewRows[r.id]?.login ? "✓" : <span className="text-xs text-muted-foreground">Not created</span> },
     {
       key: "status",
       header: "Status",
@@ -1233,7 +1239,11 @@ function HodStudentsContent() {
   ];
 
   // The read-only incoming list has no select / action columns.
-  const visibleColumns = isFreshmanView ? columns.filter((c) => c.key !== "actions" && c.key !== "select") : columns;
+  // Lab Batch only when someone in view has one; the overview's columns only on the department roster.
+  const anyLabBatch = students.some((r) => !!r.labBatch);
+  const overviewKeys = new Set(["today", "attendancePct", "mentor", "mobile", "login"]);
+  const baseColumns = columns.filter((c) => (c.key !== "labBatch" || anyLabBatch) && (!isFreshmanView || !overviewKeys.has(c.key)));
+  const visibleColumns = isFreshmanView ? baseColumns.filter((c) => c.key !== "actions" && c.key !== "select") : baseColumns;
 
   // Same header - title, description and tab strip - for both views, so
   // switching tabs moves and resizes nothing; only the active pill changes.
@@ -1563,7 +1573,12 @@ function HodStudentsContent() {
           </div>
         </div>
 
-        {!hasLoaded ? (
+        {hasLoaded && overviewQuery !== null && appliedView === "none" && (
+          // Keyed by the filters: a new filter starts from the full list (no quick filter / section picked).
+          <StudentsOverview key={overviewQuery} query={overviewQuery} reloadKey={applied} onData={setOverviewRows} onFocusChange={setOverviewFocus} onOpen={setPanelId} />
+        )}
+
+        {overviewFocus && appliedView === "none" ? null : !hasLoaded ? (
           <div className="flex flex-col items-center justify-center py-20 text-center border rounded-lg bg-card">
             <Users className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="font-medium text-base">No Student Records Loaded</p>
@@ -1604,11 +1619,12 @@ function HodStudentsContent() {
                   {students.map((row) => (
                     <tr
                       key={row.id}
-                      onClick={() => router.push(withHodStudentsBack(`/hod/students/${row.id}`, listUrl))}
+                      onClick={() => (isFreshmanView ? router.push(withHodStudentsBack(`/hod/students/${row.id}`, listUrl)) : setPanelId(row.id))}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          router.push(withHodStudentsBack(`/hod/students/${row.id}`, listUrl));
+                          if (isFreshmanView) router.push(withHodStudentsBack(`/hod/students/${row.id}`, listUrl));
+                          else setPanelId(row.id);
                         }
                       }}
                       tabIndex={0}
@@ -1631,7 +1647,17 @@ function HodStudentsContent() {
           </div>
         )}
 
-        {hasLoaded && total > 10 && (
+        <StudentQuickPanel
+          key={panelId ?? "none"}
+          studentId={panelId}
+          info={panelId ? overviewRows?.[panelId] ?? null : null}
+          onClose={() => setPanelId(null)}
+          onOpenProfile={(id) => router.push(withHodStudentsBack(`/hod/students/${id}`, listUrl))}
+          onOpenAttendance={(id) => router.push(withHodStudentsBack(`/hod/students/${id}/attendance?name=${encodeURIComponent(overviewRows?.[id]?.n ?? "")}`, listUrl))}
+          onMove={(() => { const row = panelId ? students.find((r) => r.id === panelId) : undefined; return row ? () => { setPanelId(null); openAssign(row); } : undefined; })()}
+        />
+
+        {hasLoaded && total > 10 && !(overviewFocus && appliedView === "none") && (
           <Pagination
             page={page}
             pageSize={pageSize}

@@ -335,26 +335,7 @@ export async function handleHodStudentsRequest(
     return { status: 200, body: await fetchHodMeta(studentsColl, ctx) };
   }
 
-  const department = (params.get("department") ?? "").trim();
-  const coreDepartment = (params.get("coreDepartment") ?? "").trim();
-  const yearParam = params.get("year");
-  // A shared-year department (Basic Science - Chemistry) and a branch it groups (CS&BS): the students may be filed
-  // under the feeder with the branch as `secondaryDepartment` (VWU) or under the branch itself (VIT) - both count.
-  // The feeder picked alone also brings the branches it groups (their shared year; classifyHodStudent keeps the year).
-  let departmentNames: string[] | null = department
-    ? await resolveRollupDepartmentNames(db.collection("colleges").doc(session.collegeId), ctx.departments as DepartmentWithId[], department)
-    : null;
-  if (departmentNames && coreDepartment) departmentNames = [...new Set([...departmentNames, coreDepartment])];
-  else if (departmentNames && ctx.scope.ownDepartmentNames.includes(department)) departmentNames = [...new Set([...departmentNames, ...ctx.scope.managedDepartmentNames])];
-  const filters: HodListFilters = {
-    level,
-    freshmanDept: incoming,
-    departmentNames,
-    coreDepartment,
-    course: (params.get("course") ?? "").trim(),
-    year: yearParam && Number.isFinite(Number(yearParam)) ? Number(yearParam) : null,
-    unassignedOnly: params.get("unassigned") === "1",
-  };
+  const filters = await buildHodListFilters(db, session, ctx, params, level, incoming);
 
   if (params.get("selectAll") === "1") {
     const result = await fetchHodStudentsMatching(studentsColl, ctx, filters, {
@@ -374,4 +355,45 @@ export async function handleHodStudentsRequest(
     rollTo: (params.get("rollTo") ?? "").trim(),
   });
   return { status: 200, body: { ...result, students: projectStudentsForRole("HOD", result.students) } };
+}
+
+/** The list filters of a request (Department / branch / Course / Year / unassigned), as the paged list reads them. */
+async function buildHodListFilters(
+  db: FirebaseFirestore.Firestore, session: { collegeId: string }, ctx: HodStudentsContext, params: URLSearchParams, level: HodAccess, incoming: string,
+): Promise<HodListFilters> {
+  const department = (params.get("department") ?? "").trim();
+  const coreDepartment = (params.get("coreDepartment") ?? "").trim();
+  const yearParam = params.get("year");
+  // A shared-year department (Basic Science - Chemistry) and a branch it groups (CS&BS): the students may be filed
+  // under the feeder with the branch as `secondaryDepartment` (VWU) or under the branch itself (VIT) - both count.
+  // The feeder picked alone also brings the branches it groups (their shared year; classifyHodStudent keeps the year).
+  let departmentNames: string[] | null = department
+    ? await resolveRollupDepartmentNames(db.collection("colleges").doc(session.collegeId), ctx.departments as DepartmentWithId[], department)
+    : null;
+  if (departmentNames && coreDepartment) departmentNames = [...new Set([...departmentNames, coreDepartment])];
+  else if (departmentNames && ctx.scope.ownDepartmentNames.includes(department)) departmentNames = [...new Set([...departmentNames, ...ctx.scope.managedDepartmentNames])];
+  return {
+    level,
+    freshmanDept: incoming,
+    departmentNames,
+    coreDepartment,
+    course: (params.get("course") ?? "").trim(),
+    year: yearParam && Number.isFinite(Number(yearParam)) ? Number(yearParam) : null,
+    unassignedOnly: params.get("unassigned") === "1",
+  };
+
+}
+
+/**
+ * Every student of the HOD's own roster matching the page's filters (Department / branch / Course / Year), full
+ * records - for the Students page's overview (number cards, section cards, quick filters). Not capped beyond the
+ * roster itself.
+ */
+export async function hodStudentsForOverview(
+  db: FirebaseFirestore.Firestore, session: { collegeId: string; uid: string }, params: URLSearchParams,
+): Promise<HodStudent[]> {
+  const studentsColl = db.collection("colleges").doc(session.collegeId).collection("students");
+  const ctx = await loadHodStudentsContext(db, session.collegeId, session.uid);
+  const filters = await buildHodListFilters(db, session, ctx, params, "primary", "");
+  return loadCandidates(studentsColl, ctx, filters);
 }
