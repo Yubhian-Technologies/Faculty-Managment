@@ -20,6 +20,8 @@ const TIMETABLE_INCHARGE_HREFS = [
 ];
 const SECTION_INCHARGE_HREFS = ["/panel/students", "/panel/students/batches", "/panel/section", "/panel/students/class-representatives"];
 const QUESTION_BANK_HREFS = ["/panel/mid-bank"];
+// Faculty > Mid Marks: only where the Exam Cell turned on the Faculty Mid Marks Page (examSettings/mid.midMarksPage).
+const MID_MARKS_HREFS = ["/panel/mid-marks"];
 const INTERNAL_EXAM_HREFS = ["/panel/internal-exam"];
 // Mid Timetable shows for students and faculty only once a timetable they may see is published.
 const MID_TIMETABLE_HREFS = ["/student/mid-timetable", "/panel/mid-timetable"];
@@ -94,6 +96,13 @@ export function useNavVisibility() {
     staleTime: 2 * 60_000,
   });
 
+  const { data: midMarksPage } = useQuery({
+    queryKey: ["mid-marks-page", user?.collegeId],
+    queryFn: () => fetch("/api/college/exam-mid-settings").then((r) => (r.ok ? r.json() : {})).then((d: { settings?: { midMarksPage?: boolean } }) => d.settings?.midMarksPage === true),
+    enabled: wantsDuties,
+    staleTime: 5 * 60_000,
+  });
+
   const hiddenItems = useMemo(() => {
     if (!primary) return [];
     // The Super Admin configures rules per role, but a login can act as several
@@ -118,6 +127,7 @@ export function useNavVisibility() {
     if (wantsTimetable && hasTimetable !== true) MID_TIMETABLE_HREFS.forEach((h) => hrefs.add(h));
     if (hasDuties !== true) INVIGILATION_HREFS.forEach((h) => hrefs.add(h));
     if (hasCertificates !== true) hrefs.add(PANEL_CERTIFICATES_HREF);
+    if (midMarksPage !== true) MID_MARKS_HREFS.forEach((h) => hrefs.add(h));
     if (assignments) {
       if (!assignments.timetableIncharge) TIMETABLE_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
       if (!assignments.sectionIncharge) SECTION_INCHARGE_HREFS.forEach((h) => hrefs.add(h));
@@ -125,7 +135,7 @@ export function useNavVisibility() {
       if (assignments.internalExam === false) INTERNAL_EXAM_HREFS.forEach((h) => hrefs.add(h));
     }
     return Array.from(hrefs);
-  }, [raw, primary, seatRoles, collegeAdmin, assignments, officeAllowed.hrefs, wantsTimetable, hasTimetable, hasDuties, hasCertificates]);
+  }, [raw, primary, seatRoles, collegeAdmin, assignments, officeAllowed.hrefs, wantsTimetable, hasTimetable, hasDuties, hasCertificates, midMarksPage]);
 
   const hiddenModules = useMemo(() => {
     if (!primary) return [];

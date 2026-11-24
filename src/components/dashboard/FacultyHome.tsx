@@ -83,6 +83,8 @@ export function FacultyHome({ extraAttention }: { extraAttention?: ReactNode }) 
   const adjustments = useHomeQuery<{ items?: unknown[] }>(uid, "adjustments", "/api/leave/adjustment-requests", show.adjustments);
   const mid = useHomeQuery<{ items?: MidBankListItem[] }>(uid, "mid", "/api/college/mid-question-banks", show.mid);
   const cie = useHomeQuery<{ assignments?: CeaAssignment[] }>(uid, "cie", "/api/college/cea/marks", show.cie);
+  // Faculty > Mid Marks (only where the Exam Cell turned the page on; elsewhere the call answers 404 and shows nothing).
+  const midMarks = useHomeQuery<{ classes?: { subjectName: string; sectionName: string; midNumber: number; status: string; state: { canEdit: boolean; lastDate: string | null } }[] }>(uid, "mid-marks", "/api/college/mid-marks-sheets", true);
   const duties = useHomeQuery<{ duties?: Duty[] }>(uid, "duties", "/api/college/invigilation/my", true);
   const mids = useHomeQuery<{ timetables?: MidTimetable[] }>(uid, "mids", "/api/college/mid-timetables/published", true);
   const teaching = useHomeQuery<{ assignments?: TeachingAssignment[] }>(uid, "teaching", `/api/college/teaching-assignments?week=${monday}`, show.teaching);
@@ -100,7 +102,14 @@ export function FacultyHome({ extraAttention }: { extraAttention?: ReactNode }) 
     .sort((a, b) => a.deadline.deadline.localeCompare(b.deadline.deadline));
   for (const i of midTodo.slice(0, 2)) attention.push({ key: `mid-${i.key}`, tone: "amber", href: "/panel/mid-bank", action: i.myBank ? "Continue" : "Start",
     text: <>Mid {i.deadline.midNumber} paper - {i.subject.name} ({i.branch}){i.myBank ? ` · ${i.myBank.completeCount}/${i.myBank.totalCount} done` : ""} · {deadlineLabel(i.deadline.deadline)}</> });
-  const cieDraft = (cie.data?.assignments ?? []).flatMap((a) => a.units.filter((u) => u.status === "DRAFT").map((u) => `${a.subjectName} ${a.section} Unit ${u.unit}`));
+  // Mid marks open for entry and not yet submitted.
+  const midMarksTodo = (midMarks.data?.classes ?? []).filter((c) => c.state.canEdit && c.status !== "SUBMITTED");
+  if (midMarksTodo.length) {
+    const last = midMarksTodo.map((c) => c.state.lastDate).filter((d): d is string => !!d).sort()[0];
+    attention.push({ key: "mid-marks", tone: "amber", href: "/panel/mid-marks", action: "Enter",
+      text: <>Mid marks to enter: {midMarksTodo.slice(0, 3).map((c) => `Mid-${c.midNumber} ${c.subjectName} ${c.sectionName}`).join(", ")}{midMarksTodo.length > 3 ? ` +${midMarksTodo.length - 3} more` : ""}{last ? ` · last date ${last.split("-").reverse().join("/")}` : ""}</> });
+  }
+  const cieDraft =(cie.data?.assignments ?? []).flatMap((a) => a.units.filter((u) => u.status === "DRAFT").map((u) => `${a.subjectName} ${a.section} Unit ${u.unit}`));
   if (cieDraft.length) attention.push({ key: "cie", tone: "amber", href: "/panel/cea", action: "Submit",
     text: <>CIE marks not submitted: {cieDraft.slice(0, 3).join(", ")}{cieDraft.length > 3 ? ` +${cieDraft.length - 3} more` : ""}</> });
   const adj = adjustments.data?.items?.length ?? 0;
