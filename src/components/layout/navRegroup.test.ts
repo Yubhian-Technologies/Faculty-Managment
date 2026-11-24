@@ -124,6 +124,7 @@ const EXPECTED: Record<string, string[]> = {
     "/panel/faculty-timetable",
     "/panel/internal-exam",
     "/panel/cea",
+    "/panel/mid-marks",
     "/panel/mid-bank",
     "/panel/mid-timetable",
     "/panel/invigilation",

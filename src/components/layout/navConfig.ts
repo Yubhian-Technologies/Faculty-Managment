@@ -467,6 +467,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Faculty Timetable", href: "/panel/faculty-timetable", iconName: "CalendarSearch", roles: ["PANEL_MEMBER"], module: "assignment-requests", legacyModule: "My Work" },
   { label: "Internal Marks", href: "/panel/internal-exam", iconName: "ClipboardList", roles: ["PANEL_MEMBER"], legacyModule: "My Work" },
   { label: "CIE Marks", href: "/panel/cea", iconName: "ClipboardCheck", roles: ["PANEL_MEMBER"], legacyModule: "My Work" },
+  // Shown only where the Exam Cell turned on the Faculty Mid Marks Page (useNavVisibility).
+  { label: "Mid Marks", href: "/panel/mid-marks", iconName: "ClipboardList", roles: ["PANEL_MEMBER"], legacyModule: "My Work" },
   { label: "Mid Question Bank", href: "/panel/mid-bank", iconName: "BookOpen", roles: ["PANEL_MEMBER"], legacyModule: "My Work" },
   { label: "Mid Timetable", href: "/panel/mid-timetable", iconName: "CalendarRange", roles: ["PANEL_MEMBER"], legacyModule: "My Work" },
   { label: "Invigilation Duties", href: "/panel/invigilation", iconName: "UserCheck", roles: ["PANEL_MEMBER"], legacyModule: "My Work" },
