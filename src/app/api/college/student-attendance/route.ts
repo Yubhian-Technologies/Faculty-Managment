@@ -20,6 +20,7 @@ import { sortStudentsForList } from "@/lib/students/listOrder";
 import { joinedBy } from "@/lib/studentAttendance/joiningDate";
 import { resolveAcademicYearForDate } from "@/lib/studentAttendance/academicYearWindow";
 import { facultyDisplayName } from "@/lib/faculty/facultyDisplayName";
+import { findLabClash, labClashMessage, sharedSessionMessage } from "@/lib/studentAttendance/labClash";
 import type { FacultyMember, Section, StudentAttendanceEntry, StudentAttendanceSession, TeachingAssignment } from "@/types";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
     // to filter on, instead of every session being permanently unscoped.
     const semester = assignment.sectionId ? assignment.timetableSemester : assignment.semester;
 
+    let inchargeName: string | undefined;
     if (assignment.sectionId) {
       const sectionSnap = await collegeRef.collection("sections").doc(assignment.sectionId).get();
       if (!sectionSnap.exists) {
@@ -117,6 +119,7 @@ export async function POST(request: Request) {
       sectionName = section.name;
       year = section.year;
       courseId = section.courseId;
+      inchargeName = section.facultyInchargeName;
     } else {
       const sec = assignment.section?.trim();
       if (!sec) {
@@ -189,6 +192,24 @@ export async function POST(request: Request) {
       windowCheck.slot.labBatch, await loadLabBatchModes(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]),
       sectionId, assignment.subjectId, assignment.facultyId, windowCheck.slot.batchPinned,
     );
+
+    // Another lab of this section in the same period while this period has no lab batch: every faculty would mark
+    // the whole section and the period would count twice. Refused until the class in-charge divides the section into
+    // lab batches; the same lab shared by several faculty is marked once (lib/studentAttendance/labClash.ts).
+    if (!labBatch && sectionId) {
+      const clash = await findLabClash(db, session.collegeId, windowCheck.slot, date, adjustedFrom?.fromFacultyId);
+      if (clash.length > 0) {
+        return NextResponse.json({ error: labClashMessage(sectionName, clash, inchargeName), code: "LAB_BATCHES_NEEDED" }, { status: 409 });
+      }
+      const opened = await collegeRef.collection("studentAttendance")
+        .where("sectionId", "==", sectionId).where("date", "==", date).where("periodNumber", "==", windowCheck.slot.periodNumber)
+        .select("assignmentId", "subjectId", "labBatch", "facultyName", "subjectName").limit(10).get();
+      // The same lab shared by several faculty for the whole section: whoever opened it first marks it.
+      const other = opened.docs.find((d) => d.get("assignmentId") !== assignmentId && d.get("subjectId") === assignment.subjectId && !d.get("labBatch"));
+      if (other) {
+        return NextResponse.json({ error: sharedSessionMessage(String(other.get("subjectName") ?? ""), sectionName, String(other.get("facultyName") ?? "")), code: "ALREADY_MARKED" }, { status: 409 });
+      }
+    }
 
     // Resolve the roster BEFORE starting the transaction: the DRAFT-reconcile
     // branch (existing status === DRAFT) merges the incoming student list into
