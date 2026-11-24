@@ -80,7 +80,7 @@ export async function GET() {
             sections: own.sections.map((s) => s.sectionName),
             updatedAt: (own.updatedAt as unknown as { toDate?: () => Date })?.toDate?.()?.toISOString() ?? null,
           },
-          sharedBanks: others.map((b) => ({ id: b.id, ownerName: b.ownerName, sections: b.sections.map((s) => s.sectionName), completeCount: b.completeCount, totalCount: b.totalCount })),
+          sharedBanks: others.map((b) => ({ id: b.id, ownerName: b.ownerName, sections: b.sections.map((s) => s.sectionName), completeCount: b.completeCount, totalCount: b.totalCount, status: b.status, approval: b.approval ?? null, reopened: !!b.reopened })),
           // Own sections not yet in any bank - something left to prepare.
           uncovered: sections.filter((s) => s.mine && !s.bankId).map((s) => s.sectionName),
         });
@@ -220,7 +220,17 @@ async function hodModeItems(db: FirebaseFirestore.Firestore, collegeId: string, 
     const banks = (await refs.banks.where("deadlineId", "==", d.id).get()).docs.map((b) => ({ id: b.id, ...(b.data() as Omit<MidQuestionBank, "id">) }));
     const locked = isDeadlineLocked(d.deadline);
     const deadline = { id: d.id, deadline: d.deadline, locked, courseName: d.courseName, year: d.year, semester: d.semester, midNumber: d.midNumber };
-    const summary = (b: (typeof banks)[number]) => ({ id: b.id, ownerName: b.ownerName, sections: b.sections.map((s) => (s.branch && isMultiBranch(b.branch) ? `${s.branch} ${s.sectionName}` : s.sectionName)), completeCount: b.completeCount, totalCount: b.totalCount });
+    // Section names already carry the branch code (AIML-A, CSE-B); the branch is added only when two sections of the
+    // paper share a name.
+    const sectionLabels = (list: { sectionName: string; branch?: string }[]) => {
+      const seen = new Map<string, number>();
+      for (const x of list) seen.set(x.sectionName, (seen.get(x.sectionName) ?? 0) + 1);
+      return list.map((x) => ((seen.get(x.sectionName) ?? 0) > 1 && x.branch ? `${x.branch} ${x.sectionName}` : x.sectionName));
+    };
+    const summary = (b: (typeof banks)[number]) => ({
+      id: b.id, ownerName: b.ownerName, sections: sectionLabels(b.sections), completeCount: b.completeCount, totalCount: b.totalCount,
+      status: b.status, approval: b.approval ?? null, reopened: !!b.reopened,
+    });
     const sectionView = (subjectId: string, branch: string) => sectionsForScope(rows, subjectId, branch).map((s) => ({
       sectionId: s.sectionId, sectionName: isMultiBranch(branch) && s.branch ? `${s.branch} ${s.sectionName}` : s.sectionName, facultyNames: s.facultyNames,
       mine: s.facultyIds.includes(me), heldBy: null, bankId: null,
@@ -248,12 +258,14 @@ async function hodModeItems(db: FirebaseFirestore.Firestore, collegeId: string, 
     for (const g of groups.values()) {
       if (mineAssigned.some((a) => a.subjectId === g.subjectId && servesBranch(a, g.branch))) continue;
       const covering = assignments.filter((a) => a.subjectId === g.subjectId && servesBranch(a, g.branch));
-      const serving = banks.filter((b) => b.subjectId === g.subjectId && servesBranch(b, g.branch) && b.ownerFacultyId !== me);
+      const serving = banks.filter((b) => b.subjectId === g.subjectId && servesBranch(b, g.branch) && b.ownerFacultyId !== me && !b.withdrawn);
       items.push({
         key: `${d.id}|${g.subjectId}|${g.branch}`, deadline, subject: { id: g.subjectId, name: g.subjectName, code: g.subjectCode }, branch: g.branch,
         sections: sectionView(g.subjectId, g.branch), myBank: null, sharedBanks: serving.map(summary), uncovered: [],
         note: covering.length
-          ? `Prepared by ${[...new Set(covering.flatMap((a) => a.facultyNames))].filter(Boolean).join(", ")} (assigned by the HOD) - you can view it and give suggestions`
+          ? serving.length
+            ? "Assigned by the HOD to the faculty below. You can view their papers and give suggestions."
+            : `Prepared by ${[...new Set(covering.flatMap((a) => a.facultyNames))].filter(Boolean).join(", ")} (assigned by the HOD). You can view it and give suggestions once they start.`
           : "Your HOD hasn't assigned who prepares this yet",
       });
     }

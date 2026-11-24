@@ -6,6 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { notify } from "@/lib/notify";
+import { loadMidSettings } from "@/lib/exams/midSettings";
 import { loadPlan } from "@/lib/midTimetable/server";
 import { courseIdsForKey, teachingFor } from "@/lib/midBank/server";
 import { resolveLoginUidForFacultyMember } from "@/lib/faculty/resolveFacultyMemberId";
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
     const planId = String(body.planId ?? "");
     if (!planId) throw new MidMarksError("Select a Mid.");
     const db = getAdminDb();
+    const page = (await loadMidSettings(db, session.collegeId)).midMarksPage;
     const c = session.collegeId;
     const plan = await loadPlan(db, c, planId);
     if (!plan) throw new MidMarksError("Mid timetable not found. It may have been deleted.", 404);
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
       const uid = await resolveLoginUidForFacultyMember(db, c, fid);
       if (!uid || uid === fid) continue;
       await notify(db, c, uid, "MID_MARKS_REMINDER", `Mid-${plan.midNumber} marks pending`,
-        `Enter and submit the Mid-${plan.midNumber} marks of: ${items.join("; ")}.`, "/panel/internal-exam");
+        `Enter and submit the Mid-${plan.midNumber} marks of: ${items.join("; ")}.`, page ? "/panel/mid-marks" : "/panel/internal-exam");
       notified++;
     }
     const actorName = ((await db.collection("colleges").doc(c).collection("users").doc(session.uid).get()).data() as { name?: string } | undefined)?.name ?? "";

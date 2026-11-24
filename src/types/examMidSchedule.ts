@@ -15,6 +15,9 @@ export interface ExamMidSettings {
   bloomLevels?: { id: string; name: string; min: number }[];
   /** Print the PO / PSO column on question papers (Mid and CEA). Missing = not printed; the mapping itself stays. */
   printPo?: boolean;
+  /** Faculty enter Mid marks on their own Mid Marks page (question-wise, against the printed paper), without the
+   *  internal marks setup. Missing = off. */
+  midMarksPage?: boolean;
   updatedAt?: Timestamp;
   updatedByName?: string;
 }
