@@ -673,6 +673,10 @@ export interface SectionLabBatchSetting {
   // That faculty marks only that batch's students, whatever batch label the
   // timetable period itself carries. Absent/empty for a faculty = the period's own label.
   batchByFaculty?: Record<string, string>;
+  // Periods where this lab runs beside another lab of the section (Physics lab + Chemistry lab in the same
+  // period): the batch this lab takes in that period, decided by the class in-charge. Key `${day}_${periodNumber}`
+  // (labPeriodKey). Wins over batchByFaculty, the period's own label and "no batch"; the same every week.
+  batchByPeriod?: Record<string, string>;
   updatedBy: string;
   updatedAt: unknown;
 }

@@ -172,7 +172,7 @@ export async function POST(request: Request) {
     // student-attendance/route.ts's own POST).
     const labBatch = effectiveLabBatch(
       matchedPeriod.slot.labBatch, await loadLabBatchModes(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]),
-      sectionId, assignment.subjectId, assignment.facultyId, matchedPeriod.slot.batchPinned,
+      sectionId, assignment.subjectId, assignment.facultyId, matchedPeriod.slot.batchPinned, matchedPeriod.slot,
     );
     // Correcting an earlier day: a student who joined after it (Date of Joining) is not on that day's list.
     const students = sortStudentsForList(await fetchSectionStudents(collegeRef, { department, sectionName, year, courseId, labBatch }))
