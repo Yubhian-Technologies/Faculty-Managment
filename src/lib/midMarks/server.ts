@@ -44,9 +44,13 @@ export interface EntryState {
   /** The Exam Cell opened faculty entry for the subject (after its exam). */
   open: boolean;
   lastDate: string | null;
-  /** Can the faculty change marks now. */
+  /** Can the faculty change marks now (a draft, entry open, before the last date or reopened by the Exam Cell). */
   canEdit: boolean;
-  /** Why not, in a sentence (empty when they can). */
+  /** Submitted and not frozen yet: the faculty may take it back to a draft (same window as editing). */
+  canWithdraw: boolean;
+  /** Submitted or frozen, no request waiting: the faculty may ask the Exam Cell to reopen it. */
+  canRequestChange: boolean;
+  /** Why the marks can't be changed now, in a sentence (empty when they can). */
   reason: string;
 }
 
@@ -78,20 +82,33 @@ async function paperSheet(db: Db, c: string, ctx: Ctx, mid: number): Promise<Que
   return s && s.source === "CHOSEN" ? s : null;
 }
 
-async function stateFor(db: Db, c: string, ctx: Ctx, mid: number, hasPaper: boolean, submitted: boolean): Promise<EntryState> {
+type SheetLike = Pick<MidMarksSheet, "status" | "editGrant" | "changeRequest"> | null | undefined;
+
+async function stateFor(db: Db, c: string, ctx: Ctx, mid: number, hasPaper: boolean, sheet: SheetLike): Promise<EntryState> {
   const [mode, open, lastDate] = await Promise.all([
     ctx.courseKey ? loadMode(db, c, ctx.courseKey, mid) : Promise.resolve("FACULTY" as const),
     isFacultyEntryOpen(db, c, ctx.courseKey, ctx.section.year, ctx.a.timetableSemester, mid, ctx.a.subjectId),
     ctx.courseKey ? lastDateFor(db, c, ctx.courseKey, mid) : Promise.resolve(null),
   ]);
   const examCellMode = mode === "EXAM_CELL";
-  const reason = !hasPaper ? "The Exam Cell has not printed this subject's paper for your branch yet."
+  const status = sheet?.status ?? "DRAFT";
+  const pending = sheet?.changeRequest?.status === "PENDING";
+  // Entry window: the subject opened after its exam, and the last date not passed - or reopened by the Exam Cell.
+  const windowReason = !hasPaper ? "The Exam Cell has not printed this subject's paper for your branch yet."
     : examCellMode ? "The Exam Cell enters this Mid's marks."
     : !open ? "Opens once the Exam Cell opens entry after the exam."
-    : !withinLastDate(istDateKey(), lastDate) ? `The last date (${lastDate!.split("-").reverse().join("/")}) has passed. Ask the Exam Cell to reopen.`
-    : submitted ? "Submitted. Ask the Exam Cell to reopen it for changes."
+    : !sheet?.editGrant && !withinLastDate(istDateKey(), lastDate) ? `The last date (${lastDate!.split("-").reverse().join("/")}) has passed. Send a change request to the Exam Cell.`
     : "";
-  return { hasPaper, examCellMode, open, lastDate, canEdit: !reason, reason };
+  const reason = windowReason && status === "DRAFT" ? windowReason
+    : status === "FROZEN" ? (pending ? "Frozen by the Exam Cell. Your change request is waiting for the Exam Cell." : "Frozen by the Exam Cell. To change marks, send a change request.")
+    : status === "SUBMITTED" ? (pending ? "Submitted. Your change request is waiting for the Exam Cell." : "Submitted to the Exam Cell. Withdraw it to make changes, until the Exam Cell freezes it.")
+    : windowReason;
+  return {
+    hasPaper, examCellMode, open, lastDate, reason,
+    canEdit: status === "DRAFT" && !windowReason,
+    canWithdraw: status === "SUBMITTED" && !windowReason && !pending,
+    canRequestChange: (status === "SUBMITTED" || status === "FROZEN") && !pending && !examCellMode,
+  };
 }
 
 /** Faculty > Mid Marks list: every current section + subject the login teaches x each Mid with a printed paper. */
@@ -103,7 +120,7 @@ export async function myMidClasses(db: Db, c: string, uid: string) {
     .filter((a) => !a.isPast && a.sectionId && a.subjectId);
   const out: {
     assignmentId: string; subjectCode?: string; subjectName: string; sectionName: string; department: string; year?: number; midNumber: number;
-    sheetId: string; status: "NOT_STARTED" | "DRAFT" | "SUBMITTED"; complete: number; total: number; paperMax: number; state: EntryState;
+    sheetId: string; status: "NOT_STARTED" | MidMarksSheet["status"]; changeRequested: boolean; complete: number; total: number; paperMax: number; state: EntryState;
   }[] = [];
   for (const a of tas) {
     let ctx: Ctx;
@@ -115,9 +132,9 @@ export async function myMidClasses(db: Db, c: string, uid: string) {
       const saved = (await midMarksSheetsCol(db, c).doc(id).get()).data() as MidMarksSheet | undefined;
       out.push({
         assignmentId: a.id, subjectCode: a.subjectCode, subjectName: a.subjectName, sectionName: ctx.section.name, department: ctx.section.department,
-        year: ctx.section.year, midNumber: mid, sheetId: id, status: saved?.status ?? "NOT_STARTED",
+        year: ctx.section.year, midNumber: mid, sheetId: id, status: saved?.status ?? "NOT_STARTED", changeRequested: saved?.changeRequest?.status === "PENDING",
         complete: saved?.completeCount ?? 0, total: saved?.totalStudents ?? 0, paperMax: (saved?.sheet ?? sheet).paperMax,
-        state: await stateFor(db, c, ctx, mid, true, saved?.status === "SUBMITTED"),
+        state: await stateFor(db, c, ctx, mid, true, saved),
       });
     }
   }
@@ -139,7 +156,7 @@ export async function openSheet(db: Db, c: string, uid: string, byName: string, 
   const current = (await ref.get()).data() as MidMarksSheet | undefined;
   const paper = current?.sheet ?? (await paperSheet(db, c, ctx, mid));
   if (!paper) throw new MidMarksError("The Exam Cell has not printed this subject's Mid-" + mid + " paper for your branch yet.", 409);
-  const state = await stateFor(db, c, ctx, mid, true, current?.status === "SUBMITTED");
+  const state = await stateFor(db, c, ctx, mid, true, current);
   // Nothing is written while entry is closed: a saved sheet is shown as it is, an unopened one only as the paper.
   if (!state.canEdit) return { sheet: current ?? null, state, paper };
 
@@ -149,9 +166,10 @@ export async function openSheet(db: Db, c: string, uid: string, byName: string, 
   const sheet = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const cur = snap.exists ? (snap.data() as MidMarksSheet) : null;
-    if (cur?.status === "SUBMITTED") return cur;
+    if (cur && cur.status !== "DRAFT") return cur;
     const entries = reconcileRoster(paper, cur?.entries ?? [], roster);
     const next: MidMarksSheet = {
+      ...(cur ?? {}),
       id: ref.id, assignmentId, subjectId: ctx.a.subjectId, ...(ctx.a.subjectCode ? { subjectCode: ctx.a.subjectCode } : {}), subjectName: ctx.a.subjectName,
       department: ctx.section.department, sectionId: ctx.section.id, sectionName: ctx.section.name, courseId: ctx.section.courseId ?? ctx.a.courseId ?? "",
       courseKey: ctx.courseKey, ...(ctx.section.year != null ? { year: ctx.section.year } : {}),
@@ -171,7 +189,7 @@ export async function openSheet(db: Db, c: string, uid: string, byName: string, 
 /** The entry state of a saved sheet (re-checked on every save). */
 export async function stateOfSheet(db: Db, c: string, sheet: MidMarksSheet): Promise<EntryState> {
   const ctx = await contextFor(db, c, sheet.assignmentId);
-  return stateFor(db, c, ctx, sheet.midNumber, true, sheet.status === "SUBMITTED");
+  return stateFor(db, c, ctx, sheet.midNumber, true, sheet);
 }
 
 /** Read access: the sheet's faculty, an HOD of its department, the Exam Cell, Principal / VP, Super Admin. */

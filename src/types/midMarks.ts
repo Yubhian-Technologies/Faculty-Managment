@@ -6,7 +6,9 @@ import type { QuestionSheet } from "@/lib/exams/questionMarks";
 // college sets up its internal marks.
 //   colleges/{c}/midMarksSheets/{assignmentId}__m{mid}
 
-export type MidMarksSheetStatus = "DRAFT" | "SUBMITTED";
+/** DRAFT (faculty entering) -> SUBMITTED (with the Exam Cell; the faculty may withdraw it) -> FROZEN (final; a change
+ *  needs a request the Exam Cell approves, which puts it back to DRAFT). */
+export type MidMarksSheetStatus = "DRAFT" | "SUBMITTED" | "FROZEN";
 
 /** "-" in a box: the student did not attempt that question (counts 0, but the box is filled). */
 export const NOT_ATTEMPTED = "NA" as const;
@@ -24,7 +26,19 @@ export interface MidMarksEntry {
   total: number | null;
 }
 
-export interface MidMarksHistoryItem { at: string; byName: string; action: "SUBMITTED" | "REOPENED"; reason?: string }
+export type MidMarksHistoryAction = "SUBMITTED" | "WITHDRAWN" | "FROZEN" | "REOPENED" | "CHANGE_REQUESTED" | "CHANGE_APPROVED" | "CHANGE_REJECTED";
+export interface MidMarksHistoryItem { at: string; byName: string; action: MidMarksHistoryAction; reason?: string }
+
+/** A faculty member's request to change submitted / frozen marks. */
+export interface MidMarksChangeRequest {
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  reason: string;
+  at: string;
+  byName: string;
+  decidedAt?: string;
+  decidedByName?: string;
+  remarks?: string;
+}
 
 export interface MidMarksSheet {
   id: string;
@@ -54,5 +68,12 @@ export interface MidMarksSheet {
   updatedAt: string;
   updatedByName: string;
   submittedAt?: string;
+  frozenAt?: string;
+  frozenByName?: string;
+  /** The latest change request (one open at a time). */
+  changeRequest?: MidMarksChangeRequest;
+  /** Reopened by the Exam Cell (directly or by approving a request): editable even after the last date, until the
+   *  next submit. */
+  editGrant?: { at: string; byName: string };
   history?: MidMarksHistoryItem[];
 }

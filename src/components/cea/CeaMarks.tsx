@@ -1,6 +1,7 @@
 "use client";
 
 import { compareStudentsForList } from "@/lib/students/listOrder";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -26,15 +27,18 @@ export function CeaMarks() {
   const [list, setList] = useState<Assignment[] | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<{ assignmentId: string; unit: number } | null>(null);
+  // The college enters with-Mid units on Mid Marks (Faculty Mid Marks Page on): shown here, entered there.
+  const [onMidMarks, setOnMidMarks] = useState(false);
+  const viaMidMarks = (u: Unit) => onMidMarks && u.when !== "CLASS";
   const load = useCallback(() => {
-    fetch("/api/college/cea/marks").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Unable to load"); setList(j.assignments); setError(""); }).catch((e: Error) => setError(e.message));
+    fetch("/api/college/cea/marks").then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Unable to load"); setList(j.assignments); setOnMidMarks(j.withMidOnMidMarks === true); setError(""); }).catch((e: Error) => setError(e.message));
   }, []);
   useEffect(load, [load]);
 
   const [submitting, setSubmitting] = useState("");
   // Submits every unit of a section whose marks are complete (in-class ones need their date held) - one by one.
   async function submitAll(a: Assignment) {
-    const ready = a.units.filter((u) => u.status === "DRAFT" && u.totalStudents > 0 && u.enteredCount === u.totalStudents);
+    const ready = a.units.filter((u) => !viaMidMarks(u) && u.status === "DRAFT" && u.totalStudents > 0 && u.enteredCount === u.totalStudents);
     if (ready.length === 0) { toast({ title: "No unit is complete yet. Enter every student's marks first." }); return; }
     setSubmitting(a.assignmentId);
     const done: number[] = [], failed: string[] = [];
@@ -68,10 +72,18 @@ export function CeaMarks() {
             <div className="flex flex-wrap gap-2">
               <CeaUploadPanel assignmentId={a.assignmentId} onSaved={load} />
               <Button size="sm" onClick={() => void submitAll(a)} loading={submitting === a.assignmentId}
-                disabled={!a.units.some((u) => u.status === "DRAFT" && u.totalStudents > 0 && u.enteredCount === u.totalStudents)}>Submit All Complete Units</Button>
+                disabled={!a.units.some((u) => !viaMidMarks(u) && u.status === "DRAFT" && u.totalStudents > 0 && u.enteredCount === u.totalStudents)}>Submit All Complete Units</Button>
             </div>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{a.units.map((u) => (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{a.units.map((u) => viaMidMarks(u) ? (
+            <Link key={u.unit} href="/panel/mid-marks" className="block rounded-lg border border-dashed p-3 text-left hover:bg-muted/40">
+              <p className="text-sm font-medium">Unit {u.unit} · {u.typeLabel}</p>
+              <p className="text-xs text-muted-foreground">{whenLabel(u.when)}{u.title ? ` · ${u.title}` : ""}</p>
+              <p className={cn("mt-1 text-xs font-medium", u.status === "SUBMITTED" ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground")}>
+                {u.status === "SUBMITTED" ? "Submitted" : u.status ? `Draft · ${u.enteredCount}/${u.totalStudents}` : "Not started"} · entered on Mid Marks
+              </p>
+            </Link>
+          ) : (
             <button key={u.unit} type="button" onClick={() => setOpen({ assignmentId: a.assignmentId, unit: u.unit })} className="rounded-lg border p-3 text-left hover:bg-muted/40">
               <p className="text-sm font-medium">Unit {u.unit} · {u.typeLabel}</p>
               <p className="text-xs text-muted-foreground">{whenLabel(u.when)}{u.title ? ` · ${u.title}` : ""}</p>

@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     const pending = new Map<string, string[]>();
     for (const r of rows) {
       const p = progress.get(`${r.subjectId}|${r.branch}`)?.find((x) => x.sectionId === r.sectionId && x.facultyId === r.facultyId);
-      if (p && p.status === "SUBMITTED") continue; // pending = not submitted yet (not started, or a draft)
+      if (p && (p.status === "SUBMITTED" || p.status === "FROZEN")) continue; // pending = not submitted yet (not started, or a draft)
       pending.set(r.facultyId, [...(pending.get(r.facultyId) ?? []), `${r.subjectCode || r.subjectName} ${r.sectionName}${p ? ` (${p.entered}/${p.total})` : ""}`]);
     }
     let notified = 0;

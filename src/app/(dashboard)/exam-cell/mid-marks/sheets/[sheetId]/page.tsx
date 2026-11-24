@@ -24,7 +24,7 @@ export default function ExamCellMidMarksSheetPage({ params }: { params: Promise<
       <Link href="/exam-cell/mid-marks" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Mid Marks</Link>
       {q.isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
       {q.isError && <p className="text-sm text-destructive">{(q.error as Error).message}</p>}
-      {q.data?.sheet && <MidMarksSheetView initial={q.data.sheet} state={q.data.state ?? null} mode="review" canReopen />}
+      {q.data?.sheet && <MidMarksSheetView initial={q.data.sheet} state={q.data.state ?? null} mode="review" examCell />}
     </div>
   );
 }
