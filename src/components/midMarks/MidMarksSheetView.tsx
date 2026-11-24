@@ -174,7 +174,7 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
   };
 
   const submit = async () => {
-    if (stats.pending > 0) { setDialog(null); toast({ variant: "destructive", title: `${stats.pending} student(s) are not complete. Fill every box (a mark, or - for not attempted) or mark the student AB.` }); return; }
+    if (stats.pending > 0) { setDialog(null); toast({ variant: "destructive", title: `${stats.pending} student(s) have no marks yet. Enter at least one mark (an empty box counts as not attempted) or mark the student AB.` }); return; }
     setBusy(true);
     await save("SUBMIT");
     setBusy(false); setDialog(null);
@@ -333,7 +333,7 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
           {examCell && sheet.status !== "DRAFT" && !pending && <Button size="sm" variant="outline" onClick={() => setDialog("REOPEN")}><RotateCcw className="mr-1 h-4 w-4" />Reopen</Button>}
         </div>
       </div>
-      {editable && <p className="px-1 text-xs text-muted-foreground">Type a mark in each box, or <kbd className="rounded border bg-muted px-1">-</kbd> if the question was not attempted. Tap AB for an absent student. <kbd className="rounded border bg-muted px-1">Enter</kbd> and the arrow keys move between boxes; marks save on their own.</p>}
+      {editable && <p className="px-1 text-xs text-muted-foreground">Type the marks of the questions the student answered; a box left empty counts as not attempted (<kbd className="rounded border bg-muted px-1">-</kbd>). Tap AB for an absent student. <kbd className="rounded border bg-muted px-1">Enter</kbd> and the arrow keys move between boxes; marks save on their own.</p>}
 
       {/* Sheet */}
       <Card className="overflow-x-auto">
@@ -379,7 +379,7 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
                     return (
                       <td key={c.key} className={cn("px-1 py-2 text-center", pairStart.has(c.key) && "border-l border-dashed")}>
                         <input
-                          data-r={ri} data-c={ci} inputMode="decimal" disabled={!editable || r.absent} value={r.absent ? "" : t} placeholder={r.absent ? "AB" : ""}
+                          data-r={ri} data-c={ci} inputMode="decimal" disabled={!editable || r.absent} value={r.absent ? "" : t} placeholder={r.absent ? "AB" : done ? "-" : ""}
                           onChange={(ev) => setBox(e.studentId, c.key, ev.target.value)} onKeyDown={move} onFocus={(ev) => ev.currentTarget.select()}
                           aria-label={`${e.rollNumber} ${colLabel(ci, c.label)}`} aria-invalid={bad}
                           className={cn("h-9 w-12 rounded-lg border bg-background text-center text-sm tabular-nums outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-transparent disabled:border-transparent",

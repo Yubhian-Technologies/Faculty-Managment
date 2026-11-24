@@ -7,7 +7,7 @@ import { readJsonBody } from "@/lib/http/readJsonBody";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { notify, notifyRole } from "@/lib/notify";
 import { assertOwner, assertReader, midMarksSheetsCol, SHEET_ID_RE, stateOfSheet } from "@/lib/midMarks/server";
-import { applyEntries, completeCount, MidMarksError } from "@/lib/midMarks/sheet";
+import { applyEntries, completeCount, MidMarksError, notAttemptedFilled } from "@/lib/midMarks/sheet";
 import { midMarksErrorResponse } from "@/lib/midMarks/http";
 import { cieForMidSheet } from "@/lib/midMarks/cie";
 import type { MidMarksHistoryAction, MidMarksSheet } from "@/types/midMarks";
@@ -156,9 +156,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sh
     const submit = action === "SUBMIT";
     const saved = await change((cur) => {
       if (cur.status !== "DRAFT") throw new MidMarksError("Already submitted. Withdraw it, or send a change request once it is frozen.", 409);
-      const entries = body.entries ? applyEntries(cur.sheet, cur.entries, body.entries) : cur.entries;
-      const done = completeCount(cur.sheet, entries);
-      if (submit && done < entries.length) throw new MidMarksError(`${entries.length - done} student(s) are not complete. Fill every box (a mark, or - for not attempted) or mark the student AB.`);
+      const applied = body.entries ? applyEntries(cur.sheet, cur.entries, body.entries) : cur.entries;
+      const done = completeCount(cur.sheet, applied);
+      if (submit && done < applied.length) throw new MidMarksError(`${applied.length - done} student(s) have no marks yet. Enter at least one mark (an empty box counts as not attempted) or mark the student AB.`);
+      // Submitted: every empty box of a student with marks is stored as "-" (not attempted).
+      const entries = submit ? notAttemptedFilled(cur.sheet, applied) : applied;
       const next: MidMarksSheet = { ...cur, entries, completeCount: done, totalStudents: entries.length };
       if (!submit) return next;
       const out: MidMarksSheet = { ...next, status: "SUBMITTED", submittedAt: at, history: step(cur, "SUBMITTED") };
