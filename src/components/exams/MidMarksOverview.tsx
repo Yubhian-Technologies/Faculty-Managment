@@ -26,7 +26,7 @@ interface Row {
   source: "PAPER" | "LAYOUT" | "NONE"; layout: MidMarksLayout | null; paperMax?: number; questions?: number;
   /** Faculty entry of this subject opened by the Exam Cell (after its exam), and its exam day. */
   entryOpen: boolean; examDay: string | null;
-  progress: { sectionId: string; section: string; facultyName: string; entered: number; total: number; status: "NOT_STARTED" | "DRAFT" | "SUBMITTED"; locked: boolean; sheetId?: string }[];
+  progress: { sectionId: string; section: string; facultyName: string; entered: number; total: number; status: "NOT_STARTED" | "DRAFT" | "SUBMITTED" | "FROZEN"; locked: boolean; sheetId?: string; changeRequested?: boolean }[];
 }
 
 const ROMAN = ["", "I", "II", "III", "IV", "V", "VI"];
@@ -139,7 +139,7 @@ export function MidMarksOverview() {
               <Button size="sm" variant="outline" className="ml-auto" loading={toggling === "remind"} onClick={() => void remind()}>Remind Pending Faculty</Button>
             )}
           </div>
-          <MidMarksProgress rows={rows} facultyMode={mode === "FACULTY"} />
+          <MidMarksProgress rows={rows} facultyMode={mode === "FACULTY"} onChanged={() => setReload((n) => n + 1)} />
           {rows.length === 0 ? (
             <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No Mid-exam subjects with teaching assignments for this Mid.</CardContent></Card>
           ) : (
@@ -167,8 +167,8 @@ export function MidMarksOverview() {
                               <div key={p.sectionId} className="flex flex-wrap items-center gap-1.5 text-xs">
                                 <span className="font-medium">{p.section}</span>
                                 <span className="text-muted-foreground">{p.facultyName}</span>
-                                <span className={p.status === "SUBMITTED" || p.locked ? "text-emerald-700" : p.status === "DRAFT" ? "text-amber-700" : "text-muted-foreground"}>
-                                  {p.locked ? "Locked by Exam Cell" : p.status === "SUBMITTED" ? "Submitted" : p.status === "DRAFT" ? `${p.entered}/${p.total} entered` : "Not started"}
+                                <span className={p.status === "SUBMITTED" || p.status === "FROZEN" || p.locked ? "text-emerald-700" : p.status === "DRAFT" ? "text-amber-700" : "text-muted-foreground"}>
+                                  {p.locked ? "Locked by Exam Cell" : p.status === "FROZEN" ? "Frozen" : p.status === "SUBMITTED" ? "Submitted" : p.status === "DRAFT" ? `${p.entered}/${p.total} entered` : "Not started"}
                                 </span>
                                 {"sheetId" in p && p.sheetId && <Link href={`/exam-cell/mid-marks/sheets/${p.sheetId}`} className="font-medium text-primary hover:underline">View</Link>}
                               </div>

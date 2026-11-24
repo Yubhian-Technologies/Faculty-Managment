@@ -9,6 +9,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { applyCeaEntries, isEntered } from "@/lib/cea/marks";
 import { ceaMarksCol, internalSubmitted, syncCeaIntoInternal } from "@/lib/cea/marksServer";
 import { midOf } from "@/lib/cea/rules";
+import { loadMidSettings } from "@/lib/exams/midSettings";
 import { CeaError, ceaErrorResponse } from "@/lib/cea/server";
 import { editableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
 import type { CeaMarksSheet } from "@/types";
@@ -41,13 +42,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sh
     const { sheetId } = await params;
     if (!/^[A-Za-z0-9_-]{1,200}__U\d{1,2}$/.test(sheetId)) throw new CeaError("Not found", 404);
     const db = getAdminDb();
-    const body = (await readJsonBody(request)) as { rev?: unknown; entries?: unknown; heldOn?: unknown; action?: unknown };
+    const body = (await readJsonBody(request)) as { rev?: unknown; entries?: unknown; heldOn?: unknown; action?: unknown; via?: unknown };
     const ref = ceaMarksCol(db, session.collegeId).doc(sheetId);
     const first = (await ref.get()).data() as CeaMarksSheet | undefined;
     if (!first) throw new CeaError("Not found", 404);
     if (first.facultyId !== (await resolveFacultyMemberId(db, session.collegeId, session.uid))) throw new CeaError("This isn't your section", 403);
     if (await internalSubmitted(db, session.collegeId, first.assignmentId)) throw new CeaError("The section's internal marks are already submitted - CIE marks can't change", 409);
     const mid = midOf(first.when);
+    // Faculty Mid Marks Page on: a with-Mid unit's CIE is entered on Mid Marks, beside the Mid's marks.
+    if (mid && body.via !== "MID_MARKS" && (await loadMidSettings(db, session.collegeId)).midMarksPage) {
+      throw new CeaError(`Enter this unit's CIE marks on Mid Marks, with the Mid-${mid} marks.`, 409);
+    }
+    if (mid && body.via === "MID_MARKS") {
+      const midSheet = (await db.collection("colleges").doc(session.collegeId).collection("midMarksSheets").doc(`${first.assignmentId}__m${mid}`).get()).data() as { status?: string } | undefined;
+      if (midSheet && midSheet.status !== "DRAFT") throw new CeaError("The Mid marks are submitted or frozen - the CIE marks with them can't change now.", 409);
+    }
     // One total per student for every unit (with-Mid ones too) - no question-by-question entry.
     const qSheet = null;
     const at = new Date().toISOString();

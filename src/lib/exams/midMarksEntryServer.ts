@@ -151,7 +151,9 @@ export interface SectionProgress {
   sectionId: string; section: string; facultyId: string; facultyName: string; assignmentId: string | null;
   /** Students with this Mid's marks entered, out of the section's total. */
   entered: number; total: number;
-  status: "NOT_STARTED" | "DRAFT" | "SUBMITTED";
+  status: "NOT_STARTED" | "DRAFT" | "SUBMITTED" | "FROZEN";
+  /** A faculty change request is waiting for the Exam Cell (Mid Marks page sheets). */
+  changeRequested?: boolean;
   /** The Exam Cell locked this Mid's marks (Exam Cell mode). */
   locked: boolean;
   /** Entered on Faculty > Mid Marks (lib/midMarks): its sheet id, to open it. */
@@ -187,7 +189,7 @@ export async function midProgress(
   }));
   // Faculty > Mid Marks sheets (lib/midMarks) - used for a section when one exists.
   const pageSnaps = ids.length ? await db.getAll(...ids.map((id) => ref.collection("midMarksSheets").doc(`${id}__m${mid}`))) : [];
-  const pageSheets = new Map(pageSnaps.filter((s) => s.exists).map((s) => [String(s.get("assignmentId")), s.data() as { status: "DRAFT" | "SUBMITTED"; completeCount: number; totalStudents: number }]));
+  const pageSheets = new Map(pageSnaps.filter((s) => s.exists).map((s) => [String(s.get("assignmentId")), s.data() as { status: "DRAFT" | "SUBMITTED" | "FROZEN"; completeCount: number; totalStudents: number; changeRequest?: { status: string } }]));
   const out = new Map<string, SectionProgress[]>();
   for (const r of rows) {
     const aid = assignmentOf.get(`${r.subjectId}|${r.sectionId}|${r.facultyId}`) ?? null;
@@ -195,7 +197,8 @@ export async function midProgress(
     if (page) {
       const key = `${r.subjectId}|${r.branch}`;
       const p: SectionProgress = { sectionId: r.sectionId, section: r.sectionName, facultyId: r.facultyId, facultyName: r.facultyName, assignmentId: aid,
-        entered: page.completeCount, total: page.totalStudents, status: page.status, locked: false, sheetId: `${aid}__m${mid}` };
+        entered: page.completeCount, total: page.totalStudents, status: page.status, locked: false, sheetId: `${aid}__m${mid}`,
+        ...(page.changeRequest?.status === "PENDING" ? { changeRequested: true } : {}) };
       out.set(key, [...(out.get(key) ?? []), p].sort((x, y) => x.section.localeCompare(y.section)));
       continue;
     }
