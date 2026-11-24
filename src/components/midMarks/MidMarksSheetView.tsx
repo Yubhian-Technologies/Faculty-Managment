@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, CircleDashed, Download, FileLock2, Lock, MessageSquareWarning, RotateCcw, Search, Send, Snowflake, Undo2, Users } from "lucide-react";
+import { ArrowRight, CheckCircle2, CircleDashed, ClipboardCheck, Download, FileLock2, Lock, MessageSquareWarning, RotateCcw, Search, Send, Snowflake, Undo2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,18 +11,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from "@/hooks/useToast";
 import { cn, dmy, formatDateTime } from "@/lib/utils";
 import { entryTotal, isComplete, runningTotal } from "@/lib/midMarks/sheet";
-import { NOT_ATTEMPTED, type MidMarksEntry, type MidMarksSheet, type MidQuestionValue } from "@/types/midMarks";
+import { NOT_ATTEMPTED, type MidMarksEntry, type MidMarksSheet, type MidQuestionValue, type MidSheetCie } from "@/types/midMarks";
 import type { QuestionSheet } from "@/lib/exams/questionMarks";
 
 // One section's Mid marks (lib/midMarks). Faculty: a row per student in Regd. No order, a box per question of the
 // printed paper ("-" = not attempted), AB for absent, the total worked out as you type, autosaved; Submit sends it to
 // the Exam Cell (Withdraw takes it back until it is frozen); once FROZEN a change needs a request the Exam Cell
 // approves. Exam Cell (review): Freeze, Reopen, decide change requests. When the paper had a CIE part (with-Mid
-// unit), its total is entered here (only here while this page is on), into the CIE marks sheet; it is submitted
-// and reopened with the Mid sheet.
+// unit), its marks are entered on Faculty > CIE Marks and only shown here (read only), with a link to enter them
+// there while they are not complete.
 
 export interface EntryState { canEdit: boolean; canWithdraw?: boolean; canRequestChange?: boolean; reason: string; lastDate: string | null }
-interface CieSheet { id: string; rev: number; status: "DRAFT" | "SUBMITTED"; unitMarks: number; unit: number; entries: { studentId: string; marks: number | null; absent?: boolean }[] }
 
 type Row = { absent: boolean; q: Record<string, string> };
 type Filter = "ALL" | "PENDING" | "DONE" | "ABSENT";
@@ -49,12 +49,12 @@ const STEPS = [
   { key: "FROZEN", label: "Frozen", icon: Snowflake },
 ] as const;
 
-export function MidMarksSheetView({ initial, state: initialState, mode, cieAssignment, examCell = false }: {
+export function MidMarksSheetView({ initial, state: initialState, mode, cie = null, examCell = false }: {
   initial: MidMarksSheet; state: EntryState | null; mode: "faculty" | "review";
   /** Exam Cell: Freeze / Reopen / decide change requests. */
   examCell?: boolean;
-  /** Faculty: the assignment, to find the CIE unit planned with this Mid. */
-  cieAssignment?: string;
+  /** The with-Mid CIE unit as entered on CIE Marks (read only here). */
+  cie?: MidSheetCie | null;
 }) {
   const [sheet, setSheet] = useState(initial);
   const [state, setState] = useState(initialState);
@@ -67,28 +67,10 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
   const [dialog, setDialog] = useState<null | "SUBMIT" | "WITHDRAW" | "REQUEST" | "REOPEN" | "FREEZE" | "APPROVE" | "REJECT">(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [cie, setCie] = useState<CieSheet | null>(null);
-  const [cieText, setCieText] = useState<Record<string, string>>({});
-  const [cieDirty, setCieDirty] = useState<Set<string>>(new Set());
   const q = sheet.sheet;
   const editable = mode === "faculty" && sheet.status === "DRAFT" && !!state?.canEdit;
-  const cieEditable = editable && cie?.status === "DRAFT";
   const pending = sheet.changeRequest?.status === "PENDING";
 
-  // CIE unit written with this Mid (the paper's CIE part): one total per student, kept in the CIE marks sheet.
-  useEffect(() => {
-    if (mode !== "faculty" || !cieAssignment) return;
-    (async () => {
-      const list = await fetch("/api/college/cea/marks").then((r) => (r.ok ? r.json() : { assignments: [] })) as { assignments?: { assignmentId: string; units: { unit: number; when: string }[] }[] };
-      const unit = list.assignments?.find((a) => a.assignmentId === cieAssignment)?.units.find((u) => u.when === `MID${sheet.midNumber}`)?.unit;
-      if (!unit) return;
-      const res = await fetch("/api/college/cea/marks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assignmentId: cieAssignment, unit }) });
-      if (!res.ok) return;
-      const d = (await res.json()) as { sheet: CieSheet };
-      setCie(d.sheet);
-      setCieText(Object.fromEntries(d.sheet.entries.map((e) => [e.studentId, e.absent ? "AB" : e.marks == null ? "" : String(e.marks)])));
-    })().catch(() => undefined);
-  }, [mode, cieAssignment, sheet.midNumber, sheet.status]);
 
   const rowFor = useCallback((e: MidMarksEntry) => rows[e.studentId] ?? rowOf(e), [rows]);
   const stats = useMemo(() => {
@@ -121,15 +103,13 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
   const setAbsent = (sid: string, absent: boolean) => {
     setRows((p) => ({ ...p, [sid]: { absent, q: absent ? {} : p[sid].q } }));
     setDirty((d) => new Set(d).add(sid));
-    if (cie) { setCieText((p) => ({ ...p, [sid]: absent ? "AB" : p[sid] === "AB" ? "" : p[sid] ?? "" })); setCieDirty((d) => new Set(d).add(sid)); }
   };
 
   const take = (d: { sheet?: MidMarksSheet; state?: EntryState | null }) => { if (d.sheet) setSheet(d.sheet); if (d.state !== undefined) setState(d.state); };
 
   const save = useCallback(async (action?: "SUBMIT") => {
     const ids = [...dirty];
-    const cieIds = [...cieDirty];
-    if (!action && ids.length === 0 && cieIds.length === 0) return true;
+    if (!action && ids.length === 0) return true;
     for (const sid of ids) {
       const r = rows[sid];
       if (r.absent) continue;
@@ -137,16 +117,6 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
     }
     setSaving(true);
     try {
-      if (cie && cieIds.length && cie.status === "DRAFT") {
-        const entries = cieIds.map((sid) => {
-          const t = (cieText[sid] ?? "").trim().toUpperCase();
-          return t === "AB" ? { studentId: sid, absent: true } : { studentId: sid, marks: t === "" ? null : Number(t) };
-        });
-        const res = await jsonPatch(`/api/college/cea/marks/${cie.id}`, { rev: cie.rev, entries, via: "MID_MARKS" });
-        const d = (await res.json()) as { sheet?: CieSheet; error?: string };
-        if (!res.ok || !d.sheet) throw new Error(`CIE: ${d.error ?? "Unable to save the CIE marks."}`);
-        setCie(d.sheet); setCieDirty(new Set());
-      }
       const entries = ids.map((sid) => {
         const r = rows[sid];
         return r.absent ? { studentId: sid, absent: true } : { studentId: sid, q: Object.fromEntries(q.columns.map((c) => { const v = toValue(r.q[c.key] ?? ""); return [c.key, v === "BAD" ? null : v]; })) };
@@ -165,16 +135,16 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
     } finally {
       setSaving(false);
     }
-  }, [dirty, cieDirty, rows, cieText, cie, q, sheet]);
+  }, [dirty, rows, q, sheet]);
 
   // Autosave a draft 2 s after the last change.
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!editable || (dirty.size === 0 && cieDirty.size === 0) || saving) return;
+    if (!editable || dirty.size === 0 || saving) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => { void save(); }, 2000);
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [dirty, cieDirty, editable, saving, save]);
+  }, [dirty, editable, saving, save]);
 
   // Enter / arrow keys move between boxes: data-r = row index, data-c = column index.
   const move = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -205,21 +175,17 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
 
   const submit = async () => {
     if (stats.pending > 0) { setDialog(null); toast({ variant: "destructive", title: `${stats.pending} student(s) are not complete. Fill every box (a mark, or - for not attempted) or mark the student AB.` }); return; }
-    if (cie && cie.status === "DRAFT") {
-      const missing = sheet.entries.filter((e) => !rows[e.studentId]?.absent && !(cieText[e.studentId] ?? "").trim()).length;
-      if (missing) { setDialog(null); toast({ variant: "destructive", title: `Enter the CIE Unit ${cie.unit} marks for ${missing} more student(s), or mark them AB.` }); return; }
-    }
     setBusy(true);
     await save("SUBMIT");
     setBusy(false); setDialog(null);
   };
 
   const exportCsv = () => {
-    const head = ["Regd. No", "Name", ...q.columns.map((c, i) => `${colLabel(i, c.label)} (${c.max})`), `Total (${q.paperMax})`, ...(cie ? [`CIE Unit ${cie.unit} (${cie.unitMarks})`] : [])];
+    const head = ["Regd. No", "Name", ...q.columns.map((c, i) => `${colLabel(i, c.label)} (${c.max})`), `Total (${q.paperMax})`, ...(cie ? [`CIE Unit ${cie.unit}${cie.unitMarks != null ? ` (${cie.unitMarks})` : ""}`] : [])];
     const lines = sheet.entries.map((e) => {
       const r = rowFor(e);
       const t = entryTotal(q, asEntry(q, r));
-      return [e.rollNumber, e.name, ...q.columns.map((c) => (r.absent ? "AB" : r.q[c.key] ?? "")), r.absent ? "AB" : t ?? "", ...(cie ? [cieText[e.studentId] ?? ""] : [])];
+      return [e.rollNumber, e.name, ...q.columns.map((c) => (r.absent ? "AB" : r.q[c.key] ?? "")), r.absent ? "AB" : t ?? "", ...(cie ? [cie.marks[e.studentId] ?? ""] : [])];
     });
     const csv = [head, ...lines].map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
@@ -267,7 +233,7 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
               </div>
               <h1 className="text-xl font-semibold leading-tight">{sheet.subjectName}</h1>
               <p className="text-sm text-muted-foreground">{sheet.department} · Section {sheet.sectionName}{sheet.year ? ` · Year ${sheet.year}` : ""} · {sheet.facultyName}</p>
-              <p className="text-xs text-muted-foreground">Paper: {partsLine} · out of {q.paperMax}{cie ? ` · CIE Unit ${cie.unit} out of ${cie.unitMarks}` : ""}{state?.lastDate ? ` · last date ${dmy(state.lastDate)}` : ""}</p>
+              <p className="text-xs text-muted-foreground">Paper: {partsLine} · out of {q.paperMax}{cie?.unitMarks != null ? ` · CIE Unit ${cie.unit} out of ${cie.unitMarks}` : ""}{state?.lastDate ? ` · last date ${dmy(state.lastDate)}` : ""}</p>
             </div>
             {/* Where it stands */}
             <ol className="flex items-center gap-1" aria-label="Status">
@@ -312,6 +278,34 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
         </div>
       )}
 
+      {/* With-Mid CIE: entered on CIE Marks, shown here */}
+      {cie && (() => {
+        const done = cie.total > 0 && cie.entered === cie.total;
+        const href = `/panel/cea?assignment=${encodeURIComponent(sheet.assignmentId)}&unit=${cie.unit}`;
+        return (
+          <div className={cn("flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm",
+            done ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200"
+              : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200")}>
+            <div className="flex min-w-0 items-start gap-2">
+              <ClipboardCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0">
+                <p className="font-medium">CIE Unit {cie.unit} (written with Mid-{sheet.midNumber})</p>
+                <p className="text-xs opacity-90">
+                  {cie.status === "NOT_STARTED" ? "Not entered yet. CIE marks are entered on CIE Marks and appear here."
+                    : done ? `All ${cie.total} students entered on CIE Marks${cie.status === "SUBMITTED" ? " and submitted" : " (draft - submit it on CIE Marks)"}.`
+                    : `${cie.entered} of ${cie.total} students entered on CIE Marks. Enter the rest there.`}
+                </p>
+              </div>
+            </div>
+            {mode === "faculty" && (cie.status !== "SUBMITTED" || !done) && (
+              <Button asChild size="sm" variant={done ? "outline" : "default"}>
+                <Link href={href}>{cie.status === "NOT_STARTED" ? "Enter on CIE Marks" : done ? "Open CIE Marks" : "Continue on CIE Marks"}<ArrowRight className="h-3.5 w-3.5" /></Link>
+              </Button>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Toolbar */}
       <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-xl border bg-background/95 px-3 py-2 shadow-sm backdrop-blur">
         <div className="relative w-44">
@@ -325,9 +319,9 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
           ))}
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {editable && <span className="text-xs text-muted-foreground">{saving ? "Saving..." : dirty.size || cieDirty.size ? "Unsaved changes" : savedAt ? `Saved ${formatDateTime(new Date(savedAt))}` : "All changes saved"}</span>}
+          {editable && <span className="text-xs text-muted-foreground">{saving ? "Saving..." : dirty.size ? "Unsaved changes" : savedAt ? `Saved ${formatDateTime(new Date(savedAt))}` : "All changes saved"}</span>}
           <Button variant="ghost" size="sm" onClick={exportCsv}><Download className="mr-1 h-4 w-4" />CSV</Button>
-          {editable && <Button variant="outline" size="sm" disabled={saving || (dirty.size === 0 && cieDirty.size === 0)} onClick={() => void save()}>Save</Button>}
+          {editable && <Button variant="outline" size="sm" disabled={saving || dirty.size === 0} onClick={() => void save()}>Save</Button>}
           {editable && <Button size="sm" disabled={saving} onClick={() => setDialog("SUBMIT")}><Send className="mr-1 h-4 w-4" />Submit to Exam Cell</Button>}
           {mode === "faculty" && state?.canWithdraw && <Button size="sm" variant="outline" onClick={() => setDialog("WITHDRAW")}><Undo2 className="mr-1 h-4 w-4" />Withdraw</Button>}
           {mode === "faculty" && state?.canRequestChange && <Button size="sm" variant="outline" onClick={() => setDialog("REQUEST")}><MessageSquareWarning className="mr-1 h-4 w-4" />Request Change</Button>}
@@ -356,7 +350,7 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
               ))}
               <th className="px-2 py-2.5 text-center font-medium">AB</th>
               <th className="px-3 py-2.5 text-right font-medium"><span className="block font-semibold text-foreground">Total</span><span className="text-[10px]">/{q.paperMax}</span></th>
-              {cie && <th className="border-l px-2 py-2.5 text-center font-medium"><span className="block font-semibold text-foreground">CIE U{cie.unit}</span><span className="text-[10px]">/{cie.unitMarks}</span></th>}
+              {cie && <th className="border-l px-2 py-2.5 text-center font-medium"><span className="block font-semibold text-foreground">CIE U{cie.unit}</span><span className="text-[10px]">{cie.unitMarks != null ? `/${cie.unitMarks}` : "CIE Marks"}</span></th>}
             </tr>
           </thead>
           <tbody>
@@ -409,13 +403,10 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
                     )}
                   </td>
                   {cie && (
-                    <td className="border-l px-2 py-2 text-center">
-                      <input
-                        inputMode="decimal" disabled={!cieEditable || r.absent} value={r.absent ? "AB" : cieText[e.studentId] ?? ""}
-                        onChange={(ev) => { setCieText((p) => ({ ...p, [e.studentId]: ev.target.value })); setCieDirty((d) => new Set(d).add(e.studentId)); }}
-                        aria-label={`${e.rollNumber} CIE`}
-                        className="h-9 w-12 rounded-lg border bg-background text-center text-sm tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent"
-                      />
+                    <td className="border-l px-2 py-2 text-center tabular-nums">
+                      {cie.marks[e.studentId] == null ? <span className="text-xs text-muted-foreground">-</span>
+                        : cie.marks[e.studentId] === "AB" ? <span className="text-xs font-semibold text-muted-foreground">AB</span>
+                        : <span className="font-medium">{cie.marks[e.studentId]}</span>}
                     </td>
                   )}
                 </tr>
@@ -438,7 +429,7 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cieAssig
           {dialog === "SUBMIT" && <>
             <DialogHeader>
               <DialogTitle>Submit to Exam Cell</DialogTitle>
-              <DialogDescription>{sheet.subjectName}, {sheet.sectionName}: {stats.done} of {sheet.entries.length} students complete{cie ? `, with the CIE Unit ${cie.unit} marks` : ""}. You can withdraw it until the Exam Cell freezes it; after that a change needs a request.</DialogDescription>
+              <DialogDescription>{sheet.subjectName}, {sheet.sectionName}: {stats.done} of {sheet.entries.length} students complete. You can withdraw it until the Exam Cell freezes it; after that a change needs a request.</DialogDescription>
             </DialogHeader>
             <DialogFooter><Button variant="outline" onClick={() => setDialog(null)}>Cancel</Button><Button loading={busy} onClick={() => void submit()}>Submit</Button></DialogFooter>
           </>}

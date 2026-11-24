@@ -7,6 +7,7 @@ import { readJsonBody } from "@/lib/http/readJsonBody";
 import { myMidClasses, openSheet } from "@/lib/midMarks/server";
 import { MidMarksError } from "@/lib/midMarks/sheet";
 import { midMarksErrorResponse } from "@/lib/midMarks/http";
+import { cieForMidSheet } from "@/lib/midMarks/cie";
 
 // Faculty > Mid Marks (colleges with examSettings/mid.midMarksPage on).
 // GET: the login's sections x Mids with a printed paper, each with its sheet status and whether entry is open.
@@ -29,7 +30,10 @@ export async function POST(request: Request) {
     if (typeof body.assignmentId !== "string" || !body.assignmentId) throw new MidMarksError("Select a section.");
     const db = getAdminDb();
     const me = (await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get()).data() as { name?: string } | undefined;
-    return NextResponse.json(await openSheet(db, session.collegeId, session.uid, me?.name ?? session.email, body.assignmentId, Number(body.midNumber)));
+    const opened = await openSheet(db, session.collegeId, session.uid, me?.name ?? session.email, body.assignmentId, Number(body.midNumber));
+    // The with-Mid CIE unit, as entered on CIE Marks (shown beside the Mid marks, read only).
+    const cie = opened.sheet ? await cieForMidSheet(db, session.collegeId, opened.sheet).catch(() => null) : null;
+    return NextResponse.json({ ...opened, cie });
   } catch (err) {
     return midMarksErrorResponse(err, "[college/mid-marks-sheets POST]");
   }

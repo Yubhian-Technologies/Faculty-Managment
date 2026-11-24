@@ -77,3 +77,15 @@ export interface MidMarksSheet {
   editGrant?: { at: string; byName: string };
   history?: MidMarksHistoryItem[];
 }
+
+/** The with-Mid CIE unit shown (read only) on a Mid marks sheet - entered on Faculty > CIE Marks. */
+export interface MidSheetCie {
+  unit: number;
+  /** Out of; null until the CIE sheet is opened. */
+  unitMarks: number | null;
+  status: "NOT_STARTED" | "DRAFT" | "SUBMITTED";
+  entered: number;
+  total: number;
+  /** studentId -> marks, or "AB" for absent; only students entered. */
+  marks: Record<string, number | "AB">;
+}

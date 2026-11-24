@@ -9,7 +9,7 @@ import { notify, notifyRole } from "@/lib/notify";
 import { assertOwner, assertReader, midMarksSheetsCol, SHEET_ID_RE, stateOfSheet } from "@/lib/midMarks/server";
 import { applyEntries, completeCount, MidMarksError } from "@/lib/midMarks/sheet";
 import { midMarksErrorResponse } from "@/lib/midMarks/http";
-import { checkWithMidCie, reopenWithMidCie, submitWithMidCie } from "@/lib/midMarks/cie";
+import { cieForMidSheet } from "@/lib/midMarks/cie";
 import type { MidMarksHistoryAction, MidMarksSheet } from "@/types/midMarks";
 
 // One section's Mid marks sheet. DRAFT -> SUBMITTED (with the Exam Cell) -> FROZEN (final).
@@ -23,7 +23,8 @@ import type { MidMarksHistoryAction, MidMarksSheet } from "@/types/midMarks";
 //   action "FREEZE"     SUBMITTED -> FROZEN (final; the faculty can only request a change)
 //   action "REOPEN", reason           SUBMITTED / FROZEN -> DRAFT, editable past the last date until the next submit
 //   action "DECIDE", approve, remarks a pending change request: approve = REOPEN; reject keeps the marks as they are
-// Reopening also reopens the with-Mid CIE unit entered on the same sheet. The faculty is told of every Exam Cell step.
+// The with-Mid CIE unit is entered on CIE Marks; GET returns it (cie) to show beside the Mid marks. The faculty is told
+// of every Exam Cell step.
 
 const EXAM_CELL = ["EXAM_CELL", "SUPER_ADMIN"];
 const text = (v: unknown, max = 300) => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -37,7 +38,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ she
     const sheet = (await midMarksSheetsCol(db, session.collegeId).doc(sheetId).get()).data() as MidMarksSheet | undefined;
     if (!sheet) throw new MidMarksError("Mid marks sheet not found. It may have been deleted.", 404);
     await assertReader(db, session.collegeId, session, sheet);
-    return NextResponse.json({ sheet, state: await stateOfSheet(db, session.collegeId, sheet).catch(() => null) });
+    const [state, cie] = await Promise.all([stateOfSheet(db, session.collegeId, sheet).catch(() => null), cieForMidSheet(db, session.collegeId, sheet).catch(() => null)]);
+    return NextResponse.json({ sheet, state, cie });
   } catch (err) {
     return midMarksErrorResponse(err, "[college/mid-marks-sheets/[sheetId] GET]");
   }
@@ -115,7 +117,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sh
           ? `The Exam Cell approved your change request for ${label}. Make the changes and submit again.${remarks ? ` ${remarks}` : ""}`
           : `The Exam Cell rejected your change request for ${label}: ${remarks}`;
       }
-      if (saved.status === "DRAFT") await reopenWithMidCie(db, c, saved, byName, at).catch((e) => console.error("[mid-marks-sheets] CIE reopen", e));
       if (facultyUid) await notify(db, c, facultyUid, "GENERAL", `Mid-${saved.midNumber} Marks`, message, `/panel/mid-marks/${saved.assignmentId}/${saved.midNumber}`).catch(() => undefined);
       await writeAuditLogSafe(db, c, { action: `MID_MARKS_SHEET_${action === "DECIDE" ? (body.approve === true ? "CHANGE_APPROVED" : "CHANGE_REJECTED") : action === "FREEZE" ? "FROZEN" : "REOPENED"}`, performedBy: session.uid, performedByName: byName, targetId: sheetId, details: { subjectCode: saved.subjectCode, section: saved.sectionName, midNumber: saved.midNumber } });
       return NextResponse.json({ sheet: saved, state: await stateOfSheet(db, c, saved).catch(() => null) });
@@ -134,7 +135,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sh
         delete next.submittedAt;
         return next;
       });
-      await reopenWithMidCie(db, c, saved, byName, at).catch((e) => console.error("[mid-marks-sheets] CIE withdraw", e));
       return NextResponse.json({ sheet: saved, state: await stateOfSheet(db, c, saved) });
     }
 
@@ -154,16 +154,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sh
 
     if (!state.canEdit) throw new MidMarksError(state.reason, 409);
     const submit = action === "SUBMIT";
-    // The with-Mid CIE unit (entered on this sheet) goes with the submit: every student needs it too.
-    let cieId: string | null = null;
-    if (submit) {
-      try { cieId = await checkWithMidCie(db, c, first); } catch (e) {
-        const m = e instanceof Error ? e.message : "";
-        if (m.startsWith("CIE_MISSING")) throw new MidMarksError(`Enter the CIE Unit ${m.split(":")[1]} marks on this sheet before submitting.`);
-        if (m.startsWith("CIE_INCOMPLETE")) throw new MidMarksError(`Enter the CIE Unit ${m.split(":")[1]} marks for ${m.split(":")[2]} more student(s), or mark them AB.`);
-        throw e;
-      }
-    }
     const saved = await change((cur) => {
       if (cur.status !== "DRAFT") throw new MidMarksError("Already submitted. Withdraw it, or send a change request once it is frozen.", 409);
       const entries = body.entries ? applyEntries(cur.sheet, cur.entries, body.entries) : cur.entries;
@@ -176,7 +166,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sh
       return out;
     });
     if (submit) {
-      if (cieId) await submitWithMidCie(db, c, cieId, saved.assignmentId, byName, at).catch((e) => console.error("[mid-marks-sheets] CIE submit", e));
       await notifyRole(db, c, "EXAM_CELL", "GENERAL", "Mid Marks Submitted", `${byName} submitted the ${label}. Check and freeze them.`, link).catch(() => undefined);
       await writeAuditLogSafe(db, c, {
         action: "MID_MARKS_SHEET_SUBMITTED", performedBy: session.uid, performedByName: byName, targetId: sheetId,
