@@ -26,7 +26,7 @@ export async function GET(
 ) {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS"
+      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "ACCOUNTS", "HR"
     );
     const { id } = await params;
     const db = getAdminDb();
@@ -67,7 +67,7 @@ export async function PATCH(
 ) {
   try {
     const session = await requireCollegeMember(
-      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER"
+      "PRINCIPAL", "VICE_PRINCIPAL", "HOD", "SUPER_ADMIN", "COLLEGE_OFFICE", "PANEL_MEMBER", "HR"
     );
     const { id } = await params;
     const body = (await readJsonBody(request)) as {
@@ -162,6 +162,22 @@ export async function PATCH(
     const isCollegeOffice = session.role === "COLLEGE_OFFICE";
     const isAssignedCoordinator = !!batchData.coordinatorUid && session.uid === batchData.coordinatorUid;
 
+    // HR keeps the interview's schedule: date, time, venue, platform and link - nothing else - until it starts.
+    const isHr = session.role === "HR";
+    if (isHr) {
+      const HR_FIELDS = new Set(["interviewDate", "interviewTime", "interviewVenue", "meetingPlatform", "meetingLink"]);
+      const sent = Object.keys(body).filter((k) => (body as Record<string, unknown>)[k] !== undefined);
+      if (sent.length === 0 || sent.some((k) => !HR_FIELDS.has(k))) {
+        return NextResponse.json({ error: "HR can change only the interview date, time, venue and online link." }, { status: 403 });
+      }
+      if (!["PRINCIPAL_REVIEW", "HOD_FINAL_SETUP", "INTERVIEW_READY"].includes(batchData.currentPhase ?? "")) {
+        return NextResponse.json({ error: "The interview has already started; its schedule can no longer change." }, { status: 409 });
+      }
+      if (body.interviewDate !== undefined && body.interviewDate < new Date().toISOString().slice(0, 10)) {
+        return NextResponse.json({ error: "The interview date cannot be in the past." }, { status: 400 });
+      }
+    }
+
     // Principal's decision on the proposal itself - only a Principal/VP, and
     // only while the batch is actually sitting in PRINCIPAL_REVIEW. Without
     // this, any HOD/Panel/Office account with legitimate PATCH access to this
@@ -243,7 +259,7 @@ export async function PATCH(
 
     if (
       (body.interviewVenue !== undefined || body.requiredDocuments !== undefined || body.setupComplete !== undefined) &&
-      !isCollegeOffice && !isPrincipalRole && !isOwnerHod
+      !isCollegeOffice && !isPrincipalRole && !isOwnerHod && !isHr
     ) {
       return NextResponse.json({ error: "Only this batch's HOD or College Office can set this up" }, { status: 403 });
     }
@@ -252,7 +268,7 @@ export async function PATCH(
       (body.demoClassroom !== undefined || body.meetingLink !== undefined || body.meetingPlatform !== undefined || body.coordinatorFacultyId !== undefined ||
         body.panelMemberUids !== undefined || body.applicationIds !== undefined ||
         body.interviewDate !== undefined || body.interviewTime !== undefined) &&
-      !isOwnerHod && !isPrincipalRole
+      !isOwnerHod && !isPrincipalRole && !isHr
     ) {
       return NextResponse.json({ error: "Only this batch's HOD can edit this" }, { status: 403 });
     }
@@ -357,6 +373,27 @@ export async function PATCH(
       .collection("hiringBatches")
       .doc(id)
       .update(updates);
+
+    // HR moved the interview: tell the HOD and the panel, and keep it in the audit.
+    if (isHr) {
+      const when = [body.interviewDate, body.interviewTime].filter(Boolean).join(" ");
+      if (when) {
+        const to = new Set([batchData.hodUid, ...((batchData as { panelMemberUids?: string[] }).panelMemberUids ?? [])].filter(Boolean));
+        const nb = db.batch();
+        for (const uid of to) {
+          nb.set(db.collection("colleges").doc(session.collegeId).collection("notifications").doc(), {
+            collegeId: session.collegeId, toUid: uid, type: "GENERAL", title: "Interview Rescheduled",
+            message: `${actorName} (HR) changed the interview for ${(batchData as { position?: string }).position ?? "the post"} to ${when}.`,
+            link: uid === batchData.hodUid ? `/hod/batches/${id}` : "/panel/interviews", read: false, createdAt: now,
+          });
+        }
+        await nb.commit();
+      }
+      await writeAuditLogSafe(db, session.collegeId, {
+        action: "INTERVIEW_SCHEDULE_CHANGED", performedBy: session.uid, performedByName: actorName, targetId: id,
+        details: Object.fromEntries(["interviewDate", "interviewTime", "interviewVenue", "meetingPlatform", "meetingLink"].filter((k) => (body as Record<string, unknown>)[k] !== undefined).map((k) => [k, (body as Record<string, unknown>)[k]])),
+      });
+    }
 
     // Keep each candidateApplications.batchId in step with this batch's own
     // applicationIds array - without this, applications added/removed here

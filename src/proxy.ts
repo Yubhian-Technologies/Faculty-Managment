@@ -62,6 +62,7 @@ const ROLE_PATH_MAP: Record<string, string[]> = {
   SUPER_ADMIN: ["/super-admin", PANEL_INTERVIEWS_PATH, EVALUATION_PATH],
   MANAGEMENT: ["/management"],
   WEBMASTER: ["/webmaster", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
+  HR: ["/hr", LEAVE_ADJUSTMENTS_PATH, CERTIFICATES_PATH, PAYSLIPS_PATH],
   ADMINISTRATION: ["/administration", "/location-staff-admin", "/location-dept-head"],
   HR_ADMIN: ["/hr-admin"],
   ADMIN_OFFICE: ["/admin-office"],

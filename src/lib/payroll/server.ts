@@ -177,7 +177,7 @@ export function payrollErrorResponse(err: unknown, label: string): NextResponse 
 /** College roles a faculty / staff member can sign in with - each may read their OWN payslips only. */
 export const PAYSLIP_ROLES = [
   "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL", "COLLEGE_OFFICE", "COLLEGE_STAFF", "EXAM_CELL", "ACADEMICS", "IQAC_COORDINATOR",
-  "T_AND_P", "R_AND_D", "LIBRARY", "HOSTEL", "PLACEMENT_DEPT", "PD", "COLLEGE_ACCOUNTS", "WEBMASTER",
+  "T_AND_P", "R_AND_D", "LIBRARY", "HOSTEL", "PLACEMENT_DEPT", "PD", "COLLEGE_ACCOUNTS", "WEBMASTER", "HR",
 ] as const;
 
 /** The faculty / staff record linked to this login, or null. */

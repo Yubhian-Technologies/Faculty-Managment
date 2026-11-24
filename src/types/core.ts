@@ -57,6 +57,9 @@ export type UserRole =
   | "PD"
   | "EXAM_CELL"
   | "WEBMASTER"
+  // HR (Human Resources) - the college's recruitment desk: candidates, interview scheduling, offer letters and joining.
+  // A college seat like Exam Cell / Webmaster; the Principal / VP still approve requests and make the final selection.
+  | "HR"
   | "COLLEGE_ACCOUNTS"
   | "PANEL_MEMBER"
   | "ACCOUNTS"
@@ -92,6 +95,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   PD: "Physical Education Director",
   EXAM_CELL: "Exam Cell",
   WEBMASTER: "Webmaster",
+  HR: "HR",
   COLLEGE_ACCOUNTS: "College Accounts",
   PANEL_MEMBER: "Faculty",
   ACCOUNTS: "Accounts",
@@ -113,7 +117,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export const MANAGEABLE_STAFF_ROLES: UserRole[] = [
   "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF",
   "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL",
-  "PANEL_MEMBER", "WEBMASTER", "COLLEGE_ACCOUNTS",
+  "PANEL_MEMBER", "WEBMASTER", "HR", "COLLEGE_ACCOUNTS",
 ];
 
 export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
@@ -143,6 +147,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   PD: "/pd",
   EXAM_CELL: "/exam-cell",
   WEBMASTER: "/webmaster",
+  HR: "/hr",
   COLLEGE_ACCOUNTS: "/college-accounts",
   PANEL_MEMBER: "/panel",
   ACCOUNTS: "/accounts",
@@ -189,6 +194,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   PD: 4,
   EXAM_CELL: 4,
   WEBMASTER: 4,
+  HR: 4,
   COLLEGE_ACCOUNTS: 4,
   PANEL_MEMBER: 5,
   STUDENT: 6,
@@ -241,6 +247,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   PD: "COLLEGE",
   EXAM_CELL: "COLLEGE",
   WEBMASTER: "COLLEGE",
+  HR: "COLLEGE",
   COLLEGE_ACCOUNTS: "COLLEGE",
   PANEL_MEMBER: "COLLEGE",
   STUDENT: "COLLEGE",
@@ -3364,11 +3371,15 @@ export type AuditAction =
   | "VACANCY_REQUEST_REJECTED"
   | "VACANCY_REQUEST_DELETED"
   | "CANDIDATE_ADDED"
+  | "CANDIDATES_IMPORTED" // HR / HOD Excel import of candidates; details: count, vacancyRequestId
+  | "CANDIDATE_SCREENED" // HR / HOD / Principal screening: Shortlist or Not Suitable (reason); targetId = application id
   | "CANDIDATE_APPLICATION_CREATED" // candidate attached to a VacancyRequest; targetId is the CandidateApplication id
   | "CANDIDATE_SHORTLISTED"
   | "CANDIDATE_ARRIVED"
   | "CANDIDATE_STAGE_ADVANCED"
   | "HIRING_BATCH_CREATED"
+  | "INTERVIEW_SCHEDULE_CHANGED" // HR changed a batch's date / time / venue / link; details = the new values
+  | "INTERVIEW_INVITATIONS_SENT" // interview invitation emails sent to a batch's candidates; details: sent, failed
   | "HIRING_BATCH_SUBMITTED"
   | "INTERVIEW_PLAN_APPROVED"
   | "INTERVIEW_PLAN_REJECTED"

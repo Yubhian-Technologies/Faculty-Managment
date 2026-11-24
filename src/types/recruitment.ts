@@ -269,6 +269,9 @@ export interface CandidateApplication {
   // Recruiting committee's written recommendation (paper "Recommendations of
   // the Recruiting Committee" form), entered by the Principal before the final decision.
   committeeRecommendation?: string;
+  /** Screening by HR (or the HOD / Principal) before the interview: Shortlist, or Not Suitable with a reason. Not the
+   *  Principal's decision (`status`), which it never changes. */
+  screening?: { result: "SHORTLISTED" | "NOT_SUITABLE"; reason: string; byUid: string; byName: string; at: Timestamp };
   addedByUid: string;
   addedByName: string;
   createdAt: Timestamp;
@@ -344,6 +347,14 @@ export interface HiringBatch {
     byName: string;
     at: Timestamp;
   };
+  /** Scheduled by HR on the department's behalf (the batch still belongs to `hodUid`). */
+  scheduledByUid?: string;
+  scheduledByName?: string;
+  scheduledByRole?: "HR";
+  /** Interview invitation emails (POST hiring-batches/[id]/invitations). */
+  invitationsSentAt?: Timestamp;
+  invitationsSentByName?: string;
+  invitationsSentCount?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
