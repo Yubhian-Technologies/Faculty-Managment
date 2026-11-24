@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -12,6 +13,8 @@ import { loadMode, midMarksExist, modeDocId, modesCol } from "@/lib/exams/midMar
 // Who enters a Mid's marks, per course + Mid (lib/exams/midMarksEntry.ts): FACULTY (default) | EXAM_CELL.
 // GET -> { modes: [{ courseKey, courseName, midNumber, mode }] }   (only the ones set; missing = FACULTY)
 // PUT { courseKey, courseName, midNumber, mode } - refused (409) once marks of that Mid exist for the course.
+// PUT { courseKey, courseName, midNumber, lastDate: "YYYY-MM-DD" | null } - the last date faculty may enter that
+// Mid's marks on the Mid Marks page (lib/midMarks); null clears it.
 const READERS = ["EXAM_CELL", "SUPER_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL"];
 const WRITERS = ["EXAM_CELL", "SUPER_ADMIN"];
 
@@ -38,12 +41,28 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const session = await requireCollegeMember(...WRITERS);
-    const body = (await readJsonBody(request)) as { courseKey?: unknown; courseName?: unknown; midNumber?: unknown; mode?: unknown };
+    const body = (await readJsonBody(request)) as { courseKey?: unknown; courseName?: unknown; midNumber?: unknown; mode?: unknown; lastDate?: unknown };
     const courseKey = typeof body.courseKey === "string" ? body.courseKey.trim() : "";
     const midNumber = Number(body.midNumber);
     const mode = body.mode as MidMarksMode;
     if (!courseKey) return NextResponse.json({ error: "Select a course." }, { status: 400 });
     if (!Number.isInteger(midNumber) || midNumber < 1 || midNumber > 6) return NextResponse.json({ error: "Select a Mid." }, { status: 400 });
+
+    if (body.mode === undefined && "lastDate" in body) {
+      const lastDate = body.lastDate === null || body.lastDate === "" ? null : typeof body.lastDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.lastDate) ? body.lastDate : undefined;
+      if (lastDate === undefined) return NextResponse.json({ error: "Enter a valid last date." }, { status: 400 });
+      const db = getAdminDb();
+      const actor = (await db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid).get()).data() as { name?: string } | undefined;
+      await modesCol(db, session.collegeId).doc(modeDocId(courseKey, midNumber)).set({
+        courseKey, courseName: typeof body.courseName === "string" ? body.courseName : "", midNumber,
+        lastDate: lastDate ?? FieldValue.delete(), updatedAt: new Date(), updatedBy: session.uid, updatedByName: actor?.name ?? "",
+      }, { merge: true });
+      await writeAuditLogSafe(db, session.collegeId, {
+        action: "MID_MARKS_LAST_DATE_CHANGED", performedBy: session.uid, performedByName: actor?.name, targetId: modeDocId(courseKey, midNumber),
+        details: { courseKey, midNumber, lastDate },
+      });
+      return NextResponse.json({ ok: true, lastDate });
+    }
     if (!MID_MARKS_MODES.includes(mode)) return NextResponse.json({ error: "Select who enters the marks." }, { status: 400 });
 
     const db = getAdminDb();
@@ -57,7 +76,7 @@ export async function PUT(request: Request) {
     await modesCol(db, session.collegeId).doc(modeDocId(courseKey, midNumber)).set({
       courseKey, courseName: typeof body.courseName === "string" ? body.courseName : name, midNumber, mode,
       updatedAt: new Date(), updatedBy: session.uid, updatedByName: actor?.name ?? "",
-    });
+    }, { merge: true });
     await writeAuditLogSafe(db, session.collegeId, {
       action: "MID_MARKS_ENTRY_CHANGED", performedBy: session.uid, performedByName: actor?.name, targetId: modeDocId(courseKey, midNumber),
       details: { courseKey, midNumber, from: before, to: mode },

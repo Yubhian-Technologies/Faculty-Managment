@@ -120,12 +120,30 @@ export default function FacultyQuestionBankPage() {
                           </div>
                         )}
 
-                        {i.sharedBanks.map((b) => (
-                          <p key={b.id} className="flex items-center justify-between gap-2 text-xs">
-                            <span>{b.ownerName} is preparing it for section {b.sections.join(", ")} ({b.completeCount}/{b.totalCount})</span>
-                            <Link className="shrink-0 text-primary underline" href={`/panel/mid-bank/${encodeURIComponent(b.id)}/review`}><Eye className="mr-0.5 inline h-3 w-3" />View</Link>
-                          </p>
-                        ))}
+                        {i.sharedBanks.length > 0 && (() => {
+                          // Setters of one paper usually cover the same sections: list them once, then one line per setter.
+                          const sameSections = i.sharedBanks.every((b) => b.sections.join("|") === i.sharedBanks[0].sections.join("|"));
+                          const covers = (list: string[]) => `${list.join(", ")} (${list.length} section${list.length === 1 ? "" : "s"})`;
+                          return (
+                            <div className="space-y-1.5 text-xs">
+                              {sameSections && <p className="text-muted-foreground"><span className="font-medium text-foreground">Covers:</span> {covers(i.sharedBanks[0].sections)}</p>}
+                              <ul className="divide-y rounded-md border">
+                                {i.sharedBanks.map((b) => {
+                                  const st = b.status ? bankStage({ status: b.status as never, approval: (b.approval ?? undefined) as never }) : null;
+                                  const label = b.status ? stageLabel({ status: b.status as never, approval: (b.approval ?? undefined) as never, reopened: b.reopened }) : null;
+                                  return (
+                                    <li key={b.id} className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
+                                      <span className="min-w-0 flex-1 font-medium">{b.ownerName}{!sameSections && <span className="block font-normal text-muted-foreground">{covers(b.sections)}</span>}</span>
+                                      {st && label && <span className={`rounded-full px-2 py-0.5 font-medium ${STAGE_CLASS[st]}`}>{st === "READY" ? "Complete" : label}</span>}
+                                      <span className="tabular-nums text-muted-foreground">{b.completeCount} of {b.totalCount} questions</span>
+                                      <Link className="shrink-0 text-primary underline" href={`/panel/mid-bank/${encodeURIComponent(b.id)}/review`}><Eye className="mr-0.5 inline h-3 w-3" />View</Link>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
+                          );
+                        })()}
 
                         <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
                           {i.myBank && i.myBank.status === "COMPLETE" && (() => { const st = bankStage({ status: i.myBank.status, approval: i.myBank.approval ?? undefined }); const label = stageLabel({ status: i.myBank.status, approval: i.myBank.approval ?? undefined, reopened: i.myBank.reopened }); return (

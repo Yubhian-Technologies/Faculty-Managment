@@ -6,6 +6,7 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { notify } from "@/lib/notify";
+import { loadMidSettings } from "@/lib/exams/midSettings";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { loadPlan } from "@/lib/midTimetable/server";
 import { courseIdsForKey, teachingFor } from "@/lib/midBank/server";
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
     const open = body.open === true;
     if (!planId || subjectIds.length === 0) throw new MidMarksError("Select the Mid and the subject.");
     const db = getAdminDb();
+    const page = (await loadMidSettings(db, session.collegeId)).midMarksPage;
     const c = session.collegeId;
     const plan = await loadPlan(db, c, planId);
     if (!plan) throw new MidMarksError("Mid timetable not found. It may have been deleted.", 404);
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
         const uid = await resolveLoginUidForFacultyMember(db, c, fid);
         if (!uid || uid === fid) continue;
         await notify(db, c, uid, "MID_MARKS_ENTRY_OPENED", `Mid-${plan.midNumber} marks entry is open`,
-          `Enter the Mid-${plan.midNumber} marks of ${[...subjects].join(", ")} question-wise on Internal Marks.`, "/panel/internal-exam");
+          `Enter the Mid-${plan.midNumber} marks of ${[...subjects].join(", ")} question-wise on ${page ? "Mid Marks" : "Internal Marks"}.`, page ? "/panel/mid-marks" : "/panel/internal-exam");
         notified++;
       }
     }
