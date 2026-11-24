@@ -190,7 +190,7 @@ export async function POST(request: Request) {
     // ...unless the section's faculty incharge set this lab to "no batch" - then the whole section attends together.
     const labBatch = effectiveLabBatch(
       windowCheck.slot.labBatch, await loadLabBatchModes(db, session.collegeId, [{ sectionId, subjectId: assignment.subjectId }]),
-      sectionId, assignment.subjectId, assignment.facultyId, windowCheck.slot.batchPinned,
+      sectionId, assignment.subjectId, assignment.facultyId, windowCheck.slot.batchPinned, windowCheck.slot,
     );
 
     // Another lab of this section in the same period while this period has no lab batch: every faculty would mark

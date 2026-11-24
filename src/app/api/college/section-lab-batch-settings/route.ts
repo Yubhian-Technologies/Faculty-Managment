@@ -7,66 +7,15 @@ import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { authorizedSection } from "@/lib/students/sectionInchargeAuth";
 import { LAB_BATCH_SETTINGS, labBatchSettingId, normalizeBatch } from "@/lib/students/labBatchMode";
-import { fetchSectionStudents } from "@/lib/students/sectionRoster";
+import { batchesOfSection, labsOfSection, sectionLabPeriods } from "@/lib/students/sectionLabsServer";
 import { LAB_FACULTY_WINDOWS, labWindowId, normalizeWindows } from "@/lib/students/labFacultyWindow";
-import type { Section, SectionLabBatchSetting, SectionLabFacultyWindows, TeachingAssignment } from "@/types";
+import type { SectionLabBatchSetting, SectionLabFacultyWindows } from "@/types";
 
 // The labs of one section, and whether each runs batch by batch or with no batch
 // (the whole section together) - see SectionLabBatchSetting. The section's
 // faculty incharge decides it (Students -> Lab Batches), after assigning the lab
 // batches; its HOD may too.
 const ROLES = ["PANEL_MEMBER", "HOD"] as const;
-
-interface LabInfo {
-  subjectId: string;
-  subjectName: string;
-  subjectCode: string;
-  /** The lab's current faculty in this section (one assignment each). */
-  faculty: { facultyId: string; facultyName: string }[];
-}
-
-/** The distinct lab (PRACTICAL) subjects currently taught in the section, with the faculty teaching each. */
-async function labsOfSection(collegeId: string, sectionId: string): Promise<LabInfo[]> {
-  const db = getAdminDb();
-  const collegeRef = db.collection("colleges").doc(collegeId);
-  const snap = await collegeRef.collection("teachingAssignments").where("sectionId", "==", sectionId).get();
-  const current = snap.docs.map((d) => d.data() as TeachingAssignment).filter((a) => !a.isPast && a.subjectId);
-  const subjectIds = Array.from(new Set(current.map((a) => a.subjectId)));
-  if (subjectIds.length === 0) return [];
-  const subjectSnaps = await db.getAll(...subjectIds.map((id) => collegeRef.collection("subjects").doc(id)));
-  return subjectSnaps
-    .filter((s) => s.exists && (s.data() as { type?: string }).type === "PRACTICAL")
-    .map((s) => {
-      const d = s.data() as { name?: string; code?: string };
-      const seen = new Set<string>();
-      const faculty = current
-        .filter((a) => a.subjectId === s.id && a.facultyId && !seen.has(a.facultyId) && !!seen.add(a.facultyId))
-        .map((a) => ({ facultyId: a.facultyId, facultyName: a.facultyName ?? "" }))
-        .sort((x, y) => x.facultyName.localeCompare(y.facultyName));
-      return { subjectId: s.id, subjectName: d.name ?? "", subjectCode: d.code ?? "", faculty };
-    })
-    .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
-}
-
-/** The lab batch labels set up for this section (saved list + whatever students carry), de-duplicated case-insensitively. */
-async function batchesOfSection(collegeId: string, section: Section): Promise<string[]> {
-  const db = getAdminDb();
-  const students = await fetchSectionStudents(db.collection("colleges").doc(collegeId), {
-    department: section.department, sectionName: section.name, year: section.year, courseId: section.courseId,
-  });
-  const byKey = new Map<string, string>();
-  // The batches set up for the section, even ones no student is in yet...
-  for (const label of section.labBatches ?? []) {
-    const l = label.trim();
-    if (l && !byKey.has(normalizeBatch(l))) byKey.set(normalizeBatch(l), l);
-  }
-  // ...plus any a student already carries.
-  for (const s of students) {
-    const label = (s.labBatch ?? "").trim();
-    if (label && !byKey.has(normalizeBatch(label))) byKey.set(normalizeBatch(label), label);
-  }
-  return Array.from(byKey.values()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-}
 
 export async function GET(request: Request) {
   try {
@@ -77,7 +26,9 @@ export async function GET(request: Request) {
     if ("error" in auth) return auth.error;
 
     const db = getAdminDb();
-    const [labs, batches] = await Promise.all([labsOfSection(session.collegeId, sectionId), batchesOfSection(session.collegeId, auth.section)]);
+    const [labs, batches, { periods }] = await Promise.all([
+      labsOfSection(session.collegeId, sectionId), batchesOfSection(session.collegeId, auth.section), sectionLabPeriods(session.collegeId, auth.section),
+    ]);
     const col = db.collection("colleges").doc(session.collegeId).collection(LAB_BATCH_SETTINGS);
     const snaps = labs.length > 0 ? await db.getAll(...labs.map((l) => col.doc(labBatchSettingId(sectionId, l.subjectId)))) : [];
     const settingBySubject = new Map(
@@ -90,6 +41,8 @@ export async function GET(request: Request) {
     );
     return NextResponse.json({
       batches,
+      // Periods where two labs run side by side: which batch goes to which lab (class in-charge's choice).
+      periods,
       labs: labs.map((l) => {
         const setting = settingBySubject.get(l.subjectId);
         return {

@@ -26,7 +26,12 @@ export interface LabBatchMode {
   batchWise: boolean;
   /** facultyMembers doc id -> batch label. */
   batchByFaculty: Record<string, string>;
+  /** labPeriodKey(day, period) -> the batch this lab takes in that period (two labs side by side). */
+  batchByPeriod?: Record<string, string>;
 }
+
+/** Key of one timetable period in SectionLabBatchSetting.batchByPeriod. */
+export const labPeriodKey = (day: string, periodNumber: number) => `${day}_${periodNumber}`;
 
 /** settingId (`${sectionId}_${subjectId}`) -> its mode. A lab with no setting is absent. */
 export type LabBatchModes = Map<string, LabBatchMode>;
@@ -46,7 +51,7 @@ export async function loadLabBatchModes(
   for (const s of snaps) {
     if (!s.exists) continue;
     const d = s.data() as SectionLabBatchSetting;
-    out.set(s.id, { batchWise: d.batchWise !== false, batchByFaculty: d.batchByFaculty ?? {} });
+    out.set(s.id, { batchWise: d.batchWise !== false, batchByFaculty: d.batchByFaculty ?? {}, ...(d.batchByPeriod ? { batchByPeriod: d.batchByPeriod } : {}) });
   }
   return out;
 }
@@ -57,7 +62,8 @@ export async function loadLabBatchModes(
  * substitute): none when its lab is set to "no batch"; the faculty's own batch when
  * the lab is batch-wise and gave them one; else the period's own label. A period whose
  * label was pinned (`pinned`, set by the flexible-cell dialog) always uses its own
- * label, so one faculty can take Batch 1 one day and Batch 2 on another.
+ * label, so one faculty can take Batch 1 one day and Batch 2 on another. A batch the class in-charge chose for
+ * this very period (`at`, two labs side by side - batchByPeriod) wins over all of these.
  */
 export function effectiveLabBatch(
   slotLabBatch: string | null | undefined,
@@ -66,9 +72,12 @@ export function effectiveLabBatch(
   subjectId: string | undefined,
   facultyId?: string,
   pinned?: boolean,
+  at?: { day: string; periodNumber: number },
 ): string | undefined {
-  if (pinned && slotLabBatch) return slotLabBatch;
   const mode = sectionId && subjectId ? modes.get(labBatchSettingId(sectionId, subjectId)) : undefined;
+  const chosen = at ? mode?.batchByPeriod?.[labPeriodKey(at.day, at.periodNumber)] : undefined;
+  if (chosen) return chosen;
+  if (pinned && slotLabBatch) return slotLabBatch;
   if (!mode) return slotLabBatch || undefined;
   if (!mode.batchWise) return undefined;
   const mine = facultyId ? mode.batchByFaculty[facultyId] : undefined;

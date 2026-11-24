@@ -14,6 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { ArrowRight, Pencil, Trash2, Check, X } from "lucide-react";
 import { SectionLabBatchModes } from "@/components/students/SectionLabBatchModes";
+import { LabPeriodBatches } from "@/components/students/LabPeriodBatches";
 import type { Section, StudentRecord } from "@/types";
 
 type Student = StudentRecord & { id: string };
@@ -501,6 +502,7 @@ export default function LabBatchesPage() {
       )}
 
       {sectionId && sections.length > 0 && <SectionLabBatchModes key={`${sectionId}-${savedVersion}`} sectionId={sectionId} />}
+      {sectionId && sections.length > 0 && <LabPeriodBatches key={`periods-${sectionId}-${savedVersion}`} sectionId={sectionId} />}
 
       <ConfirmDialog
         open={deleteTarget !== null}

@@ -153,7 +153,7 @@ export async function GET(request: Request) {
           sessionStatus: sess?.status ?? null,
           isOpen,
           phase,
-          labBatch: effectiveLabBatch(slot.labBatch, labModes, slot.sectionId, slot.subjectId, slot.facultyId, slot.batchPinned) ?? null,
+          labBatch: effectiveLabBatch(slot.labBatch, labModes, slot.sectionId, slot.subjectId, slot.facultyId, slot.batchPinned, slot) ?? null,
           allocated,
           // Taken over from a colleague ("Adjust / Swap a Class") - shown on the period card.
           adjustedFrom: adjustedFrom ? { facultyName: adjustedFrom.fromFacultyName, subjectName: adjustedFrom.fromSubjectName, onLeave: adjustedFrom.adjustmentId === "LEAVE" } : null,

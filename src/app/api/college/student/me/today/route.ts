@@ -69,7 +69,7 @@ export async function GET() {
     // student sees it; otherwise a split lab period is shown only to its own batch.
     const labModes = await loadLabBatchModes(db, session.collegeId, liveSlots.map((s) => ({ sectionId: section.id, subjectId: s.subjectId })));
     const slots = liveSlots.filter((s) =>
-      slotVisibleToStudent({ labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId, s.batchPinned) }, student.labBatch));
+      slotVisibleToStudent({ labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId, s.batchPinned, s) }, student.labBatch));
 
     // A substitution belongs to one calendar date - only today's applies to today's list.
     const subs = slots.length > 0 ? await getActiveSubstitutionsForDates(db, session.collegeId, [today]) : [];
@@ -104,7 +104,7 @@ export async function GET() {
           faculty: sub?.substituteFacultyName || s.facultyName || "",
           isSubstitute: Boolean(sub),
           room: s.classroom ?? "",
-          labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId, s.batchPinned) ?? "",
+          labBatch: effectiveLabBatch(s.labBatch, labModes, section.id, s.subjectId, s.facultyId, s.batchPinned, s) ?? "",
           subjectId: s.subjectId,
         };
       });

@@ -7,7 +7,6 @@ import { readJsonBody } from "@/lib/http/readJsonBody";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { ceaSheetId, isEntered } from "@/lib/cea/marks";
-import { loadMidSettings } from "@/lib/exams/midSettings";
 import { assertCeaEditor, ceaMarksCol, ceaSectionContext, draftSheet, internalSubmitted } from "@/lib/cea/marksServer";
 import { planCieUpload, type UploadRow, type UploadUnit } from "@/lib/cea/upload";
 import { CeaError, ceaErrorResponse } from "@/lib/cea/server";
@@ -71,16 +70,12 @@ export async function POST(request: Request) {
     const uploadUnits: UploadUnit[] = units.map((u) => ({
       unit: u.unit, when: u.when, unitMarks: ctx.ps.settings.unitMarks, status: sheets.get(u.unit)?.status ?? null, heldOn: sheets.get(u.unit)?.heldOn ?? null,
     }));
-    const withMidOnMidMarks = (await loadMidSettings(db, session.collegeId)).midMarksPage;
     const plan = planCieUpload({
       units: uploadUnits, students: ctx.roster.map((s) => ({ studentId: s.id, rollNumber: s.rollNumber, name: s.name })),
       rows, heldOn, today: istDateKey(new Date()),
     });
-    // Faculty Mid Marks Page on: with-Mid units are entered on Mid Marks - left out of the upload.
-    const skippedWithMid = withMidOnMidMarks ? plan.changes.filter((c) => units.find((u) => u.unit === c.unit)?.when !== "CLASS").map((c) => c.unit) : [];
-    if (skippedWithMid.length) plan.changes = plan.changes.filter((c) => !skippedWithMid.includes(c.unit));
     const problems = [...plan.errors, ...(plan.unknownRolls.length ? [`Not students of this section: ${plan.unknownRolls.join(", ")}`] : [])];
-    const summary = { units: plan.changes.map((c) => ({ unit: c.unit, marks: c.values.length })), skippedSubmitted: plan.skippedSubmitted, skippedWithMid, marksGiven: plan.marksGiven };
+    const summary = { units: plan.changes.map((c) => ({ unit: c.unit, marks: c.values.length })), skippedSubmitted: plan.skippedSubmitted, marksGiven: plan.marksGiven };
     if (body.apply !== true || problems.length) {
       return NextResponse.json({ ok: problems.length === 0, problems, ...summary }, { status: body.apply === true && problems.length ? 400 : 200 });
     }

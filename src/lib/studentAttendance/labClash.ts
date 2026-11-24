@@ -49,7 +49,7 @@ export function labClashMessage(sectionName: string, others: ConcurrentSlot[], i
   const who = inchargeName?.trim()
     ? `The class in-charge (${inchargeName.trim()}) divides the students on Lab Batches`
     : "The class in-charge divides the students on Lab Batches (the HOD sets the class in-charge first)";
-  return `Divide this section into lab batches before marking this lab. ${subjects || "Another class"} also runs in this period for ${sectionName}, so marking the whole section would count it twice. ${who}; then each lab faculty marks only their own batch.`;
+  return `Divide this section into lab batches before marking this lab. ${subjects || "Another class"} also runs in this period for ${sectionName}, so marking the whole section would count it twice. ${who}; then, under Labs in the Same Period, chooses which batch goes to which lab in this period. Each lab faculty then marks only their own batch.`;
 }
 
 /** Live timetable slots of the section in that day + period, checked against this class. Empty = no clash. */
