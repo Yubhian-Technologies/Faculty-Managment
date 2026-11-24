@@ -2,7 +2,9 @@ import { paperTotal, type QuestionSheet } from "@/lib/exams/questionMarks";
 import { NOT_ATTEMPTED, type MidMarksEntry, type MidQuestionValue } from "@/types/midMarks";
 
 // Mid marks sheet rules (pure). A box holds a mark (0..its max, halves allowed), "-" = not attempted (counts 0), or
-// nothing yet. A student is complete when every box is filled, or they are marked absent (AB = 0). The total is the
+// nothing yet. A student is complete once any box has a mark or "-" (an empty box then counts as not attempted, and
+// is stored as "-" on submit - notAttemptedFilled), or they are marked absent (AB = 0). A student with nothing entered
+// at all is still pending, so a missed student is never submitted as 0 by accident. The total is the
 // paper total under its choice rule (OR pairs / any k / all) and is never scaled - it is out of the paper's marks.
 
 export class MidMarksError extends Error {
@@ -11,7 +13,16 @@ export class MidMarksError extends Error {
 
 export function isComplete(sheet: QuestionSheet, e: Pick<MidMarksEntry, "absent" | "q">): boolean {
   if (e.absent) return true;
-  return sheet.columns.every((c) => e.q[c.key] != null);
+  return sheet.columns.some((c) => e.q[c.key] != null);
+}
+
+/** On submit: the empty boxes of every student with marks become "-" (not attempted). */
+export function notAttemptedFilled(sheet: QuestionSheet, entries: MidMarksEntry[]): MidMarksEntry[] {
+  return entries.map((e) => {
+    if (e.absent || !isComplete(sheet, e) || sheet.columns.every((c) => e.q[c.key] != null)) return e;
+    const q = Object.fromEntries(sheet.columns.map((c) => [c.key, e.q[c.key] ?? NOT_ATTEMPTED])) as Record<string, MidQuestionValue>;
+    return { ...e, q, total: entryTotal(sheet, { ...e, q }) };
+  });
 }
 
 /** The paper total when complete (absent = 0), else null. "-" counts 0. */

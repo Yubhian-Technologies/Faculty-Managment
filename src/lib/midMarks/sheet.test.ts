@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEntries, completeCount, entryTotal, isComplete, MidMarksError, reconcileRoster, runningTotal, withinLastDate } from "./sheet";
+import { applyEntries, completeCount, entryTotal, isComplete, MidMarksError, notAttemptedFilled, reconcileRoster, runningTotal, withinLastDate } from "./sheet";
 import type { QuestionSheet } from "@/lib/exams/questionMarks";
 import type { MidMarksEntry } from "@/types/midMarks";
 
@@ -18,15 +18,18 @@ const orPairs: QuestionSheet = {
 const blank = (sheet: QuestionSheet, id = "s1"): MidMarksEntry => ({ studentId: id, rollNumber: `R-${id}`, name: id, q: Object.fromEntries(sheet.columns.map((c) => [c.key, null])), total: null });
 
 describe("Mid marks sheet", () => {
-  it("is complete only when every box is a mark or '-', or the student is absent", () => {
-    expect(isComplete(vit, { q: { A1: 5, A2: 4, A3: "NA", A4: 3 } })).toBe(false);
+  it("is complete once any box has a mark or '-' (empty = not attempted), or the student is absent", () => {
+    expect(isComplete(vit, { q: {} })).toBe(false);
+    expect(isComplete(vit, { q: { A1: null } })).toBe(false);
+    expect(isComplete(vit, { q: { A1: 5, A2: 4, A3: "NA", A4: 3 } })).toBe(true);
     expect(isComplete(vit, { q: { A1: 5, A2: 4, A3: "NA", A4: 3, A5: 0 } })).toBe(true);
     expect(isComplete(vit, { absent: true, q: {} })).toBe(true);
   });
 
   it("adds the paper up, '-' counting 0, never scaled", () => {
     expect(entryTotal(vit, { q: { A1: 5, A2: 4.5, A3: "NA", A4: 3, A5: 2 } })).toBe(14.5);
-    expect(entryTotal(vit, { q: { A1: 5 } })).toBeNull();
+    expect(entryTotal(vit, { q: { A1: 5 } })).toBe(5);
+    expect(entryTotal(vit, { q: {} })).toBeNull();
     expect(entryTotal(vit, { absent: true, q: {} })).toBe(0);
     expect(runningTotal(vit, { q: { A1: 5, A2: 4 } })).toBe(9);
   });
@@ -47,6 +50,9 @@ describe("Mid marks sheet", () => {
     expect(out[1].q.A1).toBeNull();
     expect(out[2].total).toBeNull();
     expect(completeCount(vit, out)).toBe(2);
+    const filled = notAttemptedFilled(vit, out);
+    expect(filled[2].q.A1).toBeNull();
+    expect(notAttemptedFilled(vit, applyEntries(vit, [blank(vit, "d")], [{ studentId: "d", q: { A1: 4 } }]))[0]).toMatchObject({ q: { A1: 4, A2: "NA", A5: "NA" }, total: 4 });
   });
 
   it("keeps boxes the browser didn't send", () => {
