@@ -25,7 +25,7 @@ export async function PATCH(request: Request) {
       "PLACEMENT_DEPT",
       "LIBRARY",
       "EXAM_CELL",
-      "WEBMASTER", "HR",
+      "WEBMASTER", "HR", "SCHOLARSHIP_CELL",
       "COLLEGE_ACCOUNTS"
     );
 

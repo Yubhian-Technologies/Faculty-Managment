@@ -155,6 +155,7 @@ const EXPECTED: Record<string, string[]> = {
     "/student/results",
     "/student/cea",
     "/student/mid-marks",
+    "/student/fees",
     "/student/mentoring",
     "/student/library",
     "/student/documents",

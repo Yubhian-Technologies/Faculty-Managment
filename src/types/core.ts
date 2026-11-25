@@ -60,6 +60,9 @@ export type UserRole =
   // HR (Human Resources) - the college's recruitment desk: candidates, interview scheduling, offer letters and joining.
   // A college seat like Exam Cell / Webmaster; the Principal / VP still approve requests and make the final selection.
   | "HR"
+  // Scholarship Cell - marks Category A students FR / NFR (fee reimbursement) and records the government money
+  // received (Accounts > Fees, lib/fees). A college seat like Exam Cell / HR.
+  | "SCHOLARSHIP_CELL"
   | "COLLEGE_ACCOUNTS"
   | "PANEL_MEMBER"
   | "ACCOUNTS"
@@ -96,6 +99,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   EXAM_CELL: "Exam Cell",
   WEBMASTER: "Webmaster",
   HR: "HR",
+  SCHOLARSHIP_CELL: "Scholarship Cell",
   COLLEGE_ACCOUNTS: "College Accounts",
   PANEL_MEMBER: "Faculty",
   ACCOUNTS: "Accounts",
@@ -117,7 +121,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export const MANAGEABLE_STAFF_ROLES: UserRole[] = [
   "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF",
   "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL",
-  "PANEL_MEMBER", "WEBMASTER", "HR", "COLLEGE_ACCOUNTS",
+  "PANEL_MEMBER", "WEBMASTER", "HR", "SCHOLARSHIP_CELL", "COLLEGE_ACCOUNTS",
 ];
 
 export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
@@ -148,6 +152,7 @@ export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
   EXAM_CELL: "/exam-cell",
   WEBMASTER: "/webmaster",
   HR: "/hr",
+  SCHOLARSHIP_CELL: "/scholarship",
   COLLEGE_ACCOUNTS: "/college-accounts",
   PANEL_MEMBER: "/panel",
   ACCOUNTS: "/accounts",
@@ -195,6 +200,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   EXAM_CELL: 4,
   WEBMASTER: 4,
   HR: 4,
+  SCHOLARSHIP_CELL: 4,
   COLLEGE_ACCOUNTS: 4,
   PANEL_MEMBER: 5,
   STUDENT: 6,
@@ -248,6 +254,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   EXAM_CELL: "COLLEGE",
   WEBMASTER: "COLLEGE",
   HR: "COLLEGE",
+  SCHOLARSHIP_CELL: "COLLEGE",
   COLLEGE_ACCOUNTS: "COLLEGE",
   PANEL_MEMBER: "COLLEGE",
   STUDENT: "COLLEGE",
