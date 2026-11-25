@@ -69,7 +69,13 @@ export async function POST(request: Request) {
     const target = await resolve(identifier);
     if (target) {
       const base = (process.env.APP_URL ?? new URL(request.url).origin).replace(/\/+$/, "");
-      const link = await (await getAdminAuth()).generatePasswordResetLink(target.loginEmail, { url: `${base}/login` });
+      // The "continue" address back to the login needs the site on Firebase Auth's authorized domains; when it isn't
+      // (auth/unauthorized-continue-uri) the link is made without it - the reset itself works the same.
+      const adminAuth = await getAdminAuth();
+      const link = await adminAuth.generatePasswordResetLink(target.loginEmail, { url: `${base}/login` }).catch((e: { code?: string }) => {
+        if (e?.code === "auth/unauthorized-continue-uri" || e?.code === "auth/invalid-continue-uri") return adminAuth.generatePasswordResetLink(target.loginEmail);
+        throw e;
+      });
       await sendMail({
         to: target.sendTo,
         subject: "Reset your Vishnu People password",
