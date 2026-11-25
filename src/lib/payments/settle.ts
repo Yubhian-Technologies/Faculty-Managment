@@ -2,11 +2,13 @@ import type { Firestore } from "firebase-admin/firestore";
 import { CERTIFICATE_REQUESTS_COL } from "@/lib/certifications/transitions";
 import { sameAmount, type CcavResponse } from "./ccavenue";
 import { paymentOf, paymentRefs } from "./server";
-import type { CertificateRequest, Payment, PaymentStatus } from "@/types";
+import { applyOnlinePayment, onlineReceiptId } from "@/lib/fees/online";
+import type { CertificateRequest, Payment, PaymentStatus, StudentFeeAccount } from "@/types";
 
 // Records CCAvenue's answer on a payment - once. The same answer arriving twice (the redirect and a
-// later status check, a browser refresh) changes nothing. A SUCCESS marks what was paid for as paid
-// (the certificate request's `feePaid`) in the same transaction.
+// later status check, a browser refresh) changes nothing. A SUCCESS marks what was paid for as paid in the same
+// transaction: the certificate request's `feePaid`, or (student fees) a fee receipt with the payment's own receipt
+// number on the student's fee account (lib/fees/online.ts) - paying more than is due is flagged for a refund.
 
 export type Settlement =
   | { kind: "IGNORE"; reason: string }
@@ -53,6 +55,8 @@ export async function settlePayment(db: Firestore, collegeId: string, r: CcavRes
     // Reads first (Firestore transactions): what was paid for.
     const reqRef = p.purpose.kind === "CERTIFICATE" ? CERTIFICATE_REQUESTS_COL(db, collegeId).doc(p.purpose.requestId) : null;
     const reqSnap = reqRef && decision.status === "SUCCESS" ? await tx.get(reqRef) : null;
+    const feeRef = p.purpose.kind === "FEE" ? paymentRefs(db, collegeId).college.collection("studentFees").doc(p.purpose.accountId) : null;
+    const feeSnap = feeRef && decision.status === "SUCCESS" ? await tx.get(feeRef) : null;
     // A successful payment gets the college's next fee receipt number (one running number per college).
     const counterRef = paymentRefs(db, collegeId).college.collection("paymentSettings").doc("receiptCounter");
     const needsNo = decision.status === "SUCCESS" && !p.receiptNo;
@@ -84,6 +88,18 @@ export async function settlePayment(db: Firestore, collegeId: string, r: CcavRes
         next.failureMessage = `Paid twice - the fee was already paid by order ${req.feePaid.paymentId}. Refund this one.`;
       } else {
         tx.update(reqRef, { feePaid: { paymentId: p.id, trackingId: next.trackingId ?? "", bankRefNo: next.bankRefNo ?? "", amount: p.amount, at: now }, updatedAt: new Date() });
+      }
+    }
+    if (decision.status === "SUCCESS" && feeRef) {
+      const account = feeSnap?.exists ? (feeSnap.data() as StudentFeeAccount) : null;
+      const applied = account && next.receiptNo ? applyOnlinePayment(account, next, next.receiptNo, now) : null;
+      if (!applied || applied.excess) {
+        alreadyPaidByOther = true;
+        next.needsRefund = true;
+        next.failureMessage = !account ? "The student's fee account was not found. Refund this payment." : `More than the fee due (balance Rs. ${account.balance}). Refund this payment.`;
+      } else {
+        tx.set(paymentRefs(db, collegeId).college.collection("feeReceipts").doc(onlineReceiptId(p.id)), applied.receipt);
+        tx.set(feeRef, applied.account);
       }
     }
     const { id: _id, ...data } = next;

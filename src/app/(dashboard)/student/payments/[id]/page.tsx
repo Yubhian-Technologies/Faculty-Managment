@@ -57,7 +57,9 @@ export default function StudentPaymentPage({ params }: { params: Promise<{ id: s
         {!ok && <p className="text-xs text-muted-foreground">No money is taken for a failed or cancelled payment. If your bank shows a debit, the bank reverses it, or the Accounts office checks it.</p>}
       </CardContent></Card>
       <div className="flex gap-2">
-        <Button asChild><Link href="/student/certificates">Back to certificates</Link></Button>
+        {p.purpose.kind === "FEE"
+          ? <Button asChild><Link href="/student/fees">Back to fees</Link></Button>
+          : <Button asChild><Link href="/student/certificates">Back to certificates</Link></Button>}
         <Button asChild variant="outline"><Link href="/student/payments">My payments</Link></Button>
         {ok && <Button variant="outline" onClick={() => void printFeeReceipt(`/api/college/payments/my/${encodeURIComponent(p.id)}/receipt`).catch((e: unknown) => toast({ variant: "destructive", title: e instanceof Error ? e.message : "Unable to print" }))}>Print receipt</Button>}
         {!ok && canCheck && <Button variant="outline" onClick={() => void checkAgain()} loading={checking}>Check again</Button>}
