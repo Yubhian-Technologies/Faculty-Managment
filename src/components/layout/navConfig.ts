@@ -91,6 +91,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Budget History", href: "/management/indents", iconName: "ClipboardList", roles: ["MANAGEMENT"] },
   { label: "Attendance", href: "/management/attendance", iconName: "ClipboardCheck", roles: ["MANAGEMENT"] },
   { label: "Leave Approvals", href: "/management/leave-approvals", iconName: "CalendarClock", roles: ["MANAGEMENT"], section: "HR" },
+  { label: "Fee Concessions", href: "/management/fee-concessions", iconName: "HandCoins", roles: ["MANAGEMENT"], section: "Student Fees" },
   { label: "My Profile", href: "/management/profile", iconName: "UserCircle", roles: ["MANAGEMENT"], section: "Personal" },
 
   // Super Admin
@@ -363,6 +364,7 @@ export const NAV_ITEMS: NavItem[] = [
   // times over.
   { label: "Pay & Promotions", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
   { label: "Payroll", href: "/college-office/payroll", iconName: "Landmark", roles: ["COLLEGE_OFFICE"] },
+  { label: "Fee Concession Requests", href: "/college-office/fees/concessions", iconName: "HandCoins", roles: ["COLLEGE_OFFICE"] },
   { label: "Hiring Pipeline", href: "/college-office/pipeline", iconName: "GitBranch", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },
   // Student attendance reports with filters, view-only for the whole college.
@@ -513,7 +515,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Hiring Pipeline", href: "/accounts/pipeline", iconName: "GitBranch", roles: ["ACCOUNTS"], section: "Hiring" },
   { label: "Payroll", href: "/accounts/payroll", iconName: "Wallet", roles: ["ACCOUNTS"], section: "Payroll" },
   { label: "Salary Structures", href: "/accounts/salary-structures", iconName: "Landmark", roles: ["ACCOUNTS"], section: "Payroll" },
-  { label: "Payments", href: "/accounts/payments", iconName: "Wallet", roles: ["ACCOUNTS"], section: "Student Fees" },
+  { label: "Fees", href: "/accounts/fees", iconName: "IndianRupee", roles: ["ACCOUNTS"], section: "Student Fees" },
+  { label: "Payments", href: "/accounts/payments", iconName: "Wallet", roles: ["ACCOUNTS"] },
   { label: "My Profile", href: "/accounts/profile", iconName: "UserCircle", roles: ["ACCOUNTS"], section: "Personal" },
   { label: "My Leave", href: "/accounts/leave", iconName: "CalendarClock", roles: ["ACCOUNTS"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["ACCOUNTS"] },
@@ -551,6 +554,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Results", href: "/student/results", iconName: "GraduationCap", roles: ["STUDENT"] },
   { label: "CIE Marks", href: "/student/cea", iconName: "ClipboardCheck", roles: ["STUDENT"] },
   { label: "Mid Marks", href: "/student/mid-marks", iconName: "ClipboardList", roles: ["STUDENT"] },
+  { label: "Fees", href: "/student/fees", iconName: "Receipt", roles: ["STUDENT"] },
   { label: "Mentoring", href: "/student/mentoring", iconName: "UserCheck", roles: ["STUDENT"] },
   { label: "Permissions", href: "/student/permissions", iconName: "ShieldCheck", roles: ["STUDENT"] },
   { label: "Library", href: "/student/library", iconName: "BookOpen", roles: ["STUDENT"], section: "Resources" },
@@ -571,6 +575,13 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Leave", href: "/hr/leave", iconName: "CalendarClock", roles: ["HR"] },
   { label: "My Payslips", href: "/payslips", iconName: "Wallet", roles: ["HR"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["HR"] },
+  // Scholarship Cell (lib/fees): Category A students' FR / NFR and the government's fee reimbursement money.
+  { label: "FR / NFR Students", href: "/scholarship", iconName: "GraduationCap", roles: ["SCHOLARSHIP_CELL"], section: "Scholarship" },
+  { label: "Government Receipts", href: "/scholarship/receipts", iconName: "IndianRupee", roles: ["SCHOLARSHIP_CELL"] },
+  { label: "My Profile", href: "/scholarship/profile", iconName: "UserCircle", roles: ["SCHOLARSHIP_CELL"], section: "Personal" },
+  { label: "My Leave", href: "/scholarship/leave", iconName: "CalendarClock", roles: ["SCHOLARSHIP_CELL"] },
+  { label: "My Payslips", href: "/payslips", iconName: "Wallet", roles: ["SCHOLARSHIP_CELL"] },
+  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["SCHOLARSHIP_CELL"] },
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
   { label: "Credential Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"], section: "Hiring" },
   { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"], section: "Accounts" },
@@ -1223,6 +1234,11 @@ export const BOTTOM_NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Candidates", href: "/hr/candidates", iconName: "Users", roles: ["HR"] },
     { label: "Requests", href: "/hr/vacancies", iconName: "ClipboardList", roles: ["HR"] },
     { label: "Profile", href: "/hr/profile", iconName: "UserCircle", roles: ["HR"] },
+  ],
+  SCHOLARSHIP_CELL: [
+    { label: "Home", href: "/scholarship", iconName: "GraduationCap", roles: ["SCHOLARSHIP_CELL"] },
+    { label: "Receipts", href: "/scholarship/receipts", iconName: "IndianRupee", roles: ["SCHOLARSHIP_CELL"] },
+    { label: "Profile", href: "/scholarship/profile", iconName: "UserCircle", roles: ["SCHOLARSHIP_CELL"] },
   ],
   WEBMASTER: [
     { label: "Home", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },

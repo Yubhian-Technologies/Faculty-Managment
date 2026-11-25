@@ -117,7 +117,7 @@ export function StaffAccountsSection() {
   // API's loadTargetInScope 403s on every action for it - see
   // MANAGEABLE_STAFF_ROLES in types/core.ts), so listing it here only produced
   // dead View/Deactivate/Delete buttons.
-  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "COLLEGE_ADMIN", "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "WEBMASTER", "HR", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
+  const ROLE_ORDER: UserRole[] = ["VICE_PRINCIPAL", "COLLEGE_ADMIN", "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "COLLEGE_ACCOUNTS", "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "WEBMASTER", "HR", "SCHOLARSHIP_CELL", "PLACEMENT_DEPT", "LIBRARY", "EXAM_CELL"];
   const grouped = ROLE_ORDER
     .map((role) => ({ role, users: staff.filter((u) => u.role === role) }))
     .filter((g) => g.users.length > 0);
