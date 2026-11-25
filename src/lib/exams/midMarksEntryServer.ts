@@ -3,6 +3,8 @@ import { courseKeyForSubject, loadSubject } from "@/lib/midBank/server";
 import { resolveExamConfigForBatch } from "@/lib/exams/internalExamMarks";
 import { questionSheetsFor } from "@/lib/exams/questionMarksServer";
 import type { QuestionSheet } from "@/lib/exams/questionMarks";
+import type { MidSheetFormat } from "@/types/midMarks";
+import { coPendingCount } from "@/lib/midMarks/format";
 import { entryStateFor, sheetFromLayout, MID_MARKS_MODES, type MidEntryState, type MidMarksLayout, type MidMarksMode } from "@/lib/exams/midMarksEntry";
 
 // Storage behind midMarksEntry.ts:
@@ -158,6 +160,10 @@ export interface SectionProgress {
   locked: boolean;
   /** Entered on Faculty > Mid Marks (lib/midMarks): its sheet id, to open it. */
   sheetId?: string;
+  /** Mid exam format sheets: question boxes still without a CO, and whether the Exam Cell uploaded the marks. */
+  coPending?: number;
+  formatSheet?: boolean;
+  uploaded?: boolean;
 }
 
 /**
@@ -189,7 +195,7 @@ export async function midProgress(
   }));
   // Faculty > Mid Marks sheets (lib/midMarks) - used for a section when one exists.
   const pageSnaps = ids.length ? await db.getAll(...ids.map((id) => ref.collection("midMarksSheets").doc(`${id}__m${mid}`))) : [];
-  const pageSheets = new Map(pageSnaps.filter((s) => s.exists).map((s) => [String(s.get("assignmentId")), s.data() as { status: "DRAFT" | "SUBMITTED" | "FROZEN"; completeCount: number; totalStudents: number; changeRequest?: { status: string } }]));
+  const pageSheets = new Map(pageSnaps.filter((s) => s.exists).map((s) => [String(s.get("assignmentId")), s.data() as { status: "DRAFT" | "SUBMITTED" | "FROZEN"; completeCount: number; totalStudents: number; changeRequest?: { status: string }; format?: MidSheetFormat; enteredBy?: unknown }]));
   const out = new Map<string, SectionProgress[]>();
   for (const r of rows) {
     const aid = assignmentOf.get(`${r.subjectId}|${r.sectionId}|${r.facultyId}`) ?? null;
@@ -198,7 +204,8 @@ export async function midProgress(
       const key = `${r.subjectId}|${r.branch}`;
       const p: SectionProgress = { sectionId: r.sectionId, section: r.sectionName, facultyId: r.facultyId, facultyName: r.facultyName, assignmentId: aid,
         entered: page.completeCount, total: page.totalStudents, status: page.status, locked: false, sheetId: `${aid}__m${mid}`,
-        ...(page.changeRequest?.status === "PENDING" ? { changeRequested: true } : {}) };
+        ...(page.changeRequest?.status === "PENDING" ? { changeRequested: true } : {}),
+        ...(page.format ? { formatSheet: true, coPending: coPendingCount(page.format), uploaded: !!page.enteredBy } : {}) };
       out.set(key, [...(out.get(key) ?? []), p].sort((x, y) => x.section.localeCompare(y.section)));
       continue;
     }

@@ -12,6 +12,7 @@ import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
 import { istDateKey } from "@/lib/attendance/istTime";
 import { editableDepartmentNames, getHodDepartmentScope } from "@/lib/departments/scope";
 import { completeCount, MidMarksError, reconcileRoster, withinLastDate } from "./sheet";
+import { formatCache } from "./formatServer";
 
 // Server side of Faculty > Mid Marks (types/midMarks.ts): which sections a faculty member enters, where each one's
 // entry stands (paper printed, opened by the Exam Cell after the exam, last date), and the sheet itself.
@@ -54,13 +55,19 @@ export interface EntryState {
   reason: string;
 }
 
-interface Ctx {
+export interface Ctx {
   a: TeachingAssignment & { id: string };
   section: Section & { id: string };
   courseKey: string;
 }
 
-async function contextFor(db: Db, c: string, assignmentId: string): Promise<Ctx> {
+/** The section's students in list order, as a sheet lists them. */
+export async function rosterOf(db: Db, c: string, ctx: Ctx) {
+  return sortStudentsForList(await sectionRoster(college(db, c), { department: ctx.section.department, sectionName: ctx.section.name, courseId: ctx.section.courseId ?? ctx.a.courseId ?? "", year: ctx.section.year }))
+    .map((s) => ({ id: s.id as string, rollNumber: s.rollNumber ?? "", name: s.name ?? "" }));
+}
+
+export async function contextFor(db: Db, c: string, assignmentId: string): Promise<Ctx> {
   const aSnap = await college(db, c).collection("teachingAssignments").doc(assignmentId).get();
   if (!aSnap.exists) throw new MidMarksError("Teaching assignment not found. It may have been deleted.", 404);
   const a = { ...(aSnap.data() as TeachingAssignment), id: aSnap.id };
@@ -122,14 +129,17 @@ export async function myMidClasses(db: Db, c: string, uid: string) {
     assignmentId: string; subjectCode?: string; subjectName: string; sectionName: string; department: string; year?: number; midNumber: number;
     sheetId: string; status: "NOT_STARTED" | MidMarksSheet["status"]; changeRequested: boolean; complete: number; total: number; paperMax: number; state: EntryState;
   }[] = [];
+  const formatOf = formatCache(db, c);
   for (const a of tas) {
     let ctx: Ctx;
     try { ctx = await contextFor(db, c, a.id); } catch { continue; }
+    const usesFormat = !!(await formatOf(a.subjectId));
     for (let mid = 1; mid <= midCount; mid++) {
-      const sheet = await paperSheet(db, c, ctx, mid);
-      if (!sheet) continue;
       const id = midMarksSheetId(a.id, mid);
       const saved = (await midMarksSheetsCol(db, c).doc(id).get()).data() as MidMarksSheet | undefined;
+      // Mid exam format: listed once the Exam Cell set the section's questions (or uploaded its marks).
+      const sheet = usesFormat ? (saved?.format ? saved.sheet : null) : await paperSheet(db, c, ctx, mid);
+      if (!sheet) continue;
       out.push({
         assignmentId: a.id, subjectCode: a.subjectCode, subjectName: a.subjectName, sectionName: ctx.section.name, department: ctx.section.department,
         year: ctx.section.year, midNumber: mid, sheetId: id, status: saved?.status ?? "NOT_STARTED", changeRequested: saved?.changeRequest?.status === "PENDING",
@@ -154,14 +164,16 @@ export async function openSheet(db: Db, c: string, uid: string, byName: string, 
   await assertOwner(db, c, uid, ctx.a.facultyId);
   const ref = midMarksSheetsCol(db, c).doc(midMarksSheetId(assignmentId, mid));
   const current = (await ref.get()).data() as MidMarksSheet | undefined;
-  const paper = current?.sheet ?? (await paperSheet(db, c, ctx, mid));
-  if (!paper) throw new MidMarksError("The Exam Cell has not printed this subject's Mid-" + mid + " paper for your branch yet.", 409);
+  const usesFormat = !!(await formatCache(db, c)(ctx.a.subjectId));
+  const paper = current?.sheet ?? (usesFormat ? null : await paperSheet(db, c, ctx, mid));
+  if (!paper) {
+    throw new MidMarksError(usesFormat ? `The Exam Cell has not set this section's Mid-${mid} questions yet.` : `The Exam Cell has not printed this subject's Mid-${mid} paper for your branch yet.`, 409);
+  }
   const state = await stateFor(db, c, ctx, mid, true, current);
   // Nothing is written while entry is closed: a saved sheet is shown as it is, an unopened one only as the paper.
   if (!state.canEdit) return { sheet: current ?? null, state, paper };
 
-  const roster = sortStudentsForList(await sectionRoster(college(db, c), { department: ctx.section.department, sectionName: ctx.section.name, courseId: ctx.section.courseId ?? ctx.a.courseId ?? "", year: ctx.section.year }))
-    .map((s) => ({ id: s.id as string, rollNumber: s.rollNumber ?? "", name: s.name ?? "" }));
+  const roster = await rosterOf(db, c, ctx);
   const at = new Date().toISOString();
   const sheet = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
