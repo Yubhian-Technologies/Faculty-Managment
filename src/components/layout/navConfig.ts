@@ -550,6 +550,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Attendance", href: "/student/attendance", iconName: "TrendingUp", roles: ["STUDENT"] },
   { label: "Results", href: "/student/results", iconName: "GraduationCap", roles: ["STUDENT"] },
   { label: "CIE Marks", href: "/student/cea", iconName: "ClipboardCheck", roles: ["STUDENT"] },
+  { label: "Mid Marks", href: "/student/mid-marks", iconName: "ClipboardList", roles: ["STUDENT"] },
   { label: "Mentoring", href: "/student/mentoring", iconName: "UserCheck", roles: ["STUDENT"] },
   { label: "Permissions", href: "/student/permissions", iconName: "ShieldCheck", roles: ["STUDENT"] },
   { label: "Library", href: "/student/library", iconName: "BookOpen", roles: ["STUDENT"], section: "Resources" },

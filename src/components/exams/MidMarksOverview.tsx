@@ -15,6 +15,8 @@ import type { MidExamPlan } from "@/types";
 import { MidMarksUploadDialog } from "@/components/exams/MidMarksUploadDialog";
 import { MidMarksProgress } from "@/components/exams/MidMarksProgress";
 import type { MidLayoutQuestion, MidMarksLayout, MidMarksMode } from "@/lib/exams/midMarksEntry";
+import { MidFilesUploadDialog } from "@/components/midMarks/MidFilesUploadDialog";
+import { MidQuestionsEditor } from "@/components/midMarks/MidQuestionsEditor";
 
 // Exam Cell > Mid Marks (lib/exams/midMarksEntry.ts): pick a Mid timetable; every Mid-exam subject per branch, who
 // enters its marks, and where its question columns come from - the finalized paper, the questions the Exam Cell set
@@ -26,7 +28,12 @@ interface Row {
   source: "PAPER" | "LAYOUT" | "NONE"; layout: MidMarksLayout | null; paperMax?: number; questions?: number;
   /** Faculty entry of this subject opened by the Exam Cell (after its exam), and its exam day. */
   entryOpen: boolean; examDay: string | null;
-  progress: { sectionId: string; section: string; facultyName: string; entered: number; total: number; status: "NOT_STARTED" | "DRAFT" | "SUBMITTED" | "FROZEN"; locked: boolean; sheetId?: string; changeRequested?: boolean }[];
+  progress: {
+    sectionId: string; section: string; facultyName: string; entered: number; total: number; status: "NOT_STARTED" | "DRAFT" | "SUBMITTED" | "FROZEN"; locked: boolean;
+    sheetId?: string; changeRequested?: boolean; assignmentId?: string | null; coPending?: number; formatSheet?: boolean; uploaded?: boolean;
+  }[];
+  /** Mid exam format of the subject ("Descriptive 30 + Quiz 10 + Course Activity 10 = 50"), or null. */
+  format: string | null;
 }
 
 const ROMAN = ["", "I", "II", "III", "IV", "V", "VI"];
@@ -40,6 +47,8 @@ export function MidMarksOverview() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Row | null>(null);
   const [uploading, setUploading] = useState<Row | null>(null);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [questionsOf, setQuestionsOf] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const plan = plans?.find((p) => p.id === planId) ?? null;
   const key = plan ? `${plan.id}|${reload}` : "";
@@ -103,6 +112,9 @@ export function MidMarksOverview() {
   const counts = useMemo(() => ({
     set: rows?.filter((r) => r.source !== "NONE").length ?? 0,
     total: rows?.length ?? 0,
+    format: rows?.filter((r) => r.format).length ?? 0,
+    coPending: (rows ?? []).flatMap((r) => r.progress).filter((p) => (p.coPending ?? 0) > 0).length,
+    noQuestions: (rows ?? []).filter((r) => r.format).flatMap((r) => r.progress).filter((p) => !p.formatSheet).length,
   }), [rows]);
 
   return (
@@ -139,6 +151,16 @@ export function MidMarksOverview() {
               <Button size="sm" variant="outline" className="ml-auto" loading={toggling === "remind"} onClick={() => void remind()}>Remind Pending Faculty</Button>
             )}
           </div>
+          {counts.format > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+              <span className="flex-1">
+                {counts.format} subject-branch pair{counts.format === 1 ? "" : "s"} follow the Mid exam format.
+                {counts.noQuestions > 0 && ` ${counts.noQuestions} section${counts.noQuestions === 1 ? " has" : "s have"} no questions yet.`}
+                {counts.coPending > 0 && <span className="text-amber-700 dark:text-amber-300"> CO pending in {counts.coPending} section{counts.coPending === 1 ? "" : "s"}.</span>}
+              </span>
+              <Button size="sm" onClick={() => setFilesOpen(true)}>Upload Mid Files</Button>
+            </div>
+          )}
           <MidMarksProgress rows={rows} facultyMode={mode === "FACULTY"} onChanged={() => setReload((n) => n + 1)} />
           {rows.length === 0 ? (
             <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No Mid-exam subjects with teaching assignments for this Mid.</CardContent></Card>
@@ -170,13 +192,21 @@ export function MidMarksOverview() {
                                 <span className={p.status === "SUBMITTED" || p.status === "FROZEN" || p.locked ? "text-emerald-700" : p.status === "DRAFT" ? "text-amber-700" : "text-muted-foreground"}>
                                   {p.locked ? "Locked by Exam Cell" : p.status === "FROZEN" ? "Frozen" : p.status === "SUBMITTED" ? "Submitted" : p.status === "DRAFT" ? `${p.entered}/${p.total} entered` : "Not started"}
                                 </span>
+                                {"uploaded" in p && p.uploaded && <Badge variant="outline" className="text-[10px]">Uploaded</Badge>}
+                                {"coPending" in p && (p.coPending ?? 0) > 0 && <Badge variant="outline" className="border-amber-400 text-[10px] text-amber-800 dark:text-amber-300">CO Pending ({p.coPending})</Badge>}
                                 {"sheetId" in p && p.sheetId && <Link href={`/exam-cell/mid-marks/sheets/${p.sheetId}`} className="font-medium text-primary hover:underline">View</Link>}
+                                {r.format && "assignmentId" in p && p.assignmentId && (
+                                  <button type="button" className="font-medium text-primary hover:underline" onClick={() => setQuestionsOf(p.assignmentId!)}>
+                                    {"formatSheet" in p && p.formatSheet ? "Questions & COs" : "Set Questions"}
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          {r.source === "PAPER" ? <span>Finalized paper · {r.questions} columns · out of {r.paperMax}</span>
+                          {r.format ? <span>Mid exam format · {r.format}</span>
+                            : r.source === "PAPER" ? <span>Finalized paper · {r.questions} columns · out of {r.paperMax}</span>
                             : r.source === "LAYOUT" ? <span>Set by Exam Cell · {r.questions} questions · out of {r.paperMax}</span>
                             : <span className="text-amber-700">Not set</span>}
                         </td>
@@ -195,7 +225,7 @@ export function MidMarksOverview() {
                           </td>
                         )}
                         <td className="px-4 py-3 text-right">
-                          {mode === "EXAM_CELL" ? (
+                          {r.format ? null : mode === "EXAM_CELL" ? (
                             <Button size="sm" onClick={() => setUploading(r)}>Upload Marks</Button>
                           ) : r.source !== "PAPER" && (
                             <Button size="sm" variant="outline" onClick={() => setEditing(r)}>{r.layout ? "Edit Questions" : "Set Questions"}</Button>
@@ -217,6 +247,17 @@ export function MidMarksOverview() {
           subjectName={uploading.subjectName} branch={uploading.branch}
           onClose={() => setUploading(null)} onChanged={() => setReload((n) => n + 1)}
         />
+      )}
+
+      {filesOpen && plan && (
+        <MidFilesUploadDialog
+          planId={plan.id} title={`${plan.courseName} · ${ROMAN[plan.year] ?? plan.year} Year · Semester ${plan.semester} · Mid-${plan.midNumber}`}
+          onClose={() => setFilesOpen(false)} onChanged={() => setReload((n) => n + 1)}
+        />
+      )}
+
+      {questionsOf && plan && (
+        <MidQuestionsEditor assignmentId={questionsOf} midNumber={plan.midNumber} onClose={() => setQuestionsOf(null)} onSaved={() => setReload((n) => n + 1)} />
       )}
 
       {editing && plan && (

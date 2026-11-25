@@ -6,7 +6,11 @@ import { flexibleQuestions, marksPerQuestion } from "@/lib/midPapers/pattern";
 // (OR pairs: the better of each pair; "any k": the best k; else all), and the component's marks - the paper total
 // scaled to the component's maximum when they differ (nearest whole mark, half up).
 
-export interface SheetColumn { key: string; label: string; max: number; partId: string }
+export interface SheetColumn {
+  key: string; label: string; max: number; partId: string;
+  /** Format sheets: the CO this box is mapped to (none = CO pending). */
+  co?: string;
+}
 export interface SheetPart {
   id: string; label: string; perQuestion: boolean; questions: number; marksEach: number; choice: PaperChoice; max: number;
   /** A faculty-decides part: each question's own max, in order (its columns are `${id}${no}`). */
@@ -15,11 +19,20 @@ export interface SheetPart {
   countAs?: number;
   /** A faculty-decides part answered in full: its objective questions entered as one total (column `${id}obj`). */
   objectiveTotal?: { max: number; nos: number[] };
+  /** Format sheets: the part's column keys in order (used instead of `${id}${n}`). */
+  keys?: string[];
+  /** Format sheets, QUESTIONS: boxes per question in order (Q2(A) + Q2(B) = 2) - added up into the question before
+   *  the choice rule; a question adds up to at most `groupMax`. */
+  groups?: number[];
+  groupMax?: number;
+  /** Format sheets, ITEMS: `count` items of `each` marks, added up and scaled to `scaleTo` (nearest, half up). */
+  items?: { count: number; each: number; scaleTo: number };
 }
 export interface QuestionSheet {
   paperMax: number; parts: SheetPart[]; columns: SheetColumn[];
-  /** CHOSEN: the Exam Cell's paper; PATTERN: the course pattern; LAYOUT: questions + max marks the Exam Cell set (midMarksEntry.ts). */
-  source: "CHOSEN" | "PATTERN" | "LAYOUT";
+  /** CHOSEN: the Exam Cell's paper; PATTERN: the course pattern; LAYOUT: questions + max marks the Exam Cell set (midMarksEntry.ts);
+   *  FORMAT: the college's Mid exam format + the section's questions (lib/midMarks/format.ts). */
+  source: "CHOSEN" | "PATTERN" | "LAYOUT" | "FORMAT";
   /** The finalized (printed) paper this sheet comes from - the faculty can view it once the exam date has come. */
   paper?: { choiceId: string; date: string };
 }
@@ -67,8 +80,38 @@ export function sheetFromPattern(pattern: Pick<MidPaperPattern, "parts">, source
 
 type Values = Record<string, number | null | undefined>;
 
+/** The choice rule over question marks in order: OR pairs = the better of each pair, any k = the best k, else all. */
+function underChoice(choice: PaperChoice, n: number[]): number {
+  if (choice.kind === "OR_PAIRS") {
+    let sum = 0;
+    for (let i = 0; i < n.length; i += 2) sum += Math.max(n[i], n[i + 1] ?? 0);
+    return sum;
+  }
+  if (choice.kind === "ANY") return [...n].sort((a, b) => b - a).slice(0, choice.answer).reduce((a, b) => a + b, 0);
+  return n.reduce((a, b) => a + b, 0);
+}
+
+/** Boxes per question added up (format sheets: Q2(A) + Q2(B)). */
+export function groupSums(part: Pick<SheetPart, "groups">, boxes: number[]): number[] {
+  if (!part.groups) return boxes;
+  const out: number[] = [];
+  let i = 0;
+  for (const g of part.groups) { out.push(boxes.slice(i, i + g).reduce((a, b) => a + b, 0)); i += g; }
+  return out;
+}
+
 /** A part's marks from what was entered (blank question = not answered). */
 export function partTotal(part: SheetPart, values: Values): number | null {
+  if (part.keys) {
+    const raw = part.keys.map((k) => values[k] ?? null);
+    if (raw.every((v) => v == null)) return null;
+    const n = raw.map((v) => v ?? 0);
+    if (part.items) {
+      const full = part.items.count * part.items.each;
+      return full > 0 ? Math.floor((n.reduce((a, b) => a + b, 0) * part.items.scaleTo) / full + 0.5) : 0;
+    }
+    return underChoice(part.choice, groupSums(part, n));
+  }
   if (!part.perQuestion) { const v = values[part.id]; return v == null ? null : v; }
   const objNos = new Set(part.objectiveTotal?.nos ?? []);
   const q = Array.from({ length: part.questions }, (_, i) => (objNos.has(i + 1) ? null : values[`${part.id}${i + 1}`] ?? null));
@@ -76,13 +119,9 @@ export function partTotal(part: SheetPart, values: Values): number | null {
   if (q.every((v) => v == null) && obj == null) return null;
   const n = q.map((v) => v ?? 0);
   if (part.objectiveTotal) return (obj ?? 0) + n.reduce((a, b) => a + b, 0);
-  if (part.choice.kind === "OR_PAIRS") {
-    let sum = 0;
-    for (let i = 0; i + 1 < n.length; i += 2) sum += Math.max(n[i], n[i + 1]);
-    return sum;
-  }
-  if (part.choice.kind === "ANY") return [...n].sort((a, b) => b - a).slice(0, part.choice.answer).reduce((a, b) => a + b, 0);
-  return n.reduce((a, b) => a + b, 0);
+  // An odd last question of OR pairs never counted here (pairs only) - kept as it was.
+  if (part.choice.kind === "OR_PAIRS" && n.length % 2 === 1) return underChoice(part.choice, n.slice(0, -1));
+  return underChoice(part.choice, n);
 }
 
 /**
@@ -115,10 +154,29 @@ export function questionMarksError(sheet: QuestionSheet, values: Values): string
     if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > c.max) return `${c.label} must be between 0 and ${c.max}`;
     if (Math.round(v * 2) !== v * 2) return `${c.label}: marks in halves only`;
   }
+  const g = groupError(sheet, values);
+  if (g) return g;
   // An Exam Cell layout has no choice rule: what was entered adds up, and can't go above the paper max.
   if (sheet.source === "LAYOUT") {
     const total = paperTotal(sheet, values);
     if (total != null && total > sheet.paperMax) return `the total (${total}) is above the paper max (${sheet.paperMax})`;
+  }
+  return null;
+}
+
+/** Format sheets: the first question whose parts add up to more than the question's marks (Q2(A) + Q2(B) > 10), or null. */
+export function groupError(sheet: QuestionSheet, values: Values): string | null {
+  for (const p of sheet.parts) {
+    if (!p.groups || !p.keys || p.groupMax == null) continue;
+    const cols = sheet.columns.filter((c) => c.partId === p.id);
+    let i = 0;
+    for (const g of p.groups) {
+      const box = cols.slice(i, i + g);
+      i += g;
+      if (g < 2) continue;
+      const sum = box.reduce((n, c) => n + (typeof values[c.key] === "number" ? (values[c.key] as number) : 0), 0);
+      if (sum > p.groupMax) return `${box.map((c) => c.label).join(" + ")} add up to ${sum}, more than the question's ${p.groupMax}`;
+    }
   }
   return null;
 }

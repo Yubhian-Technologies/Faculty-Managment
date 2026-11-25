@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 // waiting to freeze (submitted by the faculty; Freeze All Submitted), change requested, in progress (n of N students complete), not started, or still closed (the Exam Cell has not opened the subject
 // after its exam). Number cards, a row per branch, and the section list with a filter and CSV.
 
-interface Progress { sectionId: string; section: string; facultyName: string; entered: number; total: number; status: "NOT_STARTED" | "DRAFT" | "SUBMITTED" | "FROZEN"; locked: boolean; sheetId?: string; changeRequested?: boolean }
+interface Progress { sectionId: string; section: string; facultyName: string; entered: number; total: number; status: "NOT_STARTED" | "DRAFT" | "SUBMITTED" | "FROZEN"; locked: boolean; sheetId?: string; changeRequested?: boolean; coPending?: number }
 export interface ProgressRow {
   subjectId: string; subjectName: string; subjectCode: string; branch: string; entryOpen: boolean; examDay: string | null;
   sections: { id: string; name: string; facultyName: string }[];
@@ -28,8 +28,8 @@ const TONE: Record<State, string> = {
 };
 const BAR: Record<State, string> = { FROZEN: "bg-emerald-600", SUBMITTED: "bg-blue-500", IN_PROGRESS: "bg-amber-500", NOT_STARTED: "bg-red-500/70", CLOSED: "bg-muted-foreground/30" };
 
-interface Line { subject: string; code: string; branch: string; section: string; faculty: string; state: State; entered: number; total: number; sheetId?: string; changeRequested: boolean }
-type FilterKey = State | "PENDING" | "REQUESTS" | "ALL";
+interface Line { subject: string; code: string; branch: string; section: string; faculty: string; state: State; entered: number; total: number; sheetId?: string; changeRequested: boolean; coPending: number }
+type FilterKey = State | "PENDING" | "REQUESTS" | "CO_PENDING" | "ALL";
 
 export function MidMarksProgress({ rows, facultyMode, onChanged }: { rows: ProgressRow[]; facultyMode: boolean; onChanged?: () => void }) {
   const [filter, setFilter] = useState<FilterKey>("PENDING");
@@ -42,7 +42,7 @@ export function MidMarksProgress({ rows, facultyMode, onChanged }: { rows: Progr
       const state: State = p.locked || p.status === "FROZEN" ? "FROZEN" : p.status === "SUBMITTED" ? "SUBMITTED"
         : facultyMode && !r.entryOpen && p.status === "NOT_STARTED" ? "CLOSED"
         : p.status === "DRAFT" ? "IN_PROGRESS" : "NOT_STARTED";
-      return { subject: r.subjectName, code: r.subjectCode, branch: r.branch, section: p.section, faculty: p.facultyName, state, entered: p.entered, total: p.total, sheetId: p.sheetId, changeRequested: !!p.changeRequested };
+      return { subject: r.subjectName, code: r.subjectCode, branch: r.branch, section: p.section, faculty: p.facultyName, state, entered: p.entered, total: p.total, sheetId: p.sheetId, changeRequested: !!p.changeRequested, coPending: p.coPending ?? 0 };
     });
   }), [rows, facultyMode]);
 
@@ -50,6 +50,8 @@ export function MidMarksProgress({ rows, facultyMode, onChanged }: { rows: Progr
   const handedIn = (s: State) => s === "SUBMITTED" || s === "FROZEN";
   const students = lines.reduce((a, l) => ({ entered: a.entered + (handedIn(l.state) ? l.total : l.entered), total: a.total + l.total }), { entered: 0, total: 0 });
   const requests = lines.filter((l) => l.changeRequested).length;
+  // Mid exam format sheets: question boxes still without a CO (never holds up marks).
+  const coPending = lines.filter((l) => l.coPending > 0).length;
   const toFreeze = lines.filter((l) => l.state === "SUBMITTED" && l.sheetId && !l.changeRequested);
 
   const freezeAll = async () => {
@@ -80,12 +82,12 @@ export function MidMarksProgress({ rows, facultyMode, onChanged }: { rows: Progr
   }, [lines]);
 
   const shown = lines
-    .filter((l) => filter === "ALL" || (filter === "PENDING" ? l.state === "IN_PROGRESS" || l.state === "NOT_STARTED" : filter === "REQUESTS" ? l.changeRequested : l.state === filter))
+    .filter((l) => filter === "ALL" || (filter === "PENDING" ? l.state === "IN_PROGRESS" || l.state === "NOT_STARTED" : filter === "REQUESTS" ? l.changeRequested : filter === "CO_PENDING" ? l.coPending > 0 : l.state === filter))
     .sort((a, b) => a.branch.localeCompare(b.branch) || a.subject.localeCompare(b.subject) || a.section.localeCompare(b.section));
 
   const exportCsv = () => {
-    const head = ["Branch", "Subject Code", "Subject", "Section", "Faculty", "Status", "Students Complete", "Students"];
-    const body = lines.map((l) => [l.branch, l.code, l.subject, l.section, l.faculty, `${LABEL[l.state]}${l.changeRequested ? " (change requested)" : ""}`, handedIn(l.state) ? l.total : l.entered, l.total]);
+    const head = ["Branch", "Subject Code", "Subject", "Section", "Faculty", "Status", "Students Complete", "Students", "CO Pending"];
+    const body = lines.map((l) => [l.branch, l.code, l.subject, l.section, l.faculty, `${LABEL[l.state]}${l.changeRequested ? " (change requested)" : ""}`, handedIn(l.state) ? l.total : l.entered, l.total, l.coPending || ""]);
     const csv = [head, ...body].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -97,6 +99,7 @@ export function MidMarksProgress({ rows, facultyMode, onChanged }: { rows: Progr
   const filters: [FilterKey, string, number][] = [
     ["PENDING", "Pending", count("IN_PROGRESS") + count("NOT_STARTED")], ["SUBMITTED", "Waiting to Freeze", count("SUBMITTED")],
     ...(requests ? [["REQUESTS", "Change Requests", requests] as [FilterKey, string, number]] : []),
+    ...(coPending ? [["CO_PENDING", "CO Pending", coPending] as [FilterKey, string, number]] : []),
     ["FROZEN", "Frozen", count("FROZEN")], ["IN_PROGRESS", "In Progress", count("IN_PROGRESS")], ["NOT_STARTED", "Not Started", count("NOT_STARTED")],
     ...(facultyMode ? [["CLOSED", "Not Open Yet", count("CLOSED")] as [FilterKey, string, number]] : []), ["ALL", "All", lines.length],
   ];
@@ -178,7 +181,7 @@ export function MidMarksProgress({ rows, facultyMode, onChanged }: { rows: Progr
                     <td className="px-3 py-1.5"><span className="font-medium">{l.code}</span> <span className="text-muted-foreground">{l.subject}</span></td>
                     <td className="px-3 py-1.5">{l.section}</td>
                     <td className="px-3 py-1.5">{l.faculty || "-"}</td>
-                    <td className={cn("px-3 py-1.5 font-medium", TONE[l.state])}>{LABEL[l.state]}{l.changeRequested && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-900 dark:bg-amber-950 dark:text-amber-200">Change requested</span>}</td>
+                    <td className={cn("px-3 py-1.5 font-medium", TONE[l.state])}>{LABEL[l.state]}{l.changeRequested && <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-900 dark:bg-amber-950 dark:text-amber-200">Change requested</span>}{l.coPending > 0 && <span className="ml-1.5 rounded-full border border-amber-400 px-1.5 py-0.5 text-[10px] text-amber-800 dark:text-amber-300">CO pending ({l.coPending})</span>}</td>
                     <td className="px-3 py-1.5 tabular-nums">{handedIn(l.state) ? `${l.total} of ${l.total}` : l.total ? `${l.entered} of ${l.total}` : "-"}</td>
                     <td className="px-3 py-1.5 text-right">{l.sheetId && <Link href={`/exam-cell/mid-marks/sheets/${l.sheetId}`} className="text-xs font-medium text-primary hover:underline">View</Link>}</td>
                   </tr>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, CheckCircle2, CircleDashed, ClipboardCheck, Download, FileLock2, Lock, MessageSquareWarning, RotateCcw, Search, Send, Snowflake, Undo2, Users } from "lucide-react";
+import { ArrowRight, CheckCircle2, CircleDashed, ClipboardCheck, Download, FileLock2, ListChecks, Lock, MessageSquareWarning, RotateCcw, Search, Send, Snowflake, Undo2, Upload, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/useToast";
 import { cn, dmy, formatDateTime } from "@/lib/utils";
-import { entryTotal, isComplete, runningTotal } from "@/lib/midMarks/sheet";
+import { entryTotal, isComplete, partMarks, runningTotal } from "@/lib/midMarks/sheet";
 import { NOT_ATTEMPTED, type MidMarksEntry, type MidMarksSheet, type MidQuestionValue, type MidSheetCie } from "@/types/midMarks";
 import type { QuestionSheet } from "@/lib/exams/questionMarks";
 
@@ -23,7 +23,8 @@ import type { QuestionSheet } from "@/lib/exams/questionMarks";
 
 export interface EntryState { canEdit: boolean; canWithdraw?: boolean; canRequestChange?: boolean; reason: string; lastDate: string | null }
 
-type Row = { absent: boolean; q: Record<string, string> };
+// ab: the parts (format sheets) the student is AB in.
+type Row = { absent: boolean; q: Record<string, string>; ab: string[] };
 type Filter = "ALL" | "PENDING" | "DONE" | "ABSENT";
 const toText = (v: MidQuestionValue | undefined) => (v === NOT_ATTEMPTED ? "-" : v == null ? "" : String(v));
 const toValue = (t: string): MidQuestionValue | "BAD" => {
@@ -33,14 +34,14 @@ const toValue = (t: string): MidQuestionValue | "BAD" => {
   const n = Number(s);
   return Number.isFinite(n) ? n : "BAD";
 };
-const rowOf = (e: MidMarksEntry): Row => ({ absent: !!e.absent, q: Object.fromEntries(Object.entries(e.q).map(([k, v]) => [k, toText(v)])) });
+const rowOf = (e: MidMarksEntry): Row => ({ absent: !!e.absent, q: Object.fromEntries(Object.entries(e.q).map(([k, v]) => [k, toText(v)])), ab: e.abParts ?? [] });
 const boxError = (text: string, max: number) => {
   const v = toValue(text);
   if (v === null || v === NOT_ATTEMPTED) return false;
   return v === "BAD" || v < 0 || v > max || !Number.isInteger(v * 2);
 };
-const asEntry = (sheet: QuestionSheet, r: Row): Pick<MidMarksEntry, "absent" | "q"> =>
-  ({ absent: r.absent, q: Object.fromEntries(sheet.columns.map((c) => { const v = toValue(r.q[c.key] ?? ""); return [c.key, v === "BAD" ? null : v]; })) });
+const asEntry = (sheet: QuestionSheet, r: Row): Pick<MidMarksEntry, "absent" | "q" | "abParts"> =>
+  ({ absent: r.absent, abParts: r.ab, q: Object.fromEntries(sheet.columns.map((c) => { const v = toValue(r.q[c.key] ?? ""); return [c.key, v === "BAD" ? null : v]; })) });
 const jsonPatch = (url: string, body: unknown) => fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 const STEPS = [
@@ -49,8 +50,10 @@ const STEPS = [
   { key: "FROZEN", label: "Frozen", icon: Snowflake },
 ] as const;
 
-export function MidMarksSheetView({ initial, state: initialState, mode, cie = null, examCell = false }: {
+export function MidMarksSheetView({ initial, state: initialState, mode, cie = null, examCell = false, onEditQuestions }: {
   initial: MidMarksSheet; state: EntryState | null; mode: "faculty" | "review";
+  /** Exam Cell, Mid exam format sheets: open Questions & COs. */
+  onEditQuestions?: () => void;
   /** Exam Cell: Freeze / Reopen / decide change requests. */
   examCell?: boolean;
   /** The with-Mid CIE unit as entered on CIE Marks (read only here). */
@@ -68,6 +71,8 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const q = sheet.sheet;
+  const isFormat = q.source === "FORMAT";
+  const coPending = isFormat ? q.columns.filter((c) => !c.co && q.parts.find((p) => p.id === c.partId)?.groups).length : 0;
   const editable = mode === "faculty" && sheet.status === "DRAFT" && !!state?.canEdit;
   const pending = sheet.changeRequest?.status === "PENDING";
 
@@ -101,7 +106,19 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
     setDirty((d) => new Set(d).add(sid));
   };
   const setAbsent = (sid: string, absent: boolean) => {
-    setRows((p) => ({ ...p, [sid]: { absent, q: absent ? {} : p[sid].q } }));
+    setRows((p) => ({ ...p, [sid]: { absent, q: absent ? {} : p[sid].q, ab: [] } }));
+    setDirty((d) => new Set(d).add(sid));
+  };
+  /** Format sheets: AB in one part (its boxes cleared); AB in every part = absent. */
+  const togglePartAb = (sid: string, partId: string) => {
+    setRows((p) => {
+      const cur = p[sid];
+      const on = !cur.ab.includes(partId);
+      const ab = on ? [...cur.ab, partId] : cur.ab.filter((x) => x !== partId);
+      if (ab.length === q.parts.length) return { ...p, [sid]: { absent: true, q: {}, ab: [] } };
+      const cleared = on ? Object.fromEntries(Object.entries(cur.q).filter(([k]) => q.columns.find((c) => c.key === k)?.partId !== partId)) : cur.q;
+      return { ...p, [sid]: { absent: false, q: cleared, ab } };
+    });
     setDirty((d) => new Set(d).add(sid));
   };
 
@@ -119,7 +136,10 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
     try {
       const entries = ids.map((sid) => {
         const r = rows[sid];
-        return r.absent ? { studentId: sid, absent: true } : { studentId: sid, q: Object.fromEntries(q.columns.map((c) => { const v = toValue(r.q[c.key] ?? ""); return [c.key, v === "BAD" ? null : v]; })) };
+        return r.absent ? { studentId: sid, absent: true } : {
+          studentId: sid, q: Object.fromEntries(q.columns.map((c) => { const v = toValue(r.q[c.key] ?? ""); return [c.key, v === "BAD" ? null : v]; })),
+          ...(isFormat ? { abParts: r.ab } : {}),
+        };
       });
       const res = await jsonPatch(`/api/college/mid-marks-sheets/${sheet.id}`, { rev: sheet.rev, ...(entries.length ? { entries } : {}), ...(action ? { action } : {}) });
       const d = (await res.json()) as { sheet?: MidMarksSheet; state?: EntryState; error?: string };
@@ -135,7 +155,7 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
     } finally {
       setSaving(false);
     }
-  }, [dirty, rows, q, sheet]);
+  }, [dirty, rows, q, sheet, isFormat]);
 
   // Autosave a draft 2 s after the last change.
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -181,11 +201,15 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
   };
 
   const exportCsv = () => {
-    const head = ["Regd. No", "Name", ...q.columns.map((c, i) => `${colLabel(i, c.label)} (${c.max})`), `Total (${q.paperMax})`, ...(cie ? [`CIE Unit ${cie.unit}${cie.unitMarks != null ? ` (${cie.unitMarks})` : ""}`] : [])];
+    const head = ["Regd. No", "Name", ...q.columns.map((c, i) => `${isFormat ? `${q.parts.find((p) => p.id === c.partId)?.label} ` : ""}${colLabel(i, c.label)} (${c.max})`),
+      ...(isFormat ? q.parts.map((p) => `${p.label} (${p.max})`) : []), `Total (${q.paperMax})`, ...(cie ? [`CIE Unit ${cie.unit}${cie.unitMarks != null ? ` (${cie.unitMarks})` : ""}`] : [])];
     const lines = sheet.entries.map((e) => {
       const r = rowFor(e);
-      const t = entryTotal(q, asEntry(q, r));
-      return [e.rollNumber, e.name, ...q.columns.map((c) => (r.absent ? "AB" : r.q[c.key] ?? "")), r.absent ? "AB" : t ?? "", ...(cie ? [cie.marks[e.studentId] ?? ""] : [])];
+      const ent = asEntry(q, r);
+      const t = entryTotal(q, ent);
+      const pm = partMarks(q, ent);
+      return [e.rollNumber, e.name, ...q.columns.map((c) => (r.absent || r.ab.includes(c.partId) ? "AB" : r.q[c.key] ?? "")),
+        ...(isFormat ? q.parts.map((p) => pm[p.id] ?? "") : []), r.absent ? "AB" : t ?? "", ...(cie ? [cie.marks[e.studentId] ?? ""] : [])];
     });
     const csv = [head, ...lines].map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
@@ -195,10 +219,20 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
   };
 
   // One part (VIT): questions read Q1..Q5; several parts keep the part's own labels.
-  const colLabel = (i: number, label: string) => (q.parts.length === 1 ? `Q${i + 1}` : label);
+  const colLabel = (i: number, label: string) => (q.parts.length === 1 && !isFormat ? `Q${i + 1}` : label);
+  // Format sheets: the first column of each part (a divider + the part's name above it).
+  const partStart = new Set(isFormat ? q.parts.map((p) => q.columns.find((c) => c.partId === p.id)?.key).filter(Boolean) as string[] : []);
+  const partEnd = new Map(isFormat ? q.parts.map((p) => [q.columns.filter((c) => c.partId === p.id).slice(-1)[0]?.key, p] as const) : []);
   const pairStart = new Set<string>();
-  for (const p of q.parts) if (p.choice.kind === "OR_PAIRS") q.columns.filter((c) => c.partId === p.id).forEach((c, i) => { if (i % 2 === 1) pairStart.add(c.key); });
-  const partsLine = q.parts.map((p) => `${p.label} · ${p.questions} question${p.questions === 1 ? "" : "s"}${p.choice.kind === "OR_PAIRS" ? " (OR pairs)" : p.choice.kind === "ANY" ? ` (any ${p.choice.answer})` : ""}`).join("  ·  ");
+  for (const p of q.parts) if (p.choice.kind === "OR_PAIRS" && !p.groups) q.columns.filter((c) => c.partId === p.id).forEach((c, i) => { if (i % 2 === 1) pairStart.add(c.key); });
+  // Format sheets: the first box of every second question of an OR pair (Q2, Q4, Q6 - with their parts).
+  for (const p of q.parts) {
+    if (p.choice.kind !== "OR_PAIRS" || !p.groups) continue;
+    const cols = q.columns.filter((c) => c.partId === p.id);
+    let at = 0;
+    p.groups.forEach((g, i) => { if (i % 2 === 1 && cols[at]) pairStart.add(cols[at].key); at += g; });
+  }
+  const partsLine = isFormat ? q.parts.map((p) => `${p.label} ${p.max}`).join(" + ") : q.parts.map((p) => `${p.label} · ${p.questions} question${p.questions === 1 ? "" : "s"}${p.choice.kind === "OR_PAIRS" ? " (OR pairs)" : p.choice.kind === "ANY" ? ` (any ${p.choice.answer})` : ""}`).join("  ·  ");
   const pct = sheet.entries.length ? Math.round((stats.done / sheet.entries.length) * 100) : 0;
   const stepIndex = STEPS.findIndex((s) => s.key === sheet.status);
   const last = sheet.history?.slice(-1)[0];
@@ -233,7 +267,7 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
               </div>
               <h1 className="text-xl font-semibold leading-tight">{sheet.subjectName}</h1>
               <p className="text-sm text-muted-foreground">{sheet.department} · Section {sheet.sectionName}{sheet.year ? ` · Year ${sheet.year}` : ""} · {sheet.facultyName}</p>
-              <p className="text-xs text-muted-foreground">Paper: {partsLine} · out of {q.paperMax}{cie?.unitMarks != null ? ` · CIE Unit ${cie.unit} out of ${cie.unitMarks}` : ""}{state?.lastDate ? ` · last date ${dmy(state.lastDate)}` : ""}</p>
+              <p className="text-xs text-muted-foreground">{isFormat ? "Mid exam" : "Paper"}: {partsLine} · out of {q.paperMax}{sheet.enteredBy ? ` · uploaded by the Exam Cell (${sheet.enteredBy.byName})` : ""}{coPending ? ` · CO pending for ${coPending} box${coPending === 1 ? "" : "es"}` : ""}{cie?.unitMarks != null ? ` · CIE Unit ${cie.unit} out of ${cie.unitMarks}` : ""}{state?.lastDate ? ` · last date ${dmy(state.lastDate)}` : ""}</p>
             </div>
             {/* Where it stands */}
             <ol className="flex items-center gap-1" aria-label="Status">
@@ -320,6 +354,7 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {editable && <span className="text-xs text-muted-foreground">{saving ? "Saving..." : dirty.size ? "Unsaved changes" : savedAt ? `Saved ${formatDateTime(new Date(savedAt))}` : "All changes saved"}</span>}
+          {examCell && isFormat && onEditQuestions && <Button variant="outline" size="sm" onClick={onEditQuestions}><ListChecks className="mr-1 h-4 w-4" />Questions &amp; COs{coPending ? ` (${coPending} pending)` : ""}</Button>}
           <Button variant="ghost" size="sm" onClick={exportCsv}><Download className="mr-1 h-4 w-4" />CSV</Button>
           {editable && <Button variant="outline" size="sm" disabled={saving || dirty.size === 0} onClick={() => void save()}>Save</Button>}
           {editable && <Button size="sm" disabled={saving} onClick={() => setDialog("SUBMIT")}><Send className="mr-1 h-4 w-4" />Submit to Exam Cell</Button>}
@@ -333,21 +368,40 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
           {examCell && sheet.status !== "DRAFT" && !pending && <Button size="sm" variant="outline" onClick={() => setDialog("REOPEN")}><RotateCcw className="mr-1 h-4 w-4" />Reopen</Button>}
         </div>
       </div>
+      {sheet.enteredBy && mode === "faculty" && <p className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground"><Upload className="h-3.5 w-3.5" />Uploaded by the Exam Cell{sheet.enteredBy.fileName ? ` from ${sheet.enteredBy.fileName}` : ""} on {formatDateTime(new Date(sheet.enteredBy.at))}.</p>}
+      {editable && isFormat && <p className="px-1 text-xs text-muted-foreground">Each part needs at least one mark, or tap its total to mark the student AB in that part.</p>}
       {editable && <p className="px-1 text-xs text-muted-foreground">Type the marks of the questions the student answered; a box left empty counts as not attempted (<kbd className="rounded border bg-muted px-1">-</kbd>). Tap AB for an absent student. <kbd className="rounded border bg-muted px-1">Enter</kbd> and the arrow keys move between boxes; marks save on their own.</p>}
 
       {/* Sheet */}
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
+            {isFormat && (
+              <tr className="border-b bg-muted/20 text-xs">
+                <th colSpan={2} />
+                {q.parts.map((p) => {
+                  const n = q.columns.filter((c) => c.partId === p.id).length + 1;
+                  return <th key={p.id} colSpan={n} className="border-l px-2 py-1.5 text-center font-semibold">{p.label} <span className="font-normal text-muted-foreground">/{p.max}{p.choice.kind === "OR_PAIRS" ? " · OR pairs" : p.items ? ` · ${p.items.count} × ${p.items.each}` : ""}</span></th>;
+                })}
+                <th colSpan={2} />
+                {cie && <th />}
+              </tr>
+            )}
             <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
               <th className="w-10 px-3 py-2.5 text-left font-medium">#</th>
               <th className="px-3 py-2.5 text-left font-medium">Student</th>
-              {q.columns.map((c, i) => (
-                <th key={c.key} className={cn("px-1 py-2.5 text-center font-medium", pairStart.has(c.key) && "border-l border-dashed")}>
-                  <span className="block font-semibold text-foreground">{colLabel(i, c.label)}</span>
-                  <span className="text-[10px]">{pairStart.has(c.key) ? "or · " : ""}/{c.max}</span>
-                </th>
-              ))}
+              {q.columns.map((c, i) => {
+                const end = partEnd.get(c.key);
+                const written = !!q.parts.find((p) => p.id === c.partId)?.groups;
+                return [
+                  <th key={c.key} className={cn("px-1 py-2.5 text-center font-medium", pairStart.has(c.key) && "border-l border-dashed", partStart.has(c.key) && "border-l")}>
+                    <span className="block font-semibold text-foreground">{colLabel(i, c.label)}</span>
+                    <span className="text-[10px]">{pairStart.has(c.key) ? "or · " : ""}/{c.max}</span>
+                    {written && <span className={cn("block text-[10px]", c.co ? "text-primary" : "text-amber-700 dark:text-amber-300")}>{c.co ?? "CO?"}</span>}
+                  </th>,
+                  ...(end ? [<th key={`${c.key}-t`} className="bg-muted/40 px-2 py-2.5 text-center font-medium"><span className="block font-semibold text-foreground">{end.label.split(" ")[0]}</span><span className="text-[10px]">/{end.max}</span></th>] : []),
+                ];
+              })}
               <th className="px-2 py-2.5 text-center font-medium">AB</th>
               <th className="px-3 py-2.5 text-right font-medium"><span className="block font-semibold text-foreground">Total</span><span className="text-[10px]">/{q.paperMax}</span></th>
               {cie && <th className="border-l px-2 py-2.5 text-center font-medium"><span className="block font-semibold text-foreground">CIE U{cie.unit}</span><span className="text-[10px]">{cie.unitMarks != null ? `/${cie.unitMarks}` : "CIE Marks"}</span></th>}
@@ -376,18 +430,33 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
                   {q.columns.map((c, ci) => {
                     const t = r.q[c.key] ?? "";
                     const bad = boxError(t, c.max);
-                    return (
-                      <td key={c.key} className={cn("px-1 py-2 text-center", pairStart.has(c.key) && "border-l border-dashed")}>
+                    const partAb = r.ab.includes(c.partId);
+                    const end = partEnd.get(c.key);
+                    const item = !!q.parts.find((p) => p.id === c.partId)?.items;
+                    const pm = end ? partMarks(q, ent)[end.id] : null;
+                    return [
+                      <td key={c.key} className={cn("px-1 py-2 text-center", pairStart.has(c.key) && "border-l border-dashed", partStart.has(c.key) && "border-l")}>
                         <input
-                          data-r={ri} data-c={ci} inputMode="decimal" disabled={!editable || r.absent} value={r.absent ? "" : t} placeholder={r.absent ? "AB" : done ? "-" : ""}
+                          data-r={ri} data-c={ci} inputMode="decimal" disabled={!editable || r.absent || partAb} value={r.absent || partAb ? "" : t} placeholder={r.absent || partAb ? "AB" : done ? "-" : ""}
                           onChange={(ev) => setBox(e.studentId, c.key, ev.target.value)} onKeyDown={move} onFocus={(ev) => ev.currentTarget.select()}
                           aria-label={`${e.rollNumber} ${colLabel(ci, c.label)}`} aria-invalid={bad}
-                          className={cn("h-9 w-12 rounded-lg border bg-background text-center text-sm tabular-nums outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-transparent disabled:border-transparent",
+                          className={cn("h-9 rounded-lg border bg-background text-center text-sm tabular-nums outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-transparent disabled:border-transparent",
+                            item ? "w-8" : "w-12",
                             t === "-" && "text-muted-foreground", t && t !== "-" && !bad && "border-primary/30 bg-primary/5 font-medium",
                             bad && "border-destructive bg-destructive/5 ring-2 ring-destructive/30")}
                         />
-                      </td>
-                    );
+                      </td>,
+                      ...(end ? [
+                        <td key={`${c.key}-t`} className="bg-muted/20 px-1 py-2 text-center">
+                          <button type="button" disabled={!editable || r.absent} onClick={() => togglePartAb(e.studentId, end.id)} aria-pressed={partAb}
+                            title={editable ? (partAb ? `Clear AB in ${end.label}` : `Mark AB in ${end.label}`) : undefined}
+                            className={cn("min-w-9 rounded-md px-1.5 py-1 text-sm font-semibold tabular-nums disabled:cursor-default",
+                              partAb || r.absent ? "text-muted-foreground" : pm == null ? "text-muted-foreground/60" : "", editable && !r.absent && "hover:bg-muted")}>
+                            {r.absent || partAb ? "AB" : pm ?? "-"}
+                          </button>
+                        </td>,
+                      ] : []),
+                    ];
                   })}
                   <td className="px-2 py-2 text-center">
                     <button type="button" disabled={!editable} onClick={() => setAbsent(e.studentId, !r.absent)} aria-pressed={r.absent} aria-label={`${e.rollNumber} absent`}
@@ -476,6 +545,7 @@ export function MidMarksSheetView({ initial, state: initialState, mode, cie = nu
 const HISTORY: Record<string, string> = {
   SUBMITTED: "Submitted", WITHDRAWN: "Withdrawn", FROZEN: "Frozen", REOPENED: "Reopened",
   CHANGE_REQUESTED: "Change requested", CHANGE_APPROVED: "Change approved", CHANGE_REJECTED: "Change rejected",
+  UPLOADED: "Uploaded by the Exam Cell", QUESTIONS_SET: "Questions set",
 };
 
 function Stat({ label, value, sub }: { label: string; value: string | number; sub?: string }) {

@@ -7,6 +7,8 @@ import { courseIdsForKey, teachingFor } from "@/lib/midBank/server";
 import { loadMode, midProgress, openCol, sheetSourceFor } from "@/lib/exams/midMarksEntryServer";
 import { loadPlan, planIdFor } from "@/lib/midTimetable/server";
 import { MID_MARKS_READERS, MidMarksError, midMarksErrorResponse } from "@/lib/exams/midMarksRoutes";
+import { formatCache } from "@/lib/midMarks/formatServer";
+import { formatLine } from "@/lib/midMarks/format";
 
 // Exam Cell > Mid Marks: for a course + year + semester + Mid, every Mid-exam subject per branch (from the
 // curriculum + teaching assignments, as the question banks use) with its sections, who enters, and where the
@@ -30,9 +32,11 @@ export async function GET(request: Request) {
       groups.set(key, g);
     }
     const list = [...groups.values()].sort((a, b) => a.branch.localeCompare(b.branch) || a.subjectCode.localeCompare(b.subjectCode));
-    const [sources, progress] = await Promise.all([
+    const formatOf = formatCache(db, session.collegeId);
+    const [sources, progress, formats] = await Promise.all([
       Promise.all(list.map((g) => sheetSourceFor(db, session.collegeId, g.subjectId, g.branch, year, mid, mode))),
       midProgress(db, session.collegeId, mid, rows),
+      Promise.all(list.map((g) => formatOf(g.subjectId))),
     ]);
     // Faculty entry per subject: opened by the Exam Cell after that subject's exam (mid-marks/open).
     const planId = planIdFor(courseKey, year, semester, mid);
@@ -54,6 +58,8 @@ export async function GET(request: Request) {
       planId,
       rows: list.map((g, i) => ({
         ...g, sections: g.sections.sort((a, b) => a.name.localeCompare(b.name)), ...sources[i],
+        // Mid exam format (lib/midMarks/format.ts): the components, e.g. "Descriptive 30 + Quiz 10 + Course Activity 10 = 50".
+        format: formats[i] ? formatLine(formats[i]!.components) : null,
         entryOpen: openBy.get(g.subjectId)?.open === true,
         examDay: examDay.get(g.subjectId) ?? lastDay,
         progress: progress.get(`${g.subjectId}|${g.branch}`) ?? [],
