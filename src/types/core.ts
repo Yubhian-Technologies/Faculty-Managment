@@ -61,7 +61,7 @@ export type UserRole =
   // A college seat like Exam Cell / Webmaster; the Principal / VP still approve requests and make the final selection.
   | "HR"
   // Scholarship Cell - marks Category A students FR / NFR (fee reimbursement) and records the government money
-  // received (Accounts > Fees, lib/fees). A college seat like Exam Cell / HR.
+  // received (lib/fees). LOCATION-scoped like ACCOUNTS: one login per location, picks the college on each screen.
   | "SCHOLARSHIP_CELL"
   | "COLLEGE_ACCOUNTS"
   | "PANEL_MEMBER"
@@ -121,7 +121,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export const MANAGEABLE_STAFF_ROLES: UserRole[] = [
   "HOD", "DEPARTMENT_OFFICE", "COLLEGE_OFFICE", "VICE_PRINCIPAL", "COLLEGE_ADMIN", "COLLEGE_STAFF",
   "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR", "PLACEMENT_DEPT", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL",
-  "PANEL_MEMBER", "WEBMASTER", "HR", "SCHOLARSHIP_CELL", "COLLEGE_ACCOUNTS",
+  "PANEL_MEMBER", "WEBMASTER", "HR", "COLLEGE_ACCOUNTS",
 ];
 
 export const ROLE_DASHBOARD_PATHS: Record<UserRole, string> = {
@@ -200,7 +200,7 @@ export const ROLE_LEVEL: Record<UserRole, 0 | 1 | 2 | 3 | 4 | 5 | 6> = {
   EXAM_CELL: 4,
   WEBMASTER: 4,
   HR: 4,
-  SCHOLARSHIP_CELL: 4,
+  SCHOLARSHIP_CELL: 2,
   COLLEGE_ACCOUNTS: 4,
   PANEL_MEMBER: 5,
   STUDENT: 6,
@@ -234,6 +234,7 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   LOCATION_STAFF_ADMIN: "LOCATION",
   LOCATION_DEPT_HEAD: "LOCATION",
   ACCOUNTS: "LOCATION",
+  SCHOLARSHIP_CELL: "LOCATION",
   PRINCIPAL: "COLLEGE",
   VICE_PRINCIPAL: "COLLEGE",
   COLLEGE_ADMIN: "COLLEGE",
@@ -254,7 +255,6 @@ export const ROLE_SCOPE: Record<UserRole, RoleScope> = {
   EXAM_CELL: "COLLEGE",
   WEBMASTER: "COLLEGE",
   HR: "COLLEGE",
-  SCHOLARSHIP_CELL: "COLLEGE",
   COLLEGE_ACCOUNTS: "COLLEGE",
   PANEL_MEMBER: "COLLEGE",
   STUDENT: "COLLEGE",

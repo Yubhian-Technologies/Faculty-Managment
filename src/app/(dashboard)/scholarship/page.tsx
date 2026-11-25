@@ -12,8 +12,9 @@ import { toast } from "@/hooks/useToast";
 import { cn, exportToCSV } from "@/lib/utils";
 import { academicYearOf } from "@/lib/fees/rules";
 import { downloadTemplate, readSheet } from "@/components/fees/scholarshipExcel";
+import { CollegePicker, useFeeCollege } from "@/components/fees/CollegePicker";
 
-// Scholarship Cell > FR / NFR Students: the Category A students of an academic year (their fees raised by Accounts).
+// Scholarship Cell (location; pick the college) > FR / NFR Students: the Category A students of an academic year (their fees raised by Accounts).
 // FR = fee reimbursement - the government pays the FR-covered heads; NFR = the student pays all. Change one student,
 // or upload an Excel list (Regd. No + FR / NFR); every change is checked first. Spot and Category B students always
 // pay themselves and are not listed.
@@ -30,6 +31,8 @@ export default function ScholarshipHomePage() {
   const current = academicYearOf(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()));
   const years = [1, 0, -1, -2].map((d) => { const s = Number(current.slice(0, 4)) + d; return `${s}-${String((s + 1) % 100).padStart(2, "0")}`; });
   const [year, setYear] = useState(current);
+  const { colleges, collegeId, setCollegeId } = useFeeCollege();
+  const qc = `collegeId=${encodeURIComponent(collegeId)}`;
   const [rows, setRows] = useState<Row[] | null>(null);
   const [filter, setFilter] = useState({ q: "", dept: "", batch: "", funding: "" });
   const [pending, setPending] = useState<{ rows: { rollNumber: string; funding: string; note?: string }[]; checks: Check[] } | null>(null);
@@ -38,13 +41,14 @@ export default function ScholarshipHomePage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (!collegeId) return;
     let live = true;
-    fetch(`/api/college/fees/scholarship?academicYear=${year}`)
+    fetch(`/api/college/fees/scholarship?academicYear=${year}&${qc}`)
       .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? "Unable to load the students."); return d.rows as Row[]; })
       .then((d) => { if (live) setRows(d); })
       .catch((e: Error) => { if (live) toast({ variant: "destructive", title: e.message }); });
     return () => { live = false; };
-  }, [year, tick]);
+  }, [year, tick, collegeId, qc]);
 
   const depts = useMemo(() => [...new Set((rows ?? []).map((r) => r.department))].sort(), [rows]);
   const batches = useMemo(() => [...new Set((rows ?? []).map((r) => r.batch))].sort().reverse(), [rows]);
@@ -54,7 +58,7 @@ export default function ScholarshipHomePage() {
   async function check(list: { rollNumber: string; funding: string; note?: string }[]) {
     setBusy(true);
     try {
-      const res = await fetch("/api/college/fees/scholarship/funding", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ academicYear: year, apply: false, rows: list }) });
+      const res = await fetch(`/api/college/fees/scholarship/funding?${qc}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ academicYear: year, apply: false, rows: list }) });
       const d = (await res.json()) as { checks?: Check[]; error?: string };
       if (!res.ok || !d.checks) throw new Error(d.error ?? "Unable to check the list.");
       setPending({ rows: list, checks: d.checks });
@@ -65,7 +69,7 @@ export default function ScholarshipHomePage() {
     if (!pending) return;
     setBusy(true);
     try {
-      const res = await fetch("/api/college/fees/scholarship/funding", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ academicYear: year, apply: true, rows: pending.rows }) });
+      const res = await fetch(`/api/college/fees/scholarship/funding?${qc}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ academicYear: year, apply: true, rows: pending.rows }) });
       const d = (await res.json()) as { changed?: number; error?: string };
       if (!res.ok) throw new Error(d.error ?? "Unable to save the changes.");
       toast({ variant: "success", title: `${d.changed ?? 0} student${d.changed === 1 ? "" : "s"} updated.` });
@@ -86,6 +90,8 @@ export default function ScholarshipHomePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="FR / NFR Students" description="Category A students: FR when the government reimburses their fee (the FR-covered heads), NFR when they pay it all. Spot and Category B students always pay themselves." />
+      <CollegePicker colleges={colleges} collegeId={collegeId} onChange={(id) => { setRows(null); setCollegeId(id); }} />
+      {collegeId && <>
       <div className="flex flex-wrap items-end gap-2">
         <div className="w-32 space-y-1"><Label className="text-xs">Academic Year</Label><select className={selectClass} value={year} onChange={(e) => { setRows(null); setYear(e.target.value); }}>{years.map((y) => <option key={y} value={y}>{y}</option>)}</select></div>
         <div className="w-48 space-y-1"><Label className="text-xs">Find</Label><Input value={filter.q} placeholder="Regd. No or name" onChange={(e) => setFilter({ ...filter, q: e.target.value })} /></div>
@@ -137,6 +143,7 @@ export default function ScholarshipHomePage() {
           </CardContent></Card>
         </>
       )}
+      </>}
 
       {pending && (
         <Dialog open onOpenChange={(o) => { if (!o && !busy) setPending(null); }}>

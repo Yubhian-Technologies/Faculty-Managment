@@ -55,7 +55,7 @@ export async function GET() {
     const session = await requireCollegeMember(
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "COLLEGE_STAFF", "ACADEMICS", "IQAC_COORDINATOR",
-      "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "HR", "SCHOLARSHIP_CELL", "COLLEGE_ACCOUNTS"
+      "T_AND_P", "R_AND_D", "PLACEMENT_DEPT", "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "HR", "COLLEGE_ACCOUNTS"
     );
 
     const db = getAdminDb();

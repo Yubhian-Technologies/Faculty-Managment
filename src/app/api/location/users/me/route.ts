@@ -9,7 +9,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 // Admin Office, Location Dept Head, Accounts) - their identity lives at
 // locations/{locationId}/locationUsers/{uid}, mirroring how college-scoped
 // roles self-serve via /api/college/users/me.
-const LOCATION_ROLES = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "ACCOUNTS"];
+const LOCATION_ROLES = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "ACCOUNTS", "SCHOLARSHIP_CELL"];
 
 export async function GET() {
   try {

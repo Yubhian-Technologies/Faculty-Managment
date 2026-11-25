@@ -11,6 +11,7 @@ import { toast } from "@/hooks/useToast";
 import { dmy } from "@/lib/utils";
 import { academicYearOf } from "@/lib/fees/rules";
 import { downloadTemplate, readSheet } from "@/components/fees/scholarshipExcel";
+import { CollegePicker, useFeeCollege } from "@/components/fees/CollegePicker";
 
 // Scholarship Cell > Government Receipts: fee reimbursement money the government paid into the college account -
 // the date, the reference (government order / UTR) and an Excel list of Regd. No + amount for FR students. Checked
@@ -26,6 +27,8 @@ export default function GovtReceiptsPage() {
   const current = academicYearOf(today);
   const years = [1, 0, -1, -2].map((d) => { const s = Number(current.slice(0, 4)) + d; return `${s}-${String((s + 1) % 100).padStart(2, "0")}`; });
   const [year, setYear] = useState(current);
+  const { colleges, collegeId, setCollegeId } = useFeeCollege();
+  const qc = `collegeId=${encodeURIComponent(collegeId)}`;
   const [credits, setCredits] = useState<Credit[] | null>(null);
   const [f, setF] = useState({ receivedOn: today, reference: "", scheme: "" });
   const [list, setList] = useState<{ rollNumber: string; amount: string }[] | null>(null);
@@ -35,19 +38,20 @@ export default function GovtReceiptsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (!collegeId) return;
     let live = true;
-    fetch(`/api/college/fees/scholarship/received?academicYear=${year}`)
+    fetch(`/api/college/fees/scholarship/received?academicYear=${year}&${qc}`)
       .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? "Unable to load the receipts."); return d.credits as Credit[]; })
       .then((d) => { if (live) setCredits(d); })
       .catch((e: Error) => { if (live) toast({ variant: "destructive", title: e.message }); });
     return () => { live = false; };
-  }, [year, tick]);
+  }, [year, tick, collegeId, qc]);
 
   async function send(apply: boolean, rows = list) {
     if (!rows) return;
     setBusy(true);
     try {
-      const res = await fetch("/api/college/fees/scholarship/received", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ academicYear: year, ...f, apply, rows: rows.map((r) => ({ rollNumber: r.rollNumber, amount: Number(r.amount) })) }) });
+      const res = await fetch(`/api/college/fees/scholarship/received?${qc}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ academicYear: year, ...f, apply, rows: rows.map((r) => ({ rollNumber: r.rollNumber, amount: Number(r.amount) })) }) });
       const d = (await res.json()) as { checks?: Check[]; total?: number; error?: string };
       if (!res.ok || !d.checks) throw new Error(d.error ?? "Unable to check the list.");
       if (apply) { toast({ variant: "success", title: `Government receipt of ${rupee(d.total ?? 0)} recorded.` }); setList(null); setChecks(null); setF({ receivedOn: today, reference: "", scheme: "" }); setTick((n) => n + 1); }
@@ -66,6 +70,8 @@ export default function GovtReceiptsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Government Receipts" description="Fee reimbursement money the government paid into the college account, student by student." />
+      <CollegePicker colleges={colleges} collegeId={collegeId} onChange={(id) => { setCredits(null); setChecks(null); setCollegeId(id); }} />
+      {collegeId && <>
       <Card><CardContent className="space-y-4 p-5">
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="space-y-1"><Label className="text-xs">Academic Year</Label><select className={selectClass} value={year} onChange={(e) => { setCredits(null); setChecks(null); setYear(e.target.value); }}>{years.map((y) => <option key={y} value={y}>{y}</option>)}</select></div>
@@ -112,6 +118,7 @@ export default function GovtReceiptsPage() {
           </table></CardContent></Card>
         )}
       </div>
+      </>}
     </div>
   );
 }

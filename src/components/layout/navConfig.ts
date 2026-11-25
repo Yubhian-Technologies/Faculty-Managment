@@ -575,13 +575,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "My Leave", href: "/hr/leave", iconName: "CalendarClock", roles: ["HR"] },
   { label: "My Payslips", href: "/payslips", iconName: "Wallet", roles: ["HR"] },
   { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["HR"] },
-  // Scholarship Cell (lib/fees): Category A students' FR / NFR and the government's fee reimbursement money.
+  // Scholarship Cell (location, lib/fees): Category A students' FR / NFR and the government's fee reimbursement money.
   { label: "FR / NFR Students", href: "/scholarship", iconName: "GraduationCap", roles: ["SCHOLARSHIP_CELL"], section: "Scholarship" },
   { label: "Government Receipts", href: "/scholarship/receipts", iconName: "IndianRupee", roles: ["SCHOLARSHIP_CELL"] },
   { label: "My Profile", href: "/scholarship/profile", iconName: "UserCircle", roles: ["SCHOLARSHIP_CELL"], section: "Personal" },
-  { label: "My Leave", href: "/scholarship/leave", iconName: "CalendarClock", roles: ["SCHOLARSHIP_CELL"] },
-  { label: "My Payslips", href: "/payslips", iconName: "Wallet", roles: ["SCHOLARSHIP_CELL"] },
-  { label: "Adjustment Requests", href: "/leave/adjustments", iconName: "UserCheck", roles: ["SCHOLARSHIP_CELL"] },
   { label: "Dashboard", href: "/webmaster", iconName: "LayoutDashboard", roles: ["WEBMASTER"] },
   { label: "Credential Requests", href: "/webmaster/credential-requests", iconName: "KeyRound", roles: ["WEBMASTER"], section: "Hiring" },
   { label: "All Accounts", href: "/webmaster/users", iconName: "Users", roles: ["WEBMASTER"], section: "Accounts" },

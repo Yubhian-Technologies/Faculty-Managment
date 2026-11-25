@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { requireLocationMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 
-const LOCATION_ROLES = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "ACCOUNTS"];
+const LOCATION_ROLES = ["ADMINISTRATION", "HR_ADMIN", "ADMIN_OFFICE", "LOCATION_DEPT_HEAD", "ACCOUNTS", "SCHOLARSHIP_CELL"];
 
 export async function PATCH(request: Request) {
   try {

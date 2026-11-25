@@ -1,13 +1,12 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { readJsonBody } from "@/lib/http/readJsonBody";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { batchNotify } from "@/lib/notify";
 import { paymentErrorResponse } from "@/lib/payments/server";
-import { actorName, SCHOLARSHIP_ROLES } from "@/lib/fees/http";
+import { requireScholarshipManager } from "@/lib/fees/http";
 import { FeeError, feeRefs, setFunding } from "@/lib/fees/server";
 import { ACADEMIC_YEAR_RE, fundingError, normType, recompute } from "@/lib/fees/rules";
 import type { FeeFunding, StudentFeeAccount } from "@/types/fees";
@@ -22,8 +21,8 @@ const MAX_ROWS = 3000;
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember(...SCHOLARSHIP_ROLES);
     const db = getAdminDb();
+    const session = await requireScholarshipManager(db, request);
     const c = session.collegeId;
     const body = (await readJsonBody(request)) as { academicYear?: unknown; apply?: unknown; rows?: unknown };
     const year = String(body.academicYear ?? "");
@@ -54,7 +53,7 @@ export async function POST(request: Request) {
     const apply = body.apply === true;
     if (!apply) return NextResponse.json({ checks });
     if (checks.some((x) => "error" in x && x.error)) throw new FeeError("Fix the rows with problems first - nothing was saved.");
-    const byName = await actorName(db, session);
+    const byName = session.byName;
     const changed: StudentFeeAccount[] = [];
     for (const x of checks) {
       if (!("change" in x) || !x.change || !x.to || !x.accountId) continue;
