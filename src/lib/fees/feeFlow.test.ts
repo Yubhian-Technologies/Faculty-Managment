@@ -138,3 +138,49 @@ describe("concession requests", () => {
     expect((await account(db, "2026-27__st2")).concessions).toHaveLength(1);
   });
 });
+
+describe("online fee payment (CCAvenue)", () => {
+  it("settles into a fee receipt with the payment's number, split by head; too much is flagged, never absorbed; a full refund cancels it", async () => {
+    const { ccavParseResponse } = await import("@/lib/payments/ccavenue");
+    const { settlePayment } = await import("@/lib/payments/settle");
+    const { minimumOnline, onlineAmountError, onlineReceiptId, refundOnlinePayment } = await import("./online");
+    const { db } = setup();
+    await raise(db);
+    const acc = await account(db, "2026-27__st1");
+    // 50,000 in two instalments (60 / 40): the first is due now.
+    expect(minimumOnline(acc)).toBe(30000);
+    expect(onlineAmountError(acc, 29999)).toMatch(/at least Rs. 30000/);
+    expect(onlineAmountError(acc, 50001)).toMatch(/more than the balance/);
+    expect(onlineAmountError(acc, 30000)).toBeNull();
+
+    const order = (id: string, amount: number) => db.doc(P(`payments/${id}`)).set({
+      collegeId: C, purpose: { kind: "FEE", accountId: "2026-27__st1", academicYear: "2026-27", label: "Fees 2026-27" }, amount, currency: "INR",
+      status: "INITIATED", gateway: "CCAVENUE", studentId: "st1", studentUid: "u1", studentName: "S", studentRollNumber: "26A001", createdAt: "", updatedAt: "",
+    });
+    const resp = (id: string, amount: number) => ccavParseResponse(new URLSearchParams({ order_id: id, tracking_id: `T${id}`, bank_ref_no: "BR", order_status: "Success", amount: `${amount}.00`, currency: "INR", payment_mode: "UPI", merchant_param1: C }).toString());
+
+    await order("FMSA", 30000);
+    const s1 = await settlePayment(db, C, resp("FMSA", 30000));
+    expect(s1).toMatchObject({ newlyPaid: true, payment: { status: "SUCCESS", receiptNo: expect.stringMatching(/^FR-TC\//) } });
+    const rc = (await db.doc(P(`feeReceipts/${onlineReceiptId("FMSA")}`)).get()).data() as FeeReceipt;
+    expect(rc).toMatchObject({ receiptNo: s1!.payment.receiptNo, source: "ONLINE", mode: "ONLINE", reference: "TFMSA", amount: 30000 });
+    expect(rc.allocation.map((x) => [x.headName, x.bankAccountName, x.amount])).toEqual([["Tuition", "College A/c", 27000], ["Special Fee", "Special A/c", 3000]]);
+    expect(await account(db, "2026-27__st1")).toMatchObject({ paid: 30000, balance: 20000 });
+
+    // The same answer again (redirect + status check) changes nothing.
+    expect(await settlePayment(db, C, resp("FMSA", 30000))).toMatchObject({ changed: false });
+    expect((await account(db, "2026-27__st1")).paid).toBe(30000);
+
+    // Two tabs: a second payment of more than is now due is kept SUCCESS and flagged for a refund.
+    await order("FMSB", 25000);
+    const s2 = await settlePayment(db, C, resp("FMSB", 25000));
+    expect(s2?.payment).toMatchObject({ status: "SUCCESS", needsRefund: true, failureMessage: expect.stringMatching(/More than the fee due/) });
+    expect((await account(db, "2026-27__st1")).paid).toBe(30000);
+    expect((await db.doc(P(`feeReceipts/${onlineReceiptId("FMSB")}`)).get()).exists).toBe(false);
+
+    // A full refund of the first: its receipt is cancelled, the amount comes off what was paid.
+    const undone = refundOnlinePayment(await account(db, "2026-27__st1"), rc, "2026-12-01T00:00:00Z", "Acc", "Refunded: duplicate");
+    expect(undone?.account).toMatchObject({ paid: 0, balance: 50000 });
+    expect(undone?.receipt.cancelled?.reason).toBe("Refunded: duplicate");
+  });
+});

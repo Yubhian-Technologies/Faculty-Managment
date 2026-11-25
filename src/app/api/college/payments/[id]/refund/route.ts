@@ -7,10 +7,11 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { notify } from "@/lib/notify";
 import { CERTIFICATE_REQUESTS_COL } from "@/lib/certifications/transitions";
+import { onlineReceiptId, refundOnlinePayment } from "@/lib/fees/online";
 import { CcavApiRefused, refundOrder } from "@/lib/payments/ccavenueApi";
 import { paymentProxyConfigured } from "@/lib/payments/proxyPost";
 import { activeCcavenue, PaymentError, paymentErrorResponse, paymentOf, paymentRefs, paymentView, requirePaymentsManager } from "@/lib/payments/server";
-import type { CertificateRequest, Payment, PaymentRefund } from "@/types";
+import type { CertificateRequest, FeeReceipt, Payment, PaymentRefund, StudentFeeAccount } from "@/types";
 
 // Accounts / Super Admin refund a successful payment (?collegeId):
 //   { via: "CCAVENUE", amount, reason }               refunded now through CCAvenue's Refund API (static-IP proxy)
@@ -37,6 +38,10 @@ async function recordRefund(db: Firestore, collegeId: string, id: string, refund
     check(p, refund.amount);
     const reqRef = p.purpose.kind === "CERTIFICATE" ? CERTIFICATE_REQUESTS_COL(db, collegeId).doc(p.purpose.requestId) : null;
     const reqSnap = reqRef ? await tx.get(reqRef) : null;
+    // Student fees: the fee receipt this payment made, and the fee account (a full refund cancels the receipt).
+    const feeRef = p.purpose.kind === "FEE" ? paymentRefs(db, collegeId).college.collection("studentFees").doc(p.purpose.accountId) : null;
+    const rcptRef = p.purpose.kind === "FEE" ? paymentRefs(db, collegeId).college.collection("feeReceipts").doc(onlineReceiptId(p.id)) : null;
+    const [feeSnap, rcptSnap] = feeRef && rcptRef ? await Promise.all([tx.get(feeRef), tx.get(rcptRef)]) : [null, null];
     const refundedAmount = round((p.refundedAmount ?? 0) + refund.amount);
     const full = refundedAmount >= p.amount;
     const next: Partial<Payment> = {
@@ -47,6 +52,10 @@ async function recordRefund(db: Firestore, collegeId: string, id: string, refund
     if (full && reqRef && reqSnap?.exists) {
       const req = reqSnap.data() as CertificateRequest;
       if (req.feePaid?.paymentId === p.id && req.status !== "ISSUED") tx.update(reqRef, { feePaid: FieldValue.delete(), updatedAt: new Date() });
+    }
+    if (full && feeRef && rcptRef && feeSnap?.exists && rcptSnap?.exists) {
+      const undone = refundOnlinePayment(feeSnap.data() as StudentFeeAccount, rcptSnap.data() as FeeReceipt, refund.at, refund.byName, `Refunded: ${refund.reason}`);
+      if (undone) { tx.set(rcptRef, undone.receipt); tx.set(feeRef, undone.account); }
     }
     return { ...p, ...next } as Payment;
   });

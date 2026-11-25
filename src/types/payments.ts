@@ -8,7 +8,10 @@
 
 export type PaymentStatus = "INITIATED" | "SUCCESS" | "FAILED" | "ABORTED" | "REFUNDED" | "PARTIALLY_REFUNDED";
 
-export type PaymentPurpose = { kind: "CERTIFICATE"; requestId: string; label: string };
+export type PaymentPurpose =
+  | { kind: "CERTIFICATE"; requestId: string; label: string }
+  /** Student fees (lib/fees): a payment towards the student's fee account for the academic year. */
+  | { kind: "FEE"; accountId: string; academicYear: string; label: string };
 
 export interface PaymentRefund {
   at: string;

@@ -5,7 +5,8 @@ import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { findOwnStudent } from "@/lib/students/ownContext";
 import { passwordChangeRequired, passwordChangeRequiredResponse } from "@/lib/students/passwordGate";
-import { receiptCollege } from "@/lib/payments/server";
+import { activeCcavenue, receiptCollege } from "@/lib/payments/server";
+import { minimumOnline } from "@/lib/fees/online";
 import { feeRefs } from "@/lib/fees/server";
 import { instalmentStates } from "@/lib/fees/rules";
 import type { FeeReceipt, StudentFeeAccount } from "@/types/fees";
@@ -21,10 +22,11 @@ export async function GET() {
     if (!own.ok) return NextResponse.json({ error: "Your login is not linked to a student record yet. Contact your College Office." }, { status: 404 });
     if (passwordChangeRequired(own.student)) return passwordChangeRequiredResponse();
     const refs = feeRefs(db, session.collegeId);
-    const [acc, rec, college] = await Promise.all([
+    const [acc, rec, college, ccav] = await Promise.all([
       refs.accounts.where("studentId", "==", own.student.id).get(),
       refs.receipts.where("studentId", "==", own.student.id).get(),
       receiptCollege(db, session.collegeId),
+      activeCcavenue(db, session.collegeId).catch(() => null),
     ]);
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
     const accounts = acc.docs.map((d) => d.data() as StudentFeeAccount).sort((a, b) => b.academicYear.localeCompare(a.academicYear)).map((a) => ({
@@ -33,10 +35,12 @@ export async function GET() {
       concessions: a.concessions.map((c) => ({ amount: c.amount, reason: c.reason, headName: c.headName ?? null })), concessionTotal: a.concessionTotal,
       govtShare: a.govtShare, studentShare: a.studentShare, paid: a.paid, balance: a.balance, status: a.status,
       instalments: instalmentStates(a, today),
+      minOnline: minimumOnline(a),
     }));
     const receipts = rec.docs.map((d) => d.data() as FeeReceipt).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((r) => ({ id: r.id, receiptNo: r.receiptNo, academicYear: r.academicYear, amount: r.amount, mode: r.mode, reference: r.reference, paidOn: r.paidOn, allocation: r.allocation, cancelled: !!r.cancelled, source: r.source, rollNumber: r.rollNumber, name: r.name, department: r.department, section: r.section, courseName: r.courseName, bank: r.bank ?? "" }));
-    return NextResponse.json({ accounts, receipts, college, today });
+    // Online payment (CCAvenue) shows only while the college's account is on.
+    return NextResponse.json({ accounts, receipts, college, today, onlinePay: !!ccav });
   } catch (err) {
     if (err instanceof Error && (err.message === "UNAUTHORIZED" || err.message === "NO_COLLEGE_CONTEXT")) return NextResponse.json({ error: "You do not have access, or your session has expired. Sign in again to continue." }, { status: 401 });
     console.error("[student/me/fees GET]", err);

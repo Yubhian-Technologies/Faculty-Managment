@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { toast } from "@/hooks/useToast";
 
 import { studentLoginEmail } from "@/lib/students/loginDefaults";
+import { ForgotPasswordDialog } from "@/components/auth/ForgotPasswordDialog";
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/invalid-credential": "Invalid username or password. Try again.",
@@ -184,6 +185,7 @@ function LoginForm() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isEmail = identifier.includes("@");
@@ -312,7 +314,10 @@ function LoginForm() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <button type="button" onClick={() => setForgotOpen(true)} className="text-xs font-medium text-primary hover:underline" suppressHydrationWarning>Forgot password?</button>
+                </div>
                 <div className="relative">
                   <Input
                     id="password"
@@ -344,6 +349,7 @@ function LoginForm() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">Having trouble signing in? Contact your college administrator.</p>
+        {forgotOpen && <ForgotPasswordDialog initial={identifier} onClose={() => setForgotOpen(false)} />}
       </div>
     </div>
   );

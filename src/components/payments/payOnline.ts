@@ -3,9 +3,18 @@
 // Starts an online payment and hands the browser to CCAvenue: the server makes the order and the
 // encrypted request; the browser posts it to CCAvenue's checkout page as a normal form.
 export async function payCertificateFeeOnline(requestId: string): Promise<void> {
+  return startOnlinePayment({ kind: "CERTIFICATE", requestId });
+}
+
+/** Student fees: pay `amount` towards the student's own fee account (lib/fees/online.ts). */
+export async function payStudentFeeOnline(accountId: string, amount: number): Promise<void> {
+  return startOnlinePayment({ kind: "FEE", accountId, amount });
+}
+
+async function startOnlinePayment(purpose: Record<string, unknown>): Promise<void> {
   const res = await fetch("/api/college/payments/ccavenue/start", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ purpose: { kind: "CERTIFICATE", requestId } }),
+    body: JSON.stringify({ purpose }),
   });
   const json = (await res.json().catch(() => ({}))) as { action?: string; fields?: Record<string, string>; error?: string };
   if (!res.ok || !json.action || !json.fields) throw new Error(json.error ?? "Unable to start the payment");
