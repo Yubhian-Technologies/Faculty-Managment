@@ -20,10 +20,11 @@ const CREATABLE_ROLES = [
   { value: "HR_ADMIN", label: "HR Admin" },
   { value: "ADMIN_OFFICE", label: "Admin Office" },
   { value: "ACCOUNTS", label: "Accounts" },
+  { value: "SCHOLARSHIP_CELL", label: "Scholarship Cell (FR / NFR, government fee reimbursement)" },
   { value: "LOCATION_DEPT_HEAD", label: "Department Head" },
 ] as const;
 
-const SINGLETON_ROLES = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
+const SINGLETON_ROLES = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "SCHOLARSHIP_CELL"];
 // These can cover several departments at once (or all of them) - a
 // Dept Head stays single-department (locationDeptId below), since they head
 // exactly one and a department can only have one head (deptsTaken below).

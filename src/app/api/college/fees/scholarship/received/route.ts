@@ -1,12 +1,11 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { readJsonBody } from "@/lib/http/readJsonBody";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { paymentErrorResponse } from "@/lib/payments/server";
-import { actorName, SCHOLARSHIP_ROLES } from "@/lib/fees/http";
+import { requireScholarshipManager } from "@/lib/fees/http";
 import { addGovtReceived, FeeError, feeRefs, todayIst } from "@/lib/fees/server";
 import { ACADEMIC_YEAR_RE, DATE_RE } from "@/lib/fees/rules";
 import type { StudentFeeAccount } from "@/types/fees";
@@ -21,7 +20,7 @@ const MAX_ROWS = 3000;
 
 export async function GET(request: Request) {
   try {
-    const session = await requireCollegeMember(...SCHOLARSHIP_ROLES);
+    const session = await requireScholarshipManager(getAdminDb(), request);
     const year = new URL(request.url).searchParams.get("academicYear") ?? "";
     if (!ACADEMIC_YEAR_RE.test(year)) throw new FeeError("Select the academic year.");
     const snap = await feeRefs(getAdminDb(), session.collegeId).govtCredits.where("academicYear", "==", year).get();
@@ -38,8 +37,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await requireCollegeMember(...SCHOLARSHIP_ROLES);
     const db = getAdminDb();
+    const session = await requireScholarshipManager(db, request);
     const c = session.collegeId;
     const body = (await readJsonBody(request)) as { academicYear?: unknown; receivedOn?: unknown; reference?: unknown; scheme?: unknown; apply?: unknown; rows?: unknown };
     const year = String(body.academicYear ?? "");
@@ -73,7 +72,7 @@ export async function POST(request: Request) {
     const total = checks.reduce((n, x) => n + (Number.isInteger(x.amount) ? x.amount : 0), 0);
     if (body.apply !== true) return NextResponse.json({ checks, total });
     if (checks.some((x) => "error" in x && x.error)) throw new FeeError("Fix the rows with problems first - nothing was saved.");
-    const byName = await actorName(db, session);
+    const byName = session.byName;
     const ref = feeRefs(db, c).govtCredits.doc();
     const rows = checks.map((x) => ({ accountId: (x as { accountId: string }).accountId, rollNumber: x.rollNumber, amount: x.amount }));
     await ref.set({ academicYear: year, receivedOn, reference, scheme, total, rows, createdAt: new Date().toISOString(), byName });

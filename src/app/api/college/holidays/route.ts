@@ -28,7 +28,7 @@ export async function GET() {
       "STUDENT", "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
       "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D",
-      "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "HR", "SCHOLARSHIP_CELL", "PLACEMENT_DEPT", "PURCHASE_DEPT"
+      "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "HR", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const db = getAdminDb();
     const snap = await db

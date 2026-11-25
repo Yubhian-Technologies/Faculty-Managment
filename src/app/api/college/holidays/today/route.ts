@@ -20,7 +20,7 @@ export async function GET() {
       "PANEL_MEMBER", "HOD", "PRINCIPAL", "VICE_PRINCIPAL",
       "COLLEGE_OFFICE", "ACCOUNTS", "COLLEGE_ACCOUNTS", "FINANCE", "COLLEGE_STAFF",
       "ACADEMICS", "IQAC_COORDINATOR", "T_AND_P", "R_AND_D", "RND_COORDINATOR",
-      "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "HR", "SCHOLARSHIP_CELL", "PLACEMENT_DEPT", "PURCHASE_DEPT"
+      "LIBRARY", "HOSTEL", "PD", "EXAM_CELL", "WEBMASTER", "HR", "PLACEMENT_DEPT", "PURCHASE_DEPT"
     );
     const isStudent = session.role === "STUDENT" || session.role === "CLASS_LEADER";
     const db = getAdminDb();

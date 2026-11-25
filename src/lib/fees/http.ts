@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { requirePaymentsManager } from "@/lib/payments/server";
+import { requireRole } from "@/lib/auth/verifySession";
+import { PaymentError, requirePaymentsManager } from "@/lib/payments/server";
 
 // Student fees are managed by the location Accounts login (and Super Admin) for a college picked as ?collegeId -
 // the same check as online payments. Returns the session with the college and the actor's display name.
@@ -22,5 +23,20 @@ export async function actorName(db: Firestore, session: { uid: string; email?: s
   return session.email ?? "";
 }
 
-/** Who marks FR / NFR and records the government's fee reimbursement money (own college). */
+/** Who marks FR / NFR and records the government's fee reimbursement money: the location Scholarship Cell. */
 export const SCHOLARSHIP_ROLES = ["SCHOLARSHIP_CELL", "SUPER_ADMIN"] as const;
+
+/** The location Scholarship Cell (or Super Admin) for the college picked as ?collegeId - it must be in their
+ *  location (same check as Accounts). Returns the session with the college and the actor's name. */
+export async function requireScholarshipManager(db: Firestore, request: Request) {
+  const session = await requireRole(...SCHOLARSHIP_ROLES);
+  const collegeId = new URL(request.url).searchParams.get("collegeId") || session.collegeId || "";
+  if (!collegeId) throw new PaymentError("Pick a college", 400);
+  if (session.role === "SCHOLARSHIP_CELL") {
+    const snap = await db.collection("colleges").doc(collegeId).get();
+    const loc = (snap.data() as { locationId?: string } | undefined)?.locationId;
+    if (!snap.exists || !session.locationId || loc !== session.locationId) throw new PaymentError("This college isn't in your location", 403);
+  }
+  const withCollege = { ...session, collegeId };
+  return { ...withCollege, byName: await actorName(db, withCollege) };
+}

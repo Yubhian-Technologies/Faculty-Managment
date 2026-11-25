@@ -8,8 +8,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { createFirebaseUser } from "@/lib/firebase/authRest";
 import type { UserRole } from "@/types";
 
-const ADMIN_CREATABLE_ROLES: UserRole[] = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "LOCATION_DEPT_HEAD"];
-const SINGLETON_ROLES: UserRole[] = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS"];
+const ADMIN_CREATABLE_ROLES: UserRole[] = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "SCHOLARSHIP_CELL", "LOCATION_DEPT_HEAD"];
+const SINGLETON_ROLES: UserRole[] = ["LOCATION_STAFF_ADMIN", "HR_ADMIN", "ADMIN_OFFICE", "ACCOUNTS", "SCHOLARSHIP_CELL"];
 
 export async function GET(request: Request) {
   try {
