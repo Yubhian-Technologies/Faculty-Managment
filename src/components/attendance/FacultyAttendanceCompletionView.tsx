@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDateTime } from "@/lib/utils";
 import { fetchDepartments } from "@/lib/client/departmentsFetch";
 import { useFacultyDisplayNames } from "@/hooks/useFacultyDisplayNames";
 import { useEffect, useState } from "react";
@@ -45,6 +46,8 @@ interface PeriodRow {
   submittedAtDisplay: string | null;
   /** Marked on the phone with no internet and sent later - the phone's time at Submit (ISO). */
   markedOfflineAt?: string | null;
+  /** Late Marking: posted after the posting window closed, with the faculty's reason. */
+  lateMark?: { reason: string; at: string; notCheckedIn: boolean } | null;
   adminUpdated?: { byName: string; at: string | null } | null;
 }
 
@@ -388,6 +391,19 @@ export function FacultyAttendanceCompletionView({ title, description, hodScoped 
                           <span className="ml-2 inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800"
                             title="Marked on the faculty's phone with no internet and sent when the connection came back. The time is the phone's own clock.">
                             Marked offline {new Date(p.markedOfflineAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}
+                          </span>
+                        )}
+                        {p.lateMark && (
+                          <span className="mt-1 block whitespace-normal text-xs">
+                            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                              Marked Late on {formatDateTime(new Date(p.lateMark.at))}
+                            </span>
+                            {p.lateMark.notCheckedIn && (
+                              <span className="ml-1 inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 font-medium text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+                                Not checked in that day
+                              </span>
+                            )}
+                            <span className="mt-0.5 block text-muted-foreground">Reason: {p.lateMark.reason}</span>
                           </span>
                         )}
                         {p.adminUpdated && (

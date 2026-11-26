@@ -43,6 +43,15 @@ export interface AttendanceRecord {
   checkOutLocation?: { latitude: number; longitude: number };
   checkOutFaceMatchDistance?: number;
   checkOutVerified?: boolean;
+  /** A self check-out before the college's End Time (lib/attendance/earlyCheckOut.ts): the reason given, the
+   *  closing time in force, and how the classes still left were covered. */
+  earlyCheckOut?: {
+    reason: string;
+    closingTime: string | null;
+    permissionIds?: string[];
+    adjustmentIds?: string[];
+    periods?: { periodNumber: number; startTime: string; endTime: string; subjectName: string; coveredBy: "ADJUSTMENT" | "PERMISSION" | "LEAVE" | null }[];
+  };
   leaveApplicationId?: string;  // populated when status is ON_LEAVE
   onDutyRequestId?: string;     // populated when status is ON_DUTY
   permissionRequestId?: string; // populated for partial-day permission

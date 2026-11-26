@@ -5,7 +5,13 @@
 // Each check-in stores the cut-off in force that day (AttendanceRecord.lateAfter), so changing the timings never
 // changes how an earlier day reads.
 
-export interface AttendanceTimings { startTime: string; graceMinutes: number }
+export interface AttendanceTimings {
+  startTime: string;
+  graceMinutes: number;
+  /** The college's closing time for faculty / staff ("HH:MM"). Not set = no early check-out rule. A check-out
+   *  before it needs a reason, and faculty with classes still left must cover them first (lib/attendance/earlyCheckOut.ts). */
+  endTime?: string;
+}
 
 export const DEFAULT_ATTENDANCE_TIMINGS: AttendanceTimings = { startTime: "09:00", graceMinutes: 5 };
 export const MAX_GRACE_MINUTES = 120;
@@ -26,11 +32,18 @@ export function lateAfterOf(t: AttendanceTimings): string {
 
 /** Validates what Principal / Office sends; throws a readable message. */
 export function cleanAttendanceTimings(raw: unknown): AttendanceTimings {
-  const r = (raw ?? {}) as { startTime?: unknown; graceMinutes?: unknown };
+  const r = (raw ?? {}) as { startTime?: unknown; graceMinutes?: unknown; endTime?: unknown };
   const startTime = typeof r.startTime === "string" ? r.startTime.trim() : "";
   if (toMinutes(startTime) === null) throw new Error("Enter the start time as HH:MM (24-hour), for example 09:00.");
   const grace = Number(r.graceMinutes);
   if (!Number.isInteger(grace) || grace < 0 || grace > MAX_GRACE_MINUTES) throw new Error(`Grace minutes must be a whole number from 0 to ${MAX_GRACE_MINUTES}.`);
+  const endTime = typeof r.endTime === "string" ? r.endTime.trim() : "";
+  if (endTime) {
+    const end = toMinutes(endTime);
+    if (end === null) throw new Error("Enter the end time as HH:MM (24-hour), for example 16:30, or leave it blank.");
+    if (end <= toMinutes(startTime)!) throw new Error("The end time must be after the start time.");
+    return { startTime, graceMinutes: grace, endTime };
+  }
   return { startTime, graceMinutes: grace };
 }
 
@@ -39,6 +52,13 @@ export function readAttendanceTimings(stored: unknown): AttendanceTimings {
   try {
     return cleanAttendanceTimings({ ...DEFAULT_ATTENDANCE_TIMINGS, ...((stored ?? {}) as object) });
   } catch {
-    return DEFAULT_ATTENDANCE_TIMINGS;
+    // A bad end time alone never loses the start time.
+    try {
+      const { endTime: _drop, ...rest } = (stored ?? {}) as { endTime?: unknown };
+      void _drop;
+      return cleanAttendanceTimings({ ...DEFAULT_ATTENDANCE_TIMINGS, ...rest });
+    } catch {
+      return DEFAULT_ATTENDANCE_TIMINGS;
+    }
   }
 }

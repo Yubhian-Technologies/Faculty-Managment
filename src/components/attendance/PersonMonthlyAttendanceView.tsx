@@ -179,7 +179,7 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
           : "No record",
       checkIn: record?.checkIn ?? "",
       checkOut: record?.checkOut ?? "",
-      reason: [record?.remarks, record?.lateReason ? `Late: ${record.lateReason}` : null].filter(Boolean).join(" | "),
+      reason: [record?.remarks, record?.lateReason ? `Late: ${record.lateReason}` : null, record?.earlyCheckOut ? `Early Out: ${record.earlyCheckOut.reason}` : null].filter(Boolean).join(" | "),
     }));
     exportToCSV(rows, `attendance-${personName ?? "person"}-${MONTH_NAMES[loadedMonth - 1]}-${loadedYear}`, [
       { key: "date", header: "Date" },
@@ -298,6 +298,11 @@ export function PersonMonthlyAttendanceView({ facultyId, backHref }: PersonMonth
                       ) : null}
                       {record?.lateReason ? (
                         <p className="text-xs font-medium text-amber-700 mt-0.5">Late: {record.lateReason}</p>
+                      ) : null}
+                      {record?.earlyCheckOut ? (
+                        <p className="text-xs font-medium text-amber-700 mt-0.5">
+                          Early Out{record.earlyCheckOut.permissionIds?.length ? " (with permission)" : ""}: {record.earlyCheckOut.reason}
+                        </p>
                       ) : null}
                     </div>
 

@@ -21,7 +21,11 @@ function todayISO(): string {
 // and sends it up for approval. Where it goes is decided server-side by the
 // college's own leave routing, so a faculty member's reaches their HOD and an
 // HOD's reaches the Principal without this form having to know the hierarchy.
-export function PermissionRequestDialog({ onSubmitted }: { onSubmitted?: () => void }) {
+export function PermissionRequestDialog({ onSubmitted, preset }: {
+  onSubmitted?: () => void;
+  /** Early check-out: today, from now until the closing time (still editable). */
+  preset?: { fromTime: string; toTime: string };
+}) {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(todayISO());
   const [fromTime, setFromTime] = useState("");
@@ -32,8 +36,8 @@ export function PermissionRequestDialog({ onSubmitted }: { onSubmitted?: () => v
   function handleOpenChange(next: boolean) {
     if (next) {
       setDate(todayISO());
-      setFromTime("");
-      setToTime("");
+      setFromTime(preset?.fromTime ?? "");
+      setToTime(preset?.toTime ?? "");
       setReason("");
     }
     setOpen(next);

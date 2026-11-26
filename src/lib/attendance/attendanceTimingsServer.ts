@@ -16,3 +16,8 @@ export async function loadAttendanceTimings(db: Db, collegeId: string): Promise<
 export function collegeLateAfter(db: Db, collegeId: string): Promise<string> {
   return cachedValue(`attendanceLateAfter/${collegeId}`, 60_000, async () => lateAfterOf(await loadAttendanceTimings(db, collegeId)));
 }
+
+/** The college's closing time for faculty / staff ("HH:MM"), or null when not set - kept 60 s per server instance. */
+export function collegeEndTime(db: Db, collegeId: string): Promise<string | null> {
+  return cachedValue(`attendanceEndTime/${collegeId}`, 60_000, async () => (await loadAttendanceTimings(db, collegeId)).endTime ?? null);
+}

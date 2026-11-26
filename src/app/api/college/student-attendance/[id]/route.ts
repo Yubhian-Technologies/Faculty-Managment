@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { offlineStamp, parseOfflineMark } from "@/lib/studentAttendance/offlineMark";
+import { checkLatePeriod, notifyLateMark } from "@/lib/studentAttendance/lateMarkServer";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveFacultyMemberId } from "@/lib/faculty/resolveFacultyMemberId";
@@ -97,12 +98,21 @@ export async function PATCH(
     const offline = body.submit ? parseOfflineMark(body.offline) : null;
     let viaOffline = false;
     if (!windowCheck.ok && offline) {
-      const late = await checkFacultyPeriodWindow(
+      const untilMidnight = await checkFacultyPeriodWindow(
         db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date, new Date(), existing.periodNumber, { untilEndOfDay: true }
       );
-      viaOffline = late.ok;
+      viaOffline = untilMidnight.ok;
     }
-    if (!windowCheck.ok && !viaOffline) {
+    // Opened through Late Marking (the session carries `lateMark`): saved / submitted within the Late Marking days.
+    let viaLate = false;
+    if (!windowCheck.ok && !viaOffline && existing.lateMark) {
+      const lateCheck = await checkLatePeriod(
+        db, session.collegeId, { uid: session.uid, facultyMemberId }, existing.assignmentId, existing.date, existing.periodNumber, new Date()
+      );
+      if (!lateCheck.ok) return NextResponse.json({ error: lateCheck.message, code: "LATE_MARK_REFUSED" }, { status: 403 });
+      viaLate = true;
+    }
+    if (!windowCheck.ok && !viaOffline && !viaLate) {
       const allocated = await checkAllocatedAccess(db, session.collegeId, facultyMemberId, existing.assignmentId, existing.date, existing.periodNumber);
       if (!allocated.ok) {
         return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
@@ -182,6 +192,8 @@ export async function PATCH(
         update.submittedAt = now;
         // Marked offline (the phone's queue): keep the phone's time beside when it arrived - shown to the HOD.
         if (offline && !fresh.markedOffline) update.markedOffline = offlineStamp(offline, now);
+        // Late Marking: when it was finally submitted (the HOD is told below).
+        if (viaLate && fresh.lateMark) update.lateMark = { ...fresh.lateMark, submittedAt: now.toISOString() };
       }
 
       tx.update(ref, update);
@@ -198,6 +210,9 @@ export async function PATCH(
     }
     const update = result.merged;
     Object.assign(existing, result.fresh);
+    if (body.submit && update.lateMark) {
+      await notifyLateMark(db, session.collegeId, { ...existing, ...update } as StudentAttendanceSession, session.uid);
+    }
 
     return NextResponse.json({ session: { ...existing, ...update, id } });
   } catch (err) {

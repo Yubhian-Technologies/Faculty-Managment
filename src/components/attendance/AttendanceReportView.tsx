@@ -122,22 +122,38 @@ function CheckInCell({ row }: { row: RosterEntry }) {
   ) : <>—</>;
 }
 
+type EarlyOut = { reason: string; closingTime: string | null; withPermission: boolean; adjusted: boolean };
+const earlyOutOf = (row: RosterEntry) => (row.earlyOut as EarlyOut | null | undefined) ?? null;
+/** "Early Out (with permission)" etc. - for the badge and the exports. */
+function earlyOutText(e: EarlyOut): string {
+  const how = [e.withPermission ? "with permission" : "", e.adjusted ? "class adjusted" : ""].filter(Boolean).join(", ");
+  return `Early Out${how ? ` (${how})` : ""}: ${e.reason}`;
+}
+
 function CheckOutCell({ row }: { row: RosterEntry }) {
+  const early = earlyOutOf(row);
   return row.checkOut ? (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex flex-wrap items-center gap-1">
       {row.checkOut}
       {row.checkOutVerified && <ShieldCheck className="h-3.5 w-3.5 text-green-600" aria-label="Face + location verified" />}
+      {early && (
+        <span className="rounded border border-amber-200 bg-amber-50 px-1 text-[10px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300" title={early.closingTime ? `Before the closing time ${early.closingTime}` : undefined}>
+          Early Out{early.withPermission ? " · Permission" : ""}
+        </span>
+      )}
     </span>
   ) : <>—</>;
 }
 
 function ReasonCell({ row }: { row: RosterEntry }) {
   const lateReason = row.lateReason as string | null | undefined;
-  if (!row.remarks && !lateReason) return <>—</>;
+  const early = earlyOutOf(row);
+  if (!row.remarks && !lateReason && !early) return <>—</>;
   return (
     <span className="block space-y-0.5">
       {row.remarks && <span className="block text-xs text-muted-foreground italic">{row.remarks}</span>}
       {lateReason && <span className="block text-xs font-medium text-amber-700">Late: {lateReason}</span>}
+      {early && <span className="block text-xs font-medium text-amber-700">{earlyOutText(early)}</span>}
     </span>
   );
 }
@@ -434,7 +450,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       key: "remarks",
       header: "Reason",
       render: (row) => <ReasonCell row={row} />,
-      csvValue: (row) => [row.remarks, row.lateReason ? `Late: ${row.lateReason}` : null].filter(Boolean).join(" | "),
+      csvValue: (row) => { const e = earlyOutOf(row); return [row.remarks, row.lateReason ? `Late: ${row.lateReason}` : null, e ? earlyOutText(e) : null].filter(Boolean).join(" | "); },
     },
     ...(allowManualMark || monthlyViewBasePath
       ? [{
@@ -522,7 +538,7 @@ export function AttendanceReportView({ title, description, groupByDepartmentAndC
       status: statusLabel(r.status) + (r.status === "PRESENT" && isLateCheckIn(r.checkIn, r.permittedCheckInTime, r.lateAfter) ? " (Late)" : ""),
       checkIn: r.checkIn ?? "",
       checkOut: r.checkOut ?? "",
-      reason: [r.remarks, r.lateReason ? `Late: ${r.lateReason}` : null].filter(Boolean).join(" | "),
+      reason: [r.remarks, r.lateReason ? `Late: ${r.lateReason}` : null, earlyOutOf(r) ? earlyOutText(earlyOutOf(r)!) : null].filter(Boolean).join(" | "),
     }));
     exportToCSV(rows, `attendance-${date}`, [
       { key: "name", header: "Faculty" },

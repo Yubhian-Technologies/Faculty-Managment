@@ -16,23 +16,26 @@ import { lateAfterOf, MAX_GRACE_MINUTES } from "@/lib/attendance/attendanceTimin
 export function AttendanceTimingsCard() {
   const [startTime, setStartTime] = useState("09:00");
   const [grace, setGrace] = useState("5");
+  const [endTime, setEndTime] = useState("");
   const [meta, setMeta] = useState<{ isDefault: boolean; updatedAt: string | null; updatedByName: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     fetch("/api/college/settings/attendance-timings")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { timings: { startTime: string; graceMinutes: number }; isDefault: boolean; updatedAt: string | null; updatedByName: string | null } | null) => {
+      .then((d: { timings: { startTime: string; graceMinutes: number; endTime?: string }; isDefault: boolean; updatedAt: string | null; updatedByName: string | null } | null) => {
         if (!d) return;
         setStartTime(d.timings.startTime);
         setGrace(String(d.timings.graceMinutes));
+        setEndTime(d.timings.endTime ?? "");
         setMeta({ isDefault: d.isDefault, updatedAt: d.updatedAt, updatedByName: d.updatedByName });
       })
       .catch(() => toast({ variant: "destructive", title: "Unable to load the attendance timings." }));
   }, []);
 
   const graceNum = Number(grace);
-  const valid = /^([01]\d|2[0-3]):[0-5]\d$/.test(startTime) && Number.isInteger(graceNum) && graceNum >= 0 && graceNum <= MAX_GRACE_MINUTES;
+  const endValid = !endTime || (/^([01]\d|2[0-3]):[0-5]\d$/.test(endTime) && endTime > startTime);
+  const valid = /^([01]\d|2[0-3]):[0-5]\d$/.test(startTime) && Number.isInteger(graceNum) && graceNum >= 0 && graceNum <= MAX_GRACE_MINUTES && endValid;
   const cutoff = valid ? lateAfterOf({ startTime, graceMinutes: graceNum }) : null;
 
   async function save() {
@@ -40,7 +43,7 @@ export function AttendanceTimingsCard() {
     try {
       const res = await fetch("/api/college/settings/attendance-timings", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startTime, graceMinutes: graceNum }),
+        body: JSON.stringify({ startTime, graceMinutes: graceNum, ...(endTime ? { endTime } : {}) }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) { toast({ variant: "destructive", title: j.error ?? "Unable to save the attendance timings." }); return; }
@@ -66,6 +69,15 @@ export function AttendanceTimingsCard() {
           <div className="space-y-1.5">
             <Label htmlFor="att-grace">Grace Minutes</Label>
             <Input id="att-grace" type="number" min={0} max={MAX_GRACE_MINUTES} value={grace} onChange={(e) => setGrace(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="att-end">End Time</Label>
+            <Input id="att-end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            <p className="text-xs text-muted-foreground">
+              {endTime
+                ? endValid ? <>A check-out before {endTime} is early: a reason is asked, and faculty with classes still left adjust them or apply for a permission first.</> : <span className="text-destructive">The end time must be after the start time.</span>
+                : "Not set: no early check-out rule."}
+            </p>
           </div>
         </div>
         <p className="text-sm">

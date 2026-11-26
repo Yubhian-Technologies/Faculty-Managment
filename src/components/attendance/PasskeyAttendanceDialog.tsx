@@ -53,8 +53,10 @@ function webauthnMessage(err: unknown): string {
   return (err as Error)?.message || "Unable to use phone unlock. Try again.";
 }
 
-export function PasskeyAttendanceDialog({ mode, open, onOpenChange, onSuccess, onUseFace }: {
+export function PasskeyAttendanceDialog({ mode, open, onOpenChange, onSuccess, onUseFace, earlyReason }: {
   mode: "check-in" | "check-out" | "register";
+  /** Check-out before the college's End Time: the reason already asked by EarlyCheckOutButton. */
+  earlyReason?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -174,6 +176,7 @@ export function PasskeyAttendanceDialog({ mode, open, onOpenChange, onSuccess, o
         body: JSON.stringify({
           latitude: c.latitude, longitude: c.longitude, accuracy: c.accuracy, passkey, touchPoints: touchPoints(),
           ...(late ? { lateReason: lateReason.trim() } : {}),
+          ...(mode === "check-out" && earlyReason ? { earlyReason } : {}),
         }),
       });
       const json = await res.json() as { error?: string; code?: string; checkIn?: string; checkOut?: string };

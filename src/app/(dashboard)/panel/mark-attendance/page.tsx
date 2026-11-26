@@ -1,5 +1,6 @@
 "use client";
 
+import { MissedClassesCard } from "@/components/attendance/MissedClassesCard";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, Info, Lock, Pencil, RefreshCw, Clock, CloudOff, CloudUpload, Check, X } from "lucide-react";
@@ -756,6 +757,8 @@ export default function MarkAttendancePage() {
         title="Mark Attendance"
         description="Classes assigned to you today in the published timetable. Consecutive lab periods are grouped into one slot, with attendance for each period."
       />
+
+      {!viewDate && <MissedClassesCard />}
 
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={() => void fetchTodayPeriods()} disabled={isLoadingPeriods}>
