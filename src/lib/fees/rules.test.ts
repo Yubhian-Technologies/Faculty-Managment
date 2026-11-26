@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   academicYearOf, allocationOf, byBankAccount, categoryOfType, cleanStructure, defaultCategory, fundingError, headShares, instalmentStates, lateFineFor,
-  paymentError, recompute, splitInstalments, spread, structureCategory,
+  inFeeBatch, paymentError, recompute, splitInstalments, spread, structureCategory, studentFeeBatch, yearOfBatch,
 } from "./rules";
 import type { FeeStructureInstalment, StudentFeeAccount } from "@/types/fees";
 
@@ -112,5 +112,26 @@ describe("paying", () => {
     expect(paymentError(1001, 1000)).toMatch(/more than the balance/);
     expect(paymentError(100, 0)).toMatch(/Nothing is due/);
     expect(paymentError(1000, 1000)).toBeNull();
+  });
+});
+
+describe("fee batch of a student", () => {
+  it("uses the stored batch, else works it out from the year of study", () => {
+    expect(studentFeeBatch({ batch: "2025-2029", year: 3 }, 2026, 4)).toBe("2025-2029");
+    expect(studentFeeBatch({ year: 3 }, 2026, 4)).toBe("2024-2028");
+    expect(studentFeeBatch({ year: 1 }, 2026, 2)).toBe("2026-2028");
+    expect(studentFeeBatch({}, 2026, 4)).toBe("");
+    expect(studentFeeBatch({ year: 3 }, 2026, undefined)).toBe("");
+  });
+  it("matches the same batch or a lateral entrant's, never another", () => {
+    expect(inFeeBatch("2024-2028", "2024-2028")).toBe(true);
+    expect(inFeeBatch("2025-2028", "2024-2028")).toBe(true);
+    expect(inFeeBatch("2023-2027", "2024-2028")).toBe(false);
+    expect(inFeeBatch("2025-2029", "2024-2028")).toBe(false);
+    expect(inFeeBatch("", "2024-2028")).toBe(false);
+  });
+  it("gives the year of study a batch is in", () => {
+    expect(yearOfBatch("2024-2028", 2026)).toBe(3);
+    expect(yearOfBatch("2024-28", 2026)).toBeNull();
   });
 });

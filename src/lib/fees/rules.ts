@@ -31,6 +31,35 @@ export function defaultCategory(type: string): FeeCategory | null {
   return null;
 }
 export const categoryOfType = (type: string, map: Record<string, FeeCategory>): FeeCategory | null => map[normType(type)] ?? defaultCategory(type);
+const BATCH_RE = /^(\d{4})-(\d{4})$/;
+
+/** The year of study a batch is in during the academic year starting `currentStart` ("2024-2028" in 2026 = 3); null when the text isn't a batch. */
+export function yearOfBatch(batch: string, currentStart: number): number | null {
+  const m = BATCH_RE.exec(batch.trim());
+  return m ? currentStart - Number(m[1]) + 1 : null;
+}
+
+/**
+ * The student's batch for fees: the stored one, else worked out from the year of study (many colleges never stored a
+ * batch on the student - VIT). Empty when neither is known.
+ */
+export function studentFeeBatch(s: { batch?: string; year?: number }, currentStart: number, durationYears: number | undefined): string {
+  const own = String(s.batch ?? "").trim();
+  if (own) return own;
+  const y = Number(s.year);
+  if (!Number.isInteger(y) || y < 1 || !durationYears) return "";
+  const start = currentStart - y + 1;
+  return `${start}-${start + durationYears}`;
+}
+
+/** In the batch being raised: the same, or a lateral entrant's (later start, same end year). */
+export function inFeeBatch(studentBatch: string, batch: string): boolean {
+  if (!studentBatch) return false;
+  if (studentBatch === batch) return true;
+  const a = BATCH_RE.exec(studentBatch), b = BATCH_RE.exec(batch.trim());
+  return !!a && !!b && a[2] === b[2] && Number(a[1]) > Number(b[1]);
+}
+
 /** The structure a category takes its fee from (SPOT = Category A's). */
 export const structureCategory = (c: FeeCategory): "A" | "B" => (c === "B" ? "B" : "A");
 /** SPOT and B are always paid by the student. */

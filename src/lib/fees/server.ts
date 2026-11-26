@@ -3,7 +3,9 @@ import type { Course, StudentRecord } from "@/types";
 import type { FeeBankAccount, FeeCategory, FeeConcession, FeeFunding, FeeHead, FeePaymentMode, FeeReceipt, FeeSettings, FeeStructure, StudentFeeAccount } from "@/types/fees";
 import { PaymentError } from "@/lib/payments/server";
 import { receiptNumber } from "@/lib/payments/settle";
-import { allocationOf, canBeFr, categoryOfType, CATEGORY_LABEL, DATE_RE, fundingError, normType, paymentError, recompute, structureCategory } from "./rules";
+import { loadCollegeSettings } from "@/lib/firestore/collegeSettings";
+import { currentAcademicStartYear, resolveAcademicYearStart } from "@/lib/college/academicSession";
+import { allocationOf, canBeFr, categoryOfType, CATEGORY_LABEL, DATE_RE, fundingError, inFeeBatch, normType, paymentError, recompute, structureCategory, studentFeeBatch, yearOfBatch } from "./rules";
 
 // Server side of student fees (types/fees.ts): where things live, raising a class's fees from its structures (by
 // fee category), and the money steps - counter payment, cancel, FR / NFR change, concession from an approved
@@ -32,11 +34,11 @@ const step = (a: Pick<StudentFeeAccount, "history"> | null, at: string, byName: 
   [...(a?.history ?? []), { at, byName, action, ...(detail ? { detail } : {}) }].slice(-50);
 
 /** The course key of each course doc (catalog id, else "name:<lower name>") - as the course groups use. */
-export async function courseKeys(db: Db, c: string): Promise<Map<string, { key: string; name: string }>> {
+export async function courseKeys(db: Db, c: string): Promise<Map<string, { key: string; name: string; durationYears?: number }>> {
   const snap = await feeRefs(db, c).college.collection("courses").get();
   return new Map(snap.docs.map((d) => {
     const v = d.data() as Course;
-    return [d.id, { key: v.catalogId || `name:${String(v.name ?? "").trim().toLowerCase()}`, name: v.name ?? "" }];
+    return [d.id, { key: v.catalogId || `name:${String(v.name ?? "").trim().toLowerCase()}`, name: v.name ?? "", durationYears: Number(v.durationYears) || undefined }];
   }));
 }
 
@@ -75,17 +77,28 @@ export interface RaiseRow {
  */
 export async function raiseFees(db: Db, c: string, q: { academicYear: string; courseKey: string; batch: string; apply: boolean; byName: string }): Promise<RaiseRow[]> {
   const refs = feeRefs(db, c);
-  const [structSnap, keys, studentSnap, settings, heads, banks] = await Promise.all([
+  // Students are found by the batch stored on them AND by the year of study that batch is in now - most records
+  // (VIT) carry no batch, only `year`; studentFeeBatch decides which batch each one is really in.
+  const currentStart = currentAcademicStartYear(new Date(), resolveAcademicYearStart(await loadCollegeSettings(db, c)));
+  const year = yearOfBatch(q.batch, currentStart);
+  const studentsCol = refs.college.collection("students");
+  const [structSnap, keys, byBatch, byYear, settings, heads, banks] = await Promise.all([
     refs.structures.where("academicYear", "==", q.academicYear).where("courseKey", "==", q.courseKey).where("batch", "==", q.batch).get(),
     courseKeys(db, c),
-    refs.college.collection("students").where("batch", "==", q.batch).get(),
+    studentsCol.where("batch", "==", q.batch).get(),
+    year != null && year >= 1 && year <= 10 ? studentsCol.where("year", "==", year).get().then((s) => s.docs) : Promise.resolve([]),
     loadSettings(db, c), loadHeads(db, c), loadBankAccounts(db, c),
   ]);
   const structures = structSnap.docs.map((d) => ({ ...(d.data() as FeeStructure), id: d.id })).filter((s) => s.status === "PUBLISHED");
   const headOf = new Map(heads.map((h) => [h.id, h]));
   const bankOf = new Map(banks.map((b) => [b.id, b]));
-  const students = studentSnap.docs.map((d) => ({ ...(d.data() as StudentRecord), id: d.id }))
-    .filter((s) => keys.get(s.courseId ?? "")?.key === q.courseKey && (s.status === "REGULAR" || s.status === "DETAINED" || !s.status))
+  const found = new Map([...byBatch.docs, ...byYear].map((d) => [d.id, { ...(d.data() as StudentRecord), id: d.id }]));
+  const students = [...found.values()]
+    .filter((s) => {
+      const course = keys.get(s.courseId ?? "");
+      return course?.key === q.courseKey && inFeeBatch(studentFeeBatch(s, currentStart, course.durationYears), q.batch);
+    })
+    .filter((s) => s.status === "REGULAR" || s.status === "DETAINED" || !s.status)
     .sort((a, b) => (a.rollNumber ?? "").localeCompare(b.rollNumber ?? ""));
   const existing = new Map<string, StudentFeeAccount>();
   for (let i = 0; i < students.length; i += 300) {
