@@ -21,6 +21,7 @@ const TONE: Record<Row["outcome"], string> = { NEW: "text-emerald-700 dark:text-
 export function RaiseFees({ collegeId, options, academicYear, setAcademicYear }: { collegeId: string; options: FeeOptions; academicYear: string; setAcademicYear: (y: string) => void }) {
   const [courseKey, setCourseKey] = useState(options.courses[0]?.key ?? "");
   const [batch, setBatch] = useState("");
+  const [rollNumber, setRollNumber] = useState("");
   const [rows, setRows] = useState<Row[] | null>(null);
   const [applied, setApplied] = useState(false);
   const [busy, setBusy] = useState<null | "check" | "apply">(null);
@@ -29,7 +30,7 @@ export function RaiseFees({ collegeId, options, academicYear, setAcademicYear }:
   async function run(apply: boolean) {
     setBusy(apply ? "apply" : "check");
     try {
-      const d = await feeSend<{ rows: Row[] }>("/api/college/fees/raise", collegeId, "POST", { academicYear, courseKey, batch, apply });
+      const d = await feeSend<{ rows: Row[] }>("/api/college/fees/raise", collegeId, "POST", { academicYear, courseKey, batch, apply, ...(rollNumber ? { rollNumber } : {}) });
       setRows(d.rows); setApplied(apply);
       if (apply) toast({ variant: "success", title: `Fees raised for ${d.rows.filter((r) => r.outcome === "NEW" || r.outcome === "UPDATED").length} students.` });
     } catch (e) { toast({ variant: "destructive", title: (e as Error).message }); }
@@ -41,19 +42,22 @@ export function RaiseFees({ collegeId, options, academicYear, setAcademicYear }:
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Raise Fees</CardTitle>
-        <CardDescription>Gives every current student of a course and batch the year&apos;s fee from the published fee structure of their category. Check first; nothing is saved until you raise.</CardDescription>
+        <CardDescription>Gives every current student of a course and batch the year&apos;s fee from the published fee structure of their category - or, with a Regd. No, only that student (a late admission). Check first; nothing is saved until you raise.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-[8rem_1fr_10rem_auto]">
+        <div className="grid gap-3 sm:grid-cols-[8rem_1fr_10rem_10rem_auto]">
           <div className="space-y-1"><Label className="text-xs">Academic Year</Label><select className={selectClass} value={academicYear} onChange={(e) => { setAcademicYear(e.target.value); setRows(null); }}>{yearChoices(options.academicYear).map((y) => <option key={y} value={y}>{y}</option>)}</select></div>
           <div className="space-y-1"><Label className="text-xs">Course</Label><select className={selectClass} value={courseKey} onChange={(e) => { setCourseKey(e.target.value); setBatch(""); setRows(null); }}>{options.courses.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}</select></div>
           <div className="space-y-1"><Label className="text-xs">Batch</Label>
             <Input list="raise-batches" value={batch} placeholder="2026-2030" onChange={(e) => { setBatch(e.target.value.trim()); setRows(null); }} />
             <datalist id="raise-batches">{batches.map((b) => <option key={b} value={b} />)}</datalist>
           </div>
+          <div className="space-y-1"><Label className="text-xs">Regd. No (Optional)</Label>
+            <Input value={rollNumber} placeholder="Only this student" onChange={(e) => { setRollNumber(e.target.value.trim().toUpperCase()); setRows(null); }} />
+          </div>
           <div className="flex items-end gap-2">
             <Button variant="outline" disabled={!batch || !!busy} loading={busy === "check"} onClick={() => void run(false)}>Check</Button>
-            {rows && !applied && <Button disabled={!!busy || !(count("NEW") + count("UPDATED"))} loading={busy === "apply"} onClick={() => void run(true)}>Raise for {count("NEW") + count("UPDATED")}</Button>}
+            {rows && !applied && <Button disabled={!!busy || !(count("NEW") + count("UPDATED"))} loading={busy === "apply"} onClick={() => void run(true)}>Raise for {rollNumber && count("NEW") + count("UPDATED") === 1 ? rollNumber : count("NEW") + count("UPDATED")}</Button>}
           </div>
         </div>
         {rows && (
