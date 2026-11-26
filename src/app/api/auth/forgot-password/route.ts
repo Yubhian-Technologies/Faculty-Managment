@@ -20,7 +20,7 @@ import { sendMail } from "@/lib/email/mailer";
 const IP_LIMIT = 10;
 const KEY_LIMIT = 3;
 const WINDOW_MS = 15 * 60_000;
-const SENT = { ok: true, message: "If an account matches, a password reset link has been sent to its email. Students: it goes to the email on your student record." };
+const SENT = { ok: true, message: "If your account is found, a link to change your password has been sent to your email." };
 const isPlaceholder = (email: string) => /@students\.internal$/i.test(email);
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);

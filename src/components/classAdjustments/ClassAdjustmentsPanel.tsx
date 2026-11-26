@@ -78,7 +78,9 @@ function RowCard({ r, actions }: { r: Row; actions?: React.ReactNode }) {
 }
 
 export function ClassAdjustmentsPanel() {
-  const [open, setOpen] = useState(false);
+  // "?adjust=<slotId>" (the early check-out popup's Adjust Class): open the form on today's period.
+  const [presetSlotId] = useState(() => (typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("adjust") ?? ""));
+  const [open, setOpen] = useState(() => !!presetSlotId);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [declineFor, setDeclineFor] = useState<Row | null>(null);
   const [cancelFor, setCancelFor] = useState<Row | null>(null);
@@ -101,6 +103,7 @@ export function ClassAdjustmentsPanel() {
   const asked = (data?.mine ?? []).filter((r) => r.status === "PENDING" && r.counterpartFacultyId === me);
   const mine = (data?.mine ?? []).filter((r) => !(r.status === "PENDING" && r.counterpartFacultyId === me));
   const deptOnly = (data?.department ?? []).filter((r) => !r.facultyIds.includes(me));
+
 
   async function act(row: Row, action: "ACCEPT" | "DECLINE" | "CANCEL", reason?: string) {
     setBusyId(row.id);
@@ -175,6 +178,7 @@ export function ClassAdjustmentsPanel() {
           onDone={() => { setOpen(false); load(); }}
           myFacultyId={data.myFacultyId}
           departmentFaculty={data.isHod ? data.departmentFaculty : []}
+          initialSlotId={presetSlotId ?? ""}
         />
       )}
 
@@ -199,15 +203,17 @@ export function ClassAdjustmentsPanel() {
   );
 }
 
-function AdjustDialog({ onClose, onDone, myFacultyId, departmentFaculty }: {
+function AdjustDialog({ onClose, onDone, myFacultyId, departmentFaculty, initialSlotId = "" }: {
   onClose: () => void; onDone: () => void; myFacultyId: string; departmentFaculty: { id: string; name: string; department: string }[];
+  /** Today's period to start on (the early check-out popup). */
+  initialSlotId?: string;
 }) {
   const today = istToday();
   const [forId, setForId] = useState(myFacultyId);
   const [date, setDate] = useState(today);
   const [loaded, setLoaded] = useState<{ key: string; value: OptionsResponse } | null>(null);
   const [kind, setKind] = useState<"ADJUST" | "SWAP">("ADJUST");
-  const [slotId, setSlotId] = useState("");
+  const [slotId, setSlotId] = useState(initialSlotId);
   const [toId, setToId] = useState("");
   const [toAssignmentId, setToAssignmentId] = useState("");
   const [swapSlotId, setSwapSlotId] = useState("");

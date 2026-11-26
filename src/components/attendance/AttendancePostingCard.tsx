@@ -13,11 +13,20 @@ export function AttendancePostingCard() {
   const [value, setValue] = useState("");
   const [canEdit, setCanEdit] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [lateSaved, setLateSaved] = useState<number | null>(null);
+  const [lateValue, setLateValue] = useState("");
+  const [canEditLate, setCanEditLate] = useState(false);
+  const [lateBusy, setLateBusy] = useState(false);
 
   useEffect(() => {
     fetch("/api/college/settings/attendance-posting")
-      .then((r) => (r.ok ? r.json() : null) as Promise<{ extraMinutes: number; canEdit: boolean } | null>)
-      .then((d) => { if (d) { setSaved(d.extraMinutes); setValue(String(d.extraMinutes)); setCanEdit(d.canEdit); } })
+      .then((r) => (r.ok ? r.json() : null) as Promise<{ extraMinutes: number; canEdit: boolean; lateMarkDays?: number; canEditLateMark?: boolean } | null>)
+      .then((d) => {
+        if (!d) return;
+        setSaved(d.extraMinutes); setValue(String(d.extraMinutes)); setCanEdit(d.canEdit);
+        if (d.lateMarkDays != null) { setLateSaved(d.lateMarkDays); setLateValue(String(d.lateMarkDays)); }
+        setCanEditLate(!!d.canEditLateMark);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -38,7 +47,26 @@ export function AttendancePostingCard() {
     }
   }
 
+  async function saveLate() {
+    setLateBusy(true);
+    try {
+      const res = await fetch("/api/college/settings/attendance-posting", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lateMarkDays: Number(lateValue) }),
+      });
+      const d = (await res.json()) as { lateMarkDays?: number; error?: string };
+      if (!res.ok) throw new Error(d.error ?? "Unable to save the late marking days.");
+      setLateSaved(d.lateMarkDays ?? Number(lateValue));
+      toast({ title: "Late marking days saved." });
+    } catch (e) {
+      toast({ variant: "destructive", title: (e as Error).message });
+    } finally {
+      setLateBusy(false);
+    }
+  }
+
   if (saved === null) return null;
+  const ln = Number(lateValue);
+  const lateValid = Number.isInteger(ln) && ln >= 0 && ln <= 7;
   const n = Number(value);
   const valid = Number.isInteger(n) && n >= 0 && n <= 240;
   return (
@@ -61,6 +89,26 @@ export function AttendancePostingCard() {
           <p className="text-xs text-muted-foreground">Set by the College Admin.</p>
         )}
       </CardContent>
+      {lateSaved !== null && (
+        <CardContent className="space-y-2 border-t pt-4">
+          <p className="text-sm font-medium">Late Marking</p>
+          <p className="text-sm text-muted-foreground">
+            A faculty member who missed posting a class can still mark it with a reason, up to this many days back. It counts at once, and the HOD
+            of the class&apos;s department is told and sees it on Attendance Completion. 0 turns late marking off.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="late-mark-days">Days Back</Label>
+              <Input id="late-mark-days" type="number" min={0} max={7} className="w-32" value={lateValue} disabled={!canEditLate} onChange={(e) => setLateValue(e.target.value)} />
+            </div>
+            {canEditLate ? (
+              <Button onClick={() => void saveLate()} loading={lateBusy} disabled={!lateValid || ln === lateSaved}>Save</Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">Set by the Principal.</p>
+            )}
+          </div>
+        </CardContent>
+      )}
     </Card>
   );
 }

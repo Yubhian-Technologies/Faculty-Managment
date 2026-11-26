@@ -15,6 +15,7 @@ import type { DayOfWeek, FacultyMember, TimetableSlot, CourseYearTiming } from "
 import type { LeaveRequest, PeriodSubstitution, StaffAdjustment } from "@/types/leave";
 import { resolveCollegeAcademicYear } from "@/lib/college/collegeAcademicYear";
 import { dmy } from "@/lib/utils";
+import { loadClassCalendar, noClassReason } from "@/lib/studentAttendance/classDay";
 
 // Resolves, for a batch of TimetableSlots spanning possibly many course-years,
 // which ones belong to the currently-live semester/session - the same "no
@@ -179,6 +180,12 @@ export async function resolveRequiredPeriods(
   }
 
   const workingDates = enumerateWorkingDates(fromDate, toDate, holidayDates);
+  // `holidayDates` holds only the holidays faculty get (the leave-day count). A day the college holds no classes -
+  // Classwork Suspended, a students-only holiday, a students' sem break - is still a working day for the faculty
+  // member, but has no period to cover, so no substitute is asked for it (and none is left waiting to accept).
+  const classCalendar = workingDates.length
+    ? await loadClassCalendar(db, collegeId, isoDateKey(workingDates[0]), isoDateKey(workingDates[workingDates.length - 1])).catch(() => null)
+    : null;
   const required: RequiredPeriod[] = [];
   for (const date of workingDates) {
     const day = dayOfWeekFromDate(date);
@@ -186,6 +193,7 @@ export async function resolveRequiredPeriods(
     const daySlots = slotsByDay.get(day);
     if (!daySlots) continue;
     const dateISO = isoDateKey(date);
+    if (classCalendar && noClassReason({ dateISO, ...classCalendar })) continue;
     for (const s of daySlots) {
       required.push({
         date: dateISO, day, periodNumber: s.periodNumber, timetableSlotId: s.id,

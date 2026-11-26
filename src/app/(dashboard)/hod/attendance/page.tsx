@@ -3,7 +3,7 @@
 import { useAppliedFilters } from "@/hooks/useAppliedFilters";
 import { LoadButton } from "@/components/shared/LoadButton";
 import { useEffect, useState, useCallback } from "react";
-import { CalendarDays, Info, LogIn, LogOut, ScanFace } from "lucide-react";
+import { CalendarDays, Info, LogIn, ScanFace } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MarkAttendanceDialog } from "@/components/attendance/MarkAttendanceDialog";
+import { EarlyCheckOutButton } from "@/components/attendance/EarlyCheckOutButton";
 import { PhoneCheckInCard } from "@/components/attendance/PhoneCheckInCard";
 import { toast } from "@/hooks/useToast";
 import { formatDate, toDate } from "@/lib/utils";
@@ -62,6 +63,7 @@ export default function HODAttendancePage() {
   const [faceRegistered, setFaceRegistered] = useState<boolean | null>(null);
   const [todayStatus, setTodayStatus] = useState<{ isSunday: boolean; isHoliday: boolean; holidayName: string | null; isOnLeave: boolean } | null>(null);
   const [dialogMode, setDialogMode] = useState<"check-in" | "check-out" | "register" | null>(null);
+  const [earlyReason, setEarlyReason] = useState<string | undefined>(undefined);
 
   const loadFaceRegistration = useCallback(async () => {
     try {
@@ -161,9 +163,7 @@ export default function HODAttendancePage() {
             ) : todayRecord?.checkIn ? (
               <>
                 <p className="text-sm">Checked in at <span className="font-medium">{todayRecord.checkIn}</span>.</p>
-                <Button onClick={() => setDialogMode("check-out")}>
-                  <LogOut className="h-4 w-4 mr-1.5" /> Check Out
-                </Button>
+                <EarlyCheckOutButton onProceed={(r) => { setEarlyReason(r); setDialogMode("check-out"); }} />
               </>
             ) : (
               <>
@@ -327,6 +327,7 @@ export default function HODAttendancePage() {
 
       {dialogMode && (
         <MarkAttendanceDialog
+          earlyReason={dialogMode === "check-out" ? earlyReason : undefined}
           mode={dialogMode}
           open={!!dialogMode}
           onOpenChange={(o) => { if (!o) setDialogMode(null); }}

@@ -1,5 +1,6 @@
 "use client";
 
+import { MissedClassesCard } from "@/components/attendance/MissedClassesCard";
 import { sortStudentsForList } from "@/lib/students/listOrder";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, Info, Lock, Pencil, RefreshCw, Clock, CloudOff, CloudUpload, Check, X } from "lucide-react";
@@ -460,6 +461,9 @@ export default function MarkAttendancePage() {
     try {
       const fetchedSessions: Record<number, StudentAttendanceSession> = {};
       let notes = "";
+      // The server's own reason for a refused period (e.g. two labs at once with no lab batches, or the class time
+      // is over) - shown instead of a bare "unable to load", so the faculty knows what to do.
+      let refusal = "";
 
       await Promise.all(
         g.periods.map(async (p: TodayPeriod) => {
@@ -486,16 +490,18 @@ export default function MarkAttendancePage() {
             }
             return;
           }
-          const json = (await res.json()) as { session?: StudentAttendanceSession; error?: string };
+          const json = (await res.json().catch(() => ({}))) as { session?: StudentAttendanceSession; error?: string };
           if (res.ok && json.session) {
             fetchedSessions[p.periodNumber] = json.session;
             if (json.session.classNotes) notes = json.session.classNotes;
+          } else if (!refusal && json.error) {
+            refusal = json.error;
           }
         })
       );
 
       if (Object.keys(fetchedSessions).length === 0) {
-        setLoadError("Unable to load attendance sessions");
+        setLoadError(refusal || "Unable to load attendance sessions. Refresh and try again.");
         return;
       }
 
@@ -752,6 +758,8 @@ export default function MarkAttendancePage() {
         description="Classes assigned to you today in the published timetable. Consecutive lab periods are grouped into one slot, with attendance for each period."
       />
 
+      {!viewDate && <MissedClassesCard />}
+
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={() => void fetchTodayPeriods()} disabled={isLoadingPeriods}>
           <RefreshCw className="h-4 w-4" /> Refresh
@@ -931,7 +939,7 @@ export default function MarkAttendancePage() {
 
       {expandedGroupId && !isLoadingStudents && loadError && (
         <Card>
-          <CardContent className="py-12 text-center text-sm text-muted-foreground">{loadError}</CardContent>
+          <CardContent className="mx-auto max-w-2xl py-12 text-center text-sm text-muted-foreground">{loadError}</CardContent>
         </Card>
       )}
 

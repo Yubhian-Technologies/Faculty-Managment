@@ -53,9 +53,11 @@ interface MarkAttendanceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  /** Check-out before the college's End Time: the reason already asked by EarlyCheckOutButton. */
+  earlyReason?: string;
 }
 
-function FaceAttendanceDialog({ mode, open, onOpenChange, onSuccess }: MarkAttendanceDialogProps) {
+function FaceAttendanceDialog({ mode, open, onOpenChange, onSuccess, earlyReason }: MarkAttendanceDialogProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [stage, setStage] = useState<Stage>("init");
@@ -432,6 +434,7 @@ function FaceAttendanceDialog({ mode, open, onOpenChange, onSuccess }: MarkAtten
           capturedAt: proof.capturedAt,
           accuracy: coordsRef.current.accuracy,
           ...(mode === "check-in" && late ? { lateReason: lateReason.trim() } : {}),
+          ...(mode === "check-out" && earlyReason ? { earlyReason } : {}),
         }),
       });
       const json = await res.json() as { error?: string; code?: string; checkIn?: string; checkOut?: string };

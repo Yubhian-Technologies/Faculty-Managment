@@ -126,6 +126,10 @@ export interface StudentAttendanceSession {
   // offline queue). `markedAt` = the phone's own time when they pressed Submit (as reported - a phone clock can be
   // wrong), `syncedAt` = when the server received it. Accepted the same day only; shown to the HOD as "Marked offline".
   markedOffline?: { markedAt: string; syncedAt: string } | null;
+  // Late Marking (lib/studentAttendance/lateMark.ts): posted by the faculty after the period's posting window
+  // closed, within the college's Late Marking days, with a reason. `openedAt` / `submittedAt` = ISO times;
+  // `notCheckedIn` = they had no self check-in that day (shown to the HOD).
+  lateMark?: { reason: string; openedAt: string; submittedAt?: string; notCheckedIn?: boolean } | null;
 }
 
 // ─── Lab attendance allocation ───

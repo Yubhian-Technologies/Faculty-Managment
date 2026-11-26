@@ -67,6 +67,15 @@ interface RosterEntry {
   // `remarks` above, which is an approver's own note, not the requester's.
   // Only ever set alongside a Late checkIn (see isLateCheckIn).
   lateReason: string | null;
+  /** A self check-out before the college's End Time: the reason and how the classes left were covered. */
+  earlyOut?: EarlyOut | null;
+}
+
+type EarlyOut = { reason: string; closingTime: string | null; withPermission: boolean; adjusted: boolean };
+function earlyOutOf(rec: AttendanceRecord): EarlyOut | null {
+  const e = rec.earlyCheckOut;
+  if (!e) return null;
+  return { reason: e.reason ?? "", closingTime: e.closingTime ?? null, withPermission: !!e.permissionIds?.length, adjusted: !!e.adjustmentIds?.length };
 }
 
 // Daily oversight roster: every PANEL_MEMBER in scope (HOD: own department +
@@ -129,6 +138,7 @@ export async function GET(request: Request) {
         permittedCheckInTime: string | null;
         lateAfter?: string | null;
         lateReason: string | null;
+        earlyOut?: EarlyOut | null;
         entry: RosterEntry;
       }[] = [];
 
@@ -145,6 +155,7 @@ export async function GET(request: Request) {
           permittedCheckInTime: rec.permittedCheckInTime ?? null,
           lateAfter: (rec as { lateAfter?: string }).lateAfter ?? null,
           lateReason: rec.lateReason ?? null,
+          earlyOut: earlyOutOf(rec),
           entry: rosterByUid.get(rec.facultyId)!,
         });
       }
@@ -162,6 +173,7 @@ export async function GET(request: Request) {
         p.entry.lateAfter = p.lateAfter;
         p.entry.remarks = p.remarks;
         p.entry.lateReason = p.lateReason;
+        p.entry.earlyOut = p.earlyOut ?? null;
       }
 
       const todayStart = istMidnightUTC(new Date());
@@ -292,6 +304,7 @@ export async function GET(request: Request) {
       permittedCheckInTime: string | null;
       lateAfter?: string | null;
       lateReason: string | null;
+      earlyOut?: EarlyOut | null;
       entry: RosterEntry;
     }[] = [];
 
@@ -313,6 +326,7 @@ export async function GET(request: Request) {
         permittedCheckInTime: rec.permittedCheckInTime ?? null,
         lateAfter: (rec as { lateAfter?: string }).lateAfter ?? null,
         lateReason: rec.lateReason ?? null,
+          earlyOut: earlyOutOf(rec),
         entry: rosterByUid.get(rec.facultyId)!,
       });
     }
@@ -330,6 +344,7 @@ export async function GET(request: Request) {
       p.entry.lateAfter = p.lateAfter;
       p.entry.remarks = p.remarks;
       p.entry.lateReason = p.lateReason;
+        p.entry.earlyOut = p.earlyOut ?? null;
     }
 
     // "No record yet" defaults to NOT_MARKED above - refine it:

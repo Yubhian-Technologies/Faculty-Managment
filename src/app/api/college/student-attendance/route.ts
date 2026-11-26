@@ -4,6 +4,8 @@ import { effectiveLabBatch, loadLabBatchModes } from "@/lib/students/labBatchMod
 import { badBodyResponse, readJsonBody } from "@/lib/http/readJsonBody";
 import { NextResponse } from "next/server";
 import { offlineStamp, parseOfflineMark } from "@/lib/studentAttendance/offlineMark";
+import { parseLateMark } from "@/lib/studentAttendance/lateMark";
+import { checkLatePeriod } from "@/lib/studentAttendance/lateMarkServer";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireCollegeMember } from "@/lib/auth/verifySession";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -28,12 +30,18 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export async function POST(request: Request) {
   try {
     const session = await requireCollegeMember("PANEL_MEMBER");
-    const body = (await readJsonBody(request)) as { assignmentId?: string; date?: string; periodNumber?: number; offline?: unknown };
+    const body = (await readJsonBody(request)) as { assignmentId?: string; date?: string; periodNumber?: number; offline?: unknown; lateMark?: unknown };
     const assignmentId = body.assignmentId?.trim();
     const date = body.date?.trim();
 
     if (!assignmentId || !date || !DATE_RE.test(date)) {
       return NextResponse.json({ error: "assignmentId and a valid date (YYYY-MM-DD) are required" }, { status: 400 });
+    }
+
+    // Late Marking: a missed class posted after its window closed, with a reason (lib/studentAttendance/lateMark.ts).
+    let lateMarkIn: { reason: string } | null;
+    try { lateMarkIn = parseLateMark(body.lateMark); } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 400 });
     }
 
     const db = getAdminDb();
@@ -49,7 +57,7 @@ export async function POST(request: Request) {
       resolveFacultyMemberId(db, session.collegeId, session.uid),
     ]);
     if (closedReason) {
-      return NextResponse.json({ error: `No classes today - ${closedReason}.` }, { status: 403 });
+      return NextResponse.json({ error: lateMarkIn ? `No classes that day - ${closedReason}.` : `No classes today - ${closedReason}.` }, { status: 403 });
     }
 
     // Only load a subject this faculty member is currently (not historically)
@@ -153,6 +161,14 @@ export async function POST(request: Request) {
     const offline = parseOfflineMark(body.offline, now);
     if (!windowCheck.ok && offline && requestedPeriod != null) {
       windowCheck = await checkFacultyPeriodWindow(db, session.collegeId, facultyMemberId, assignmentId, date, now, requestedPeriod, { untilEndOfDay: true });
+    }
+    // Late Marking: only once the usual window has closed (an open period is marked the usual way).
+    let lateMark: { reason: string; openedAt: string; notCheckedIn?: boolean } | null = null;
+    if (!windowCheck.ok && lateMarkIn) {
+      const late = await checkLatePeriod(db, session.collegeId, { uid: session.uid, facultyMemberId }, assignmentId, date, requestedPeriod, now);
+      if (!late.ok) return NextResponse.json({ error: late.message, code: "LATE_MARK_REFUSED" }, { status: 403 });
+      windowCheck = { ok: true, slot: late.slot, startTime: late.startTime, endTime: late.endTime };
+      lateMark = { reason: lateMarkIn.reason, openedAt: now.toISOString(), ...(late.notCheckedIn ? { notCheckedIn: true } : {}) };
     }
     if (!windowCheck.ok) {
       return NextResponse.json({ error: periodWindowMessage(windowCheck) }, { status: 403 });
@@ -293,8 +309,11 @@ export async function POST(request: Request) {
             attendanceOnly: substituteFor ? true : FieldValue.delete(),
           };
         }
+        // Opened during its window and left as a draft, now finished through Late Marking: stamp it (once).
+        const lateFix = lateMark && !existing.lateMark ? { lateMark } : {};
         tx.update(ref, {
           ...ownerFix,
+          ...lateFix,
           entries,
           totalStudents: entries.length,
           presentCount,
@@ -303,7 +322,7 @@ export async function POST(request: Request) {
           ...academicYearFix,
         });
         resultSession = {
-          ...existing, id, entries, totalStudents: entries.length, presentCount, updatedAt: now as unknown as StudentAttendanceSession["updatedAt"], ...semesterFix, ...academicYearFix,
+          ...existing, id, entries, totalStudents: entries.length, presentCount, updatedAt: now as unknown as StudentAttendanceSession["updatedAt"], ...semesterFix, ...academicYearFix, ...lateFix,
           ...(ownerFix.facultyId ? { facultyId: session.uid, facultyName: ownerFix.facultyName as string } : {}),
         } as unknown as StudentAttendanceSession & { id: string };
         resultStatus = 200;
@@ -349,6 +368,7 @@ export async function POST(request: Request) {
         createdAt: now,
         updatedAt: now,
         ...(offline ? { markedOffline: offlineStamp(offline, now) } : {}),
+        ...(lateMark ? { lateMark } : {}),
       };
       tx.set(ref, attendanceSession);
       resultSession = { id, ...attendanceSession } as unknown as StudentAttendanceSession & { id: string };

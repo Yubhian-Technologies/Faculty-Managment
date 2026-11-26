@@ -224,6 +224,10 @@ export async function GET(request: Request) {
           submittedAtDisplay: formatISTTime(attendanceSession?.submittedAt),
           // Marked on the faculty's phone with no internet and sent later: the phone's time at Submit.
           markedOfflineAt: attendanceSession?.markedOffline?.markedAt ?? null,
+          // Late Marking: posted after the window closed, with the faculty's reason.
+          lateMark: attendanceSession?.lateMark?.submittedAt
+            ? { reason: attendanceSession.lateMark.reason, at: attendanceSession.lateMark.submittedAt, notCheckedIn: !!attendanceSession.lateMark.notCheckedIn }
+            : null,
           // Corrected by the College Admin / Principal: "Updated by <name> (Admin) on <date>".
           adminUpdated: attendanceSession?.adminUpdated
             ? { byName: attendanceSession.adminUpdated.byName, at: (attendanceSession.adminUpdated.at as { toDate?: () => Date })?.toDate?.()?.toISOString() ?? null }

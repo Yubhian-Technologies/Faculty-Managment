@@ -4,7 +4,7 @@ import { defaultPeriodTimings } from "@/lib/timetable/buildGrid";
 import { loadEffectiveTiming, resolveCurrentSemester, matchesCurrentSemester } from "@/lib/college/semester";
 import { substituteDay } from "@/lib/leave/substituteTeaching";
 import { istDateFromParts } from "@/lib/attendance/istTime";
-import { getTimetableDay } from "@/lib/studentAttendance/classDay";
+import { getNoClassReasonCached, getTimetableDay } from "@/lib/studentAttendance/classDay";
 import { activeSlotsOn } from "@/lib/timetable/slotScope";
 import { addMinutesCapped, postingExtraMinutes } from "@/lib/attendance/attendancePosting";
 import { classAdjustmentLegsOn } from "@/lib/classAdjustments/inForce";
@@ -230,6 +230,9 @@ export async function getFacultyPeriodsForDate(
   // timetable; any other Sunday has nothing scheduled.
   const day = DAY_BY_JS_DAY[new Date(y, m - 1, d).getDay()] ?? await getTimetableDay(db, collegeId, dateISO);
   if (!day) return [];
+  // No classes that day (a holiday, Classwork Suspended, a students' sem break, not a working day): nothing was
+  // due, so dashboards, the completion report and the not-posted counts don't list the timetable as "not posted".
+  if (await getNoClassReasonCached(db, collegeId, dateISO)) return [];
 
   const collegeRef = db.collection("colleges").doc(collegeId);
   const slotsSnap = await collegeRef.collection("timetableSlots")

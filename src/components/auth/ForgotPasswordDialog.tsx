@@ -25,7 +25,7 @@ export function ForgotPasswordDialog({ initial, onClose }: { initial: string; on
       const res = await fetch("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier: identifier.trim() }) });
       const d = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
       if (!res.ok) throw new Error(d.error ?? "Unable to send the reset link. Try again.");
-      setSent(d.message ?? "If an account matches, a password reset link has been sent to its email.");
+      setSent(d.message ?? "If your account is found, a link to change your password has been sent to your email.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to send the reset link. Try again.");
     } finally {
@@ -38,12 +38,13 @@ export function ForgotPasswordDialog({ initial, onClose }: { initial: string; on
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Forgot Password</DialogTitle>
-          <DialogDescription>Enter what you sign in with. We email you a link to set a new password.</DialogDescription>
+          <DialogDescription>Enter what you sign in with. We email you a link to change your password.</DialogDescription>
         </DialogHeader>
         {sent ? (
           <div className="space-y-3 text-sm">
             <p className="flex items-start gap-2"><MailCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />{sent}</p>
-            <p className="text-muted-foreground">Check your inbox and spam folder. The link works once and expires in about an hour. No email? Students: ask your College Office to add your email to your record. Staff: contact your college administrator.</p>
+            <p className="text-muted-foreground">Open the link in the email to set your new password. The link works once and expires in about an hour.</p>
+            <p className="text-muted-foreground">Did not get the email? Check your spam folder. If it is not there, contact your college administrator.</p>
             <DialogFooter><Button onClick={onClose}>Back to Sign In</Button></DialogFooter>
           </div>
         ) : (
