@@ -17,14 +17,17 @@ export async function POST(request: Request) {
   try {
     const db = getAdminDb();
     const session = await requireFeesManager(db, request);
-    const body = (await readJsonBody(request)) as { academicYear?: unknown; courseKey?: unknown; batch?: unknown; apply?: unknown };
+    const body = (await readJsonBody(request)) as { academicYear?: unknown; courseKey?: unknown; batch?: unknown; apply?: unknown; rollNumber?: unknown };
     const academicYear = String(body.academicYear ?? ""), courseKey = String(body.courseKey ?? ""), batch = String(body.batch ?? "");
     if (!ACADEMIC_YEAR_RE.test(academicYear) || !courseKey || !batch) throw new FeeError("Select the academic year, course and batch.");
+    // Optional: raise for one student only (Regd. No).
+    const rollNumber = String(body.rollNumber ?? "").trim().toUpperCase().slice(0, 40) || undefined;
     const apply = body.apply === true;
-    const rows = await raiseFees(db, session.collegeId, { academicYear, courseKey, batch, apply, byName: session.byName });
+    const rows = await raiseFees(db, session.collegeId, { academicYear, courseKey, batch, apply, byName: session.byName, rollNumber });
+    if (rollNumber && rows.length === 0) throw new FeeError(`No current student with Regd. No ${rollNumber} in this course and batch. Check the batch picked.`, 404);
     if (apply) {
       const counts = Object.fromEntries(["NEW", "UPDATED", "KEPT", "NO_STRUCTURE"].map((k) => [k, rows.filter((r) => r.outcome === k).length]));
-      await writeAuditLogSafe(db, session.collegeId, { action: "FEES_RAISED", performedBy: session.uid, performedByName: session.byName, targetId: `${academicYear}__${batch}`, details: { academicYear, courseKey, batch, ...counts } });
+      await writeAuditLogSafe(db, session.collegeId, { action: "FEES_RAISED", performedBy: session.uid, performedByName: session.byName, targetId: `${academicYear}__${batch}`, details: { academicYear, courseKey, batch, ...(rollNumber ? { rollNumber } : {}), ...counts } });
       // Tell the students whose fee was raised (those with a login).
       const accounts = rows.filter((r) => r.outcome === "NEW");
       if (accounts.length) {

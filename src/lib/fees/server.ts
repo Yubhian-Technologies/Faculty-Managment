@@ -75,7 +75,7 @@ export interface RaiseRow {
  * NFR until the Scholarship Cell marks FR); SPOT and B are always NFR. An account with payments is never changed
  * (KEPT); one without takes the structure's current fee, keeping its concessions. apply false = preview only.
  */
-export async function raiseFees(db: Db, c: string, q: { academicYear: string; courseKey: string; batch: string; apply: boolean; byName: string }): Promise<RaiseRow[]> {
+export async function raiseFees(db: Db, c: string, q: { academicYear: string; courseKey: string; batch: string; apply: boolean; byName: string; rollNumber?: string }): Promise<RaiseRow[]> {
   const refs = feeRefs(db, c);
   // Students are found by the batch stored on them AND by the year of study that batch is in now - most records
   // (VIT) carry no batch, only `year`; studentFeeBatch decides which batch each one is really in.
@@ -99,6 +99,8 @@ export async function raiseFees(db: Db, c: string, q: { academicYear: string; co
       return course?.key === q.courseKey && inFeeBatch(studentFeeBatch(s, currentStart, course.durationYears), q.batch);
     })
     .filter((s) => s.status === "REGULAR" || s.status === "DETAINED" || !s.status)
+    // One student only (a late admission, or a test): their Regd. No, still inside the course + batch picked.
+    .filter((s) => !q.rollNumber || String(s.rollNumber ?? "").trim().toUpperCase() === q.rollNumber)
     .sort((a, b) => (a.rollNumber ?? "").localeCompare(b.rollNumber ?? ""));
   const existing = new Map<string, StudentFeeAccount>();
   for (let i = 0; i < students.length; i += 300) {
