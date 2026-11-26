@@ -120,6 +120,21 @@ export async function getNoClassReason(db: Firestore, collegeId: string, dateISO
   return noClassReason({ dateISO, ...calendar });
 }
 
+// Per server instance, 60 s: callers that loop over every faculty member (dashboards, the completion report) ask
+// the same question hundreds of times; the in-flight promise is shared, so concurrent callers read once.
+const noClassCache = new Map<string, { at: number; value: Promise<string | null> }>();
+
+/** getNoClassReason, cached 60 s per college + date. A failed read counts as a class day (never hides classes). */
+export function getNoClassReasonCached(db: Firestore, collegeId: string, dateISO: string): Promise<string | null> {
+  const key = `${collegeId}|${dateISO}`;
+  const hit = noClassCache.get(key);
+  if (hit && Date.now() - hit.at < 60_000 && !process.env.FIRESTORE_EMULATOR_HOST) return hit.value;
+  const value = getNoClassReason(db, collegeId, dateISO).catch(() => null);
+  if (noClassCache.size > 500) noClassCache.clear();
+  noClassCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 /**
  * The timetable weekday classes follow on `dateISO` (a compensatory Sunday runs
  * another weekday's), or null for an ordinary Sunday. One tiny read.
