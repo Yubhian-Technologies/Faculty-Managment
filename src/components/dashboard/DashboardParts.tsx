@@ -134,7 +134,7 @@ export function Bar({ label, value, max = 100, text, sub, low, refLine, wide, ti
     <div className={cn("grid items-center gap-2.5 text-xs", wide ? "grid-cols-[minmax(0,130px)_1fr_64px]" : "grid-cols-[64px_1fr_76px]")} title={title ?? `${label}: ${text}`}>
       <span className="truncate font-medium text-muted-foreground">{label}</span>
       <div className="relative h-3.5 rounded bg-muted/70">
-        <div className="h-full rounded-r" style={{ width: `${Math.max(0, Math.min(100, (value / max) * 100))}%`, background: low ? CRIT : "hsl(var(--primary))" }} />
+        <div className="h-full rounded-r" style={{ width: `${Math.max(0, Math.min(100, (value / max) * 100))}%`, background: low ? CRIT : "var(--primary)" }} />
         {refLine != null && <div className="absolute -bottom-1 -top-1 border-l-[1.5px] border-dashed border-muted-foreground/70" style={{ left: `${refLine}%` }} />}
       </div>
       <span className="text-right font-semibold tabular-nums">{text}{sub && <span className="block text-[11px] font-normal text-muted-foreground">{sub}</span>}</span>
@@ -183,23 +183,23 @@ export function TrendChart({ points }: { points: { date: string; pct: number }[]
         onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke={t === SHORT ? "hsl(var(--muted-foreground))" : "hsl(var(--border))"} strokeDasharray={t === SHORT ? "4 4" : undefined} />
-            <text x={L - 6} y={y(t) + 3.5} fontSize="10" textAnchor="end" fill="hsl(var(--muted-foreground))">{t}%</text>
+            <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} stroke={t === SHORT ? "var(--muted-foreground)" : "var(--border)"} strokeDasharray={t === SHORT ? "4 4" : undefined} />
+            <text x={L - 6} y={y(t) + 3.5} fontSize="10" textAnchor="end" fill="var(--muted-foreground)">{t}%</text>
           </g>
         ))}
-        {!ticks.includes(SHORT) && SHORT > lo && SHORT < hi && <line x1={L} x2={W - R} y1={y(SHORT)} y2={y(SHORT)} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" />}
-        {SHORT > lo && SHORT < hi && <text x={W - R} y={y(SHORT) - 5} fontSize="10" textAnchor="end" fill="hsl(var(--muted-foreground))">75% line</text>}
-        <polygon points={`${L},${y(lo)} ${line} ${x(points.length - 1)},${y(lo)}`} fill="hsl(var(--primary))" opacity="0.08" />
-        <polyline points={line} fill="none" stroke="hsl(var(--primary))" strokeWidth="2" strokeLinejoin="round" />
+        {!ticks.includes(SHORT) && SHORT > lo && SHORT < hi && <line x1={L} x2={W - R} y1={y(SHORT)} y2={y(SHORT)} stroke="var(--muted-foreground)" strokeDasharray="4 4" />}
+        {SHORT > lo && SHORT < hi && <text x={W - R} y={y(SHORT) - 5} fontSize="10" textAnchor="end" fill="var(--muted-foreground)">75% line</text>}
+        <polygon points={`${L},${y(lo)} ${line} ${x(points.length - 1)},${y(lo)}`} fill="var(--primary)" opacity="0.08" />
+        <polyline points={line} fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinejoin="round" />
         {points.map((p, i) => (i % 2 === 0 || i === points.length - 1) && (
-          <text key={p.date} x={x(i)} y={H - 6} fontSize="10" textAnchor="middle" fill="hsl(var(--muted-foreground))">{shortDay(p.date)}</text>
+          <text key={p.date} x={x(i)} y={H - 6} fontSize="10" textAnchor="middle" fill="var(--muted-foreground)">{shortDay(p.date)}</text>
         ))}
-        <circle cx={x(points.length - 1)} cy={y(last.pct)} r="4" fill="hsl(var(--primary))" stroke="hsl(var(--card))" strokeWidth="2" />
-        <text x={x(points.length - 1) - 8} y={y(last.pct) - 10} fontSize="11" fontWeight="600" textAnchor="end" fill="hsl(var(--foreground))">{last.pct}%</text>
+        <circle cx={x(points.length - 1)} cy={y(last.pct)} r="4" fill="var(--primary)" stroke="var(--card)" strokeWidth="2" />
+        <text x={x(points.length - 1) - 8} y={y(last.pct) - 10} fontSize="11" fontWeight="600" textAnchor="end" fill="var(--foreground)">{last.pct}%</text>
         {hover != null && (
           <>
-            <line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} stroke="hsl(var(--muted-foreground))" opacity="0.5" />
-            <circle cx={x(hover)} cy={y(points[hover].pct)} r="4" fill="hsl(var(--primary))" stroke="hsl(var(--card))" strokeWidth="2" />
+            <line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} stroke="var(--muted-foreground)" opacity="0.5" />
+            <circle cx={x(hover)} cy={y(points[hover].pct)} r="4" fill="var(--primary)" stroke="var(--card)" strokeWidth="2" />
           </>
         )}
       </svg>

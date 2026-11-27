@@ -71,7 +71,7 @@ export function FeeDashboard({ collegeId, options, academicYear, setAcademicYear
             <Kpi icon={IndianRupee} label="Fee Raised" loading={loading && !d} error={error && !d} value={t ? lakh(t.raised) : "-"}
               sub={t && <>{t.students.toLocaleString("en-IN")} students{t.concession ? ` · concessions ${lakh(t.concession)}` : ""}</>} />
             <Kpi icon={Wallet} label="Collected" loading={loading && !d} error={error && !d} value={t ? lakh(t.collected) : "-"}
-              meter={t ? [{ value: Math.min(100, collectedPct), color: "hsl(var(--primary))" }] : undefined}
+              meter={t ? [{ value: Math.min(100, collectedPct), color: "var(--primary)" }] : undefined}
               sub={t && <>{collectedPct}% of {lakh(t.payable)} payable by students</>} />
             <Kpi icon={Banknote} label="Balance to Collect" loading={loading && !d} error={error && !d} value={t ? lakh(t.balance) : "-"}
               sub={t && <>{(t.students - t.cleared).toLocaleString("en-IN")} students yet to clear · {t.notStarted.toLocaleString("en-IN")} paid nothing</>} />
@@ -326,7 +326,7 @@ function DailyBars({ days }: { days: { date: string; amount: number; count: numb
           return (
             <g key={x.date} onMouseEnter={() => setHover(i)}>
               <rect x={L + i * slot} y={T} width={slot} height={H - T - B} fill="transparent" />
-              {x.amount > 0 && <rect x={bx} y={top} width={bw} height={Math.max(1, H - B - top)} rx={Math.min(3, bw / 2)} fill="hsl(var(--primary))" opacity={hover == null || hover === i ? 1 : 0.45} />}
+              {x.amount > 0 && <rect x={bx} y={top} width={bw} height={Math.max(1, H - B - top)} rx={Math.min(3, bw / 2)} fill="var(--primary)" opacity={hover == null || hover === i ? 1 : 0.45} />}
               {(i % 5 === 0 || i === days.length - 1) && <text x={L + i * slot + slot / 2} y={H - 8} textAnchor="middle" className="fill-muted-foreground text-[10px]">{shortDay(x.date)}</text>}
             </g>
           );

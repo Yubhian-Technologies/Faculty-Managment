@@ -250,7 +250,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
           sub={students ? (students.years.length > 1 ? students.years.map((y) => `${roman(y.year)} ${y.count.toLocaleString("en-IN")}`).join(" · ") : `${students.sections} section${students.sections === 1 ? "" : "s"}`) : undefined} />
         <Kpi icon={ClipboardCheck} label="Today's Student Attendance" onOpen={() => setDetail("students")} loading={day.isLoading} error={day.isError}
           value={day.data?.students.pct == null ? <span className="text-base font-semibold text-muted-foreground">Not yet recorded</span> : day.data.students.pct.toFixed(1)} unit={day.data?.students.pct == null ? undefined : "%"}
-          meter={day.data?.students.pct != null ? [{ value: day.data.students.pct, color: day.data.students.pct < SHORT ? CRIT : "hsl(var(--primary))" }] : undefined}
+          meter={day.data?.students.pct != null ? [{ value: day.data.students.pct, color: day.data.students.pct < SHORT ? CRIT : "var(--primary)" }] : undefined}
           sub={day.data?.students.pct != null ? `${day.data.students.absentAllDay} absent all day` : undefined} />
         <Kpi icon={CalendarDays} label="Today's Class Status" onOpen={() => setDetail("classes")} loading={day.isLoading} error={day.isError}
           value={cls ? cls.posted : "-"} unit={cls ? ` / ${cls.due} posted` : undefined}
@@ -265,7 +265,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
           meter={faculty && faculty.total ? [
             { value: ((faculty.present - faculty.late + faculty.halfDay + faculty.onDuty) / faculty.total) * 100, color: GOOD },
             { value: (faculty.late / faculty.total) * 100, color: WARN },
-            { value: (faculty.onLeave / faculty.total) * 100, color: "hsl(var(--primary))" },
+            { value: (faculty.onLeave / faculty.total) * 100, color: "var(--primary)" },
             { value: ((faculty.notIn + faculty.absent) / faculty.total) * 100, color: CRIT },
           ] : undefined}
           sub={faculty ? `${faculty.late} late · ${faculty.onLeave} on leave · ${faculty.notIn + faculty.absent} Not Yet Marked Present` : undefined} />
@@ -366,7 +366,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
                           {d.pct == null ? <span className="text-muted-foreground">Not posted yet</span> : (
                             <div className="flex items-center gap-2">
                               <div className="h-1.5 min-w-[70px] flex-1 overflow-hidden rounded-full bg-muted">
-                                <i className="block h-full rounded-full" style={{ width: `${d.pct}%`, background: d.pct < SHORT ? CRIT : "hsl(var(--primary))" }} />
+                                <i className="block h-full rounded-full" style={{ width: `${d.pct}%`, background: d.pct < SHORT ? CRIT : "var(--primary)" }} />
                               </div>
                               <span className="w-14 text-right font-semibold tabular-nums">{fmtPct(d.pct)}</span>
                             </div>
@@ -380,7 +380,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
                   </tbody>
                 </table>
               </div>
-              <Legend items={[{ color: GOOD, label: "Posted" }, { color: CRIT, label: `Not posted / below ${SHORT}%` }, { color: "hsl(var(--primary))", label: "Attendance %" }]} />
+              <Legend items={[{ color: GOOD, label: "Posted" }, { color: CRIT, label: `Not posted / below ${SHORT}%` }, { color: "var(--primary)", label: "Attendance %" }]} />
             </>
           )}
         </Panel>
@@ -473,7 +473,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
               const notStarted = Math.max(0, p.subjects - p.subjectsStarted);
               const segs = [
                 { n: approved, c: GOOD, l: "Approved" }, { n: submitted, c: "#86b6ef", l: "Submitted" },
-                { n: started, c: "#cde2fb", l: "In progress" }, { n: notStarted, c: "hsl(var(--muted))", l: "Not started" },
+                { n: started, c: "#cde2fb", l: "In progress" }, { n: notStarted, c: "var(--muted)", l: "Not started" },
               ];
               return (
                 <>

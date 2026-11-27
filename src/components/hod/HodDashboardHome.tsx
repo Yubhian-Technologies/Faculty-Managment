@@ -353,7 +353,7 @@ export function HodDashboardHome() {
           sub={students ? (students.years.length > 1 ? students.years.map((y) => `${["I", "II", "III", "IV", "V"][y.year - 1] ?? y.year} ${y.count}`).join(" · ") : `${students.sections} section${students.sections === 1 ? "" : "s"}`) : undefined} />
         <Kpi icon={ClipboardCheck} label="Today's Student Attendance" onOpen={() => setDetail("students")} loading={day.isLoading} error={day.isError}
           value={day.data?.students.pct == null ? <span className="text-base font-semibold text-muted-foreground">Not yet recorded</span> : day.data.students.pct.toFixed(1)} unit={day.data?.students.pct == null ? undefined : "%"}
-          meter={day.data?.students.pct != null ? [{ value: day.data.students.pct, color: day.data.students.pct < SHORT ? CRIT : "hsl(var(--primary))" }] : undefined}
+          meter={day.data?.students.pct != null ? [{ value: day.data.students.pct, color: day.data.students.pct < SHORT ? CRIT : "var(--primary)" }] : undefined}
           sub={day.data?.students.pct != null ? `${day.data.students.absentAllDay} absent all day` : undefined} />
         <Kpi icon={CalendarDays} label="Today's Class Status" onOpen={() => setDetail("classes")} loading={day.isLoading} error={day.isError}
           value={cls ? cls.posted : "-"} unit={cls ? ` / ${cls.due} posted` : undefined}
@@ -368,7 +368,7 @@ export function HodDashboardHome() {
           meter={faculty && faculty.total ? [
             { value: ((faculty.present - faculty.late.length + faculty.halfDay + faculty.onDuty) / faculty.total) * 100, color: GOOD },
             { value: (faculty.late.length / faculty.total) * 100, color: WARN },
-            { value: (faculty.onLeave / faculty.total) * 100, color: "hsl(var(--primary))" },
+            { value: (faculty.onLeave / faculty.total) * 100, color: "var(--primary)" },
             { value: ((faculty.notIn.length + faculty.absent) / faculty.total) * 100, color: CRIT },
           ] : undefined}
           sub={faculty ? `${faculty.late.length} late · ${faculty.onLeave} on leave · ${faculty.notIn.length} Not Yet Marked Present` : undefined} />
@@ -447,7 +447,7 @@ export function HodDashboardHome() {
                   ))}
                 </div>
                 {day.data.students.sections.length > 10 && <p className="mt-2 text-xs text-muted-foreground">Lowest 10 of {day.data.students.sections.length} sections.</p>}
-                <Legend items={[{ color: "hsl(var(--muted-foreground))", label: "- - 75% line" }, { color: CRIT, label: "Below 75%" }]} />
+                <Legend items={[{ color: "var(--muted-foreground)", label: "- - 75% line" }, { color: CRIT, label: "Below 75%" }]} />
               </>
             ))}
           </Panel>
@@ -461,13 +461,13 @@ export function HodDashboardHome() {
                 <div className="flex h-3 gap-0.5 overflow-hidden rounded-full bg-muted">
                   {[
                     { n: faculty.present - faculty.late.length + faculty.halfDay + faculty.onDuty, c: GOOD },
-                    { n: faculty.late.length, c: WARN }, { n: faculty.onLeave, c: "hsl(var(--primary))" }, { n: faculty.notIn.length + faculty.absent, c: CRIT },
+                    { n: faculty.late.length, c: WARN }, { n: faculty.onLeave, c: "var(--primary)" }, { n: faculty.notIn.length + faculty.absent, c: CRIT },
                   ].filter((s) => s.n > 0).map((s, i) => <i key={i} className="block h-full" style={{ flex: s.n, background: s.c }} />)}
                 </div>
                 <Legend items={[
                   { color: GOOD, label: `Present: ${faculty.present - faculty.late.length + faculty.halfDay + faculty.onDuty}` },
                   { color: WARN, label: `Late Arrivals: ${faculty.late.length}` },
-                  { color: "hsl(var(--primary))", label: `On Approved Leave: ${faculty.onLeave}` },
+                  { color: "var(--primary)", label: `On Approved Leave: ${faculty.onLeave}` },
                   { color: CRIT, label: `Attendance Not Marked: ${faculty.notIn.length + faculty.absent}` },
                 ]} />
                 <ul className="mt-3 space-y-2">
@@ -558,7 +558,7 @@ export function HodDashboardHome() {
                 const notStarted = Math.max(0, p.subjects - p.subjectsStarted);
                 const segs = [
                   { n: approved, c: GOOD, l: "Approved" }, { n: submitted, c: "#86b6ef", l: "Submitted" },
-                  { n: started, c: "#cde2fb", l: "In progress" }, { n: notStarted, c: "hsl(var(--muted))", l: "Not started" },
+                  { n: started, c: "#cde2fb", l: "In progress" }, { n: notStarted, c: "var(--muted)", l: "Not started" },
                 ];
                 return (
                   <>
