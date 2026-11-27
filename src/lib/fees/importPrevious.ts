@@ -49,7 +49,8 @@ export function checkDebitNote(r: DebitNoteRow):
   const category: FeeCategory | null = /SPOT/.test(type) || cat === "SPOT" ? "SPOT" : cat === "A" ? "A" : cat === "B" ? "B" : null;
   if (!category) return { ok: false, error: `Category "${r.category || "blank"}" is not A or B.` };
   const pay = String(r.payment ?? "").trim().toUpperCase();
-  const funding: FeeFunding | null = pay === "FR" ? "FR" : pay === "NFR" || pay === "" ? "NFR" : null;
+  // VWU writes NFR, VIT writes NF; "Non FR" / "Non-FR" read the same.
+  const funding: FeeFunding | null = pay === "FR" ? "FR" : ["NFR", "NF", "NON FR", "NON-FR", "NONFR", ""].includes(pay) ? "NFR" : null;
   if (!funding) return { ok: false, error: `Payment "${r.payment}" is not FR or NFR.` };
   if (funding === "FR" && category !== "A") return { ok: false, error: `Only a Category A student can be FR (this one is ${category === "SPOT" ? "Spot" : "B"}).` };
   const total = money(r.total), student = money(r.tuition), govt = money(r.scholarship);
