@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Banknote, CalendarClock, Download, Landmark, RefreshCw, Wallet, IndianRupee } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
 import { cn, dmy, exportToCSV } from "@/lib/utils";
-import { Bar, Kpi, Panel, SectionTitle, Tag, shortDay } from "@/components/dashboard/DashboardParts";
-import type { FeeDashboard as Dash, FeeGroupRow } from "@/lib/fees/dashboard";
+import { Bar, Card, Kpi, Legend, Panel, SectionTitle, Tag, jumpTo, shortDay } from "@/components/dashboard/DashboardParts";
+import { CATEGORY_GROUP, CATEGORY_KEYS, type BranchCell, type CategoryKey, type CategoryRow, type FeeDashboard as Dash, type FeeGroupRow } from "@/lib/fees/dashboard";
 import { feeGet, rupee, selectClass, yearChoices, type FeeOptions } from "./feeApi";
 
 // Accounts > Fees > Dashboard: the academic year's fee position for the college picked - raised / collected / balance,
@@ -19,72 +19,105 @@ const MODE: Record<string, string> = { CASH: "Cash", UPI: "UPI", BANK: "Bank Tra
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
 const lakh = (n: number) => (Math.abs(n) >= 1e7 ? `₹${(n / 1e7).toFixed(2)} Cr` : Math.abs(n) >= 1e5 ? `₹${(n / 1e5).toFixed(2)} L` : rupee(n));
 
+type DashData = Dash & { options?: { departments: string[]; years: number[] }; deptCodes?: Record<string, string> };
+
+// One colour per category, used for its card stripe, summary dot and matrix heading (identity, never status).
+const CAT_COLOR: Record<CategoryKey, string> = { "A-FR": "#0f766e", "A-NFR": "#1d4ed8", SPOT: "#c2410c", B: "#6d28d9" };
+const ROMAN = ["", "I", "II", "III", "IV", "V", "VI"];
+
 export function FeeDashboard({ collegeId, options, academicYear, setAcademicYear }: { collegeId: string; options: FeeOptions; academicYear: string; setAcademicYear: (y: string) => void }) {
   const [courseKey, setCourseKey] = useState("");
   const [batch, setBatch] = useState("");
-  const [d, setD] = useState<Dash | null>(null);
+  const [department, setDepartment] = useState("");
+  const [year, setYear] = useState("");
+  const [d, setD] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [tick, setTick] = useState(0);
-  const url = `/api/college/fees/dashboard?${new URLSearchParams({ academicYear, ...(courseKey ? { courseKey } : {}), ...(batch ? { batch } : {}) })}`;
+  // The Students With a Balance list's filter (a category chip, or a Branch x Category cell).
+  const [pick, setPick] = useState<{ cat: CategoryKey | ""; branch: string }>({ cat: "", branch: "" });
+  const url = `/api/college/fees/dashboard?${new URLSearchParams({ academicYear, ...(courseKey ? { courseKey } : {}), ...(batch ? { batch } : {}), ...(department ? { department } : {}), ...(year ? { year } : {}) })}`;
 
   useEffect(() => {
     let live = true;
-    feeGet<Dash>(url, collegeId)
+    feeGet<DashData>(url, collegeId)
       .then((x) => { if (live) { setD(x); setError(false); } })
       .catch((e: Error) => { if (live) { setError(true); toast({ variant: "destructive", title: e.message }); } })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [url, collegeId, tick]);
   const reload = useCallback(() => { setLoading(true); setTick((n) => n + 1); }, []);
+  const change = (f: () => void) => { setLoading(true); setPick({ cat: "", branch: "" }); f(); };
 
   const batches = courseKey ? options.batchesByCourse[courseKey] ?? [] : [];
   const t = d?.totals;
   const collectedPct = t ? pct(t.collected, t.payable) : 0;
   const empty = !!d && d.totals.students === 0;
+  const code = (dept: string) => d?.deptCodes?.[dept] || dept;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-32 space-y-1"><Label className="text-xs">Academic Year</Label>
-          <select className={selectClass} value={academicYear} onChange={(e) => { setLoading(true); setAcademicYear(e.target.value); }}>{yearChoices(options.academicYear).map((y) => <option key={y} value={y}>{y}</option>)}</select>
+          <select className={selectClass} value={academicYear} onChange={(e) => change(() => setAcademicYear(e.target.value))}>{yearChoices(options.academicYear).map((y) => <option key={y} value={y}>{y}</option>)}</select>
         </div>
-        <div className="min-w-[14rem] flex-1 space-y-1 sm:max-w-sm"><Label className="text-xs">Course</Label>
-          <select className={selectClass} value={courseKey} onChange={(e) => { setLoading(true); setCourseKey(e.target.value); setBatch(""); }}>
+        <div className="min-w-[12rem] flex-1 space-y-1 sm:max-w-xs"><Label className="text-xs">Course</Label>
+          <select className={selectClass} value={courseKey} onChange={(e) => change(() => { setCourseKey(e.target.value); setBatch(""); })}>
             <option value="">All Courses</option>{options.courses.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
           </select>
         </div>
-        <div className="w-40 space-y-1"><Label className="text-xs">Batch</Label>
-          <select className={selectClass} value={batch} disabled={!courseKey} onChange={(e) => { setLoading(true); setBatch(e.target.value); }}>
+        <div className="w-36 space-y-1"><Label className="text-xs">Batch</Label>
+          <select className={selectClass} value={batch} disabled={!courseKey} onChange={(e) => change(() => setBatch(e.target.value))}>
             <option value="">All Batches</option>{batches.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
         </div>
+        <div className="min-w-[12rem] flex-1 space-y-1 sm:max-w-xs"><Label className="text-xs">Branch</Label>
+          <select className={selectClass} value={department} onChange={(e) => change(() => setDepartment(e.target.value))}>
+            <option value="">All Branches</option>{(d?.options?.departments ?? []).map((x) => <option key={x} value={x}>{x}</option>)}
+          </select>
+        </div>
+        <div className="w-32 space-y-1"><Label className="text-xs">Year of Study</Label>
+          <select className={selectClass} value={year} onChange={(e) => change(() => setYear(e.target.value))}>
+            <option value="">All Years</option>{(d?.options?.years ?? []).map((y) => <option key={y} value={String(y)}>{ROMAN[y] ?? y} Year</option>)}
+          </select>
+        </div>
         <Button variant="outline" onClick={reload} loading={loading}><RefreshCw className="mr-1.5 h-4 w-4" />Refresh</Button>
+        <Button variant="outline" disabled={!d || empty} onClick={() => d && void downloadExcel(d, academicYear, code).catch((e: Error) => toast({ variant: "destructive", title: e.message }))}><Download className="mr-1.5 h-4 w-4" />Download Excel</Button>
         {d && <span className="pb-2 text-xs text-muted-foreground">As of {dmy(d.today)}</span>}
       </div>
 
       {empty ? (
-        <p className="rounded-lg border bg-card py-10 text-center text-sm text-muted-foreground">No fees are raised for {academicYear}{courseKey ? " in this course" : ""} yet. Raise them on the Raise Fees tab.</p>
+        <p className="rounded-lg border bg-card py-10 text-center text-sm text-muted-foreground">No fees are raised for {academicYear} with these filters yet. Raise or import them on the Raise Fees or Import Previous tab.</p>
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-            <Kpi icon={IndianRupee} label="Fee Raised" loading={loading && !d} error={error && !d} value={t ? lakh(t.raised) : "-"}
-              sub={t && <>{t.students.toLocaleString("en-IN")} students{t.concession ? ` · concessions ${lakh(t.concession)}` : ""}</>} />
-            <Kpi icon={Wallet} label="Collected" loading={loading && !d} error={error && !d} value={t ? lakh(t.collected) : "-"}
+            <Kpi icon={IndianRupee} label="Total Fee" loading={loading && !d} error={error && !d} value={t ? lakh(t.raised) : "-"}
+              sub={t && <>{t.students.toLocaleString("en-IN")} students · Government (FR) {lakh(t.govtShare)} · Students {lakh(t.payable)}</>} />
+            <Kpi icon={Wallet} label="Fee Paid (Collected)" loading={loading && !d} error={error && !d} value={t ? lakh(t.collected) : "-"}
               meter={t ? [{ value: Math.min(100, collectedPct), color: "var(--primary)" }] : undefined}
-              sub={t && <>{collectedPct}% of {lakh(t.payable)} payable by students</>} />
-            <Kpi icon={Banknote} label="Balance to Collect" loading={loading && !d} error={error && !d} value={t ? lakh(t.balance) : "-"}
-              sub={t && <>{(t.students - t.cleared).toLocaleString("en-IN")} students yet to clear · {t.notStarted.toLocaleString("en-IN")} paid nothing</>} />
-            <Kpi icon={AlertTriangle} label="Overdue Now" tone={t && t.overdue > 0 ? "crit" : undefined} href="#fee-defaulters" loading={loading && !d} error={error && !d}
-              value={t ? lakh(t.overdue) : "-"} sub={t && <>{t.overdueStudents.toLocaleString("en-IN")} students past a due date</>} />
+              sub={t && d && <>{collectedPct}% of {lakh(t.payable)} payable by students · {d.collections.year.count.toLocaleString("en-IN")} receipts</>} />
+            <Kpi icon={Banknote} label="Balance" loading={loading && !d} error={error && !d} value={t ? lakh(t.balance) : "-"}
+              sub={t && <>{t.yetToClear.toLocaleString("en-IN")} students yet to clear · {t.notStarted.toLocaleString("en-IN")} paid nothing</>} />
+            <Kpi icon={AlertTriangle} label="Overdue" tone={t && t.overdue > 0 ? "crit" : undefined} href="#fee-overdue-cat" loading={loading && !d} error={error && !d}
+              value={t ? lakh(t.overdue) : "-"} sub={t && (d?.instalments.some((i) => !i.dueDate) && t.overdue === 0 ? <span className="text-amber-700">Due dates not set yet</span> : <>{t.overdueStudents.toLocaleString("en-IN")} students past a due date</>)} />
+            <Kpi icon={Landmark} label="Government Share (FR)" loading={loading && !d} error={error && !d} value={t ? lakh(t.govtShare) : "-"}
+              sub={t && <>Received {lakh(t.govtReceived)} · Pending {lakh(Math.max(0, t.govtShare - t.govtReceived))}</>} />
             <Kpi icon={CalendarClock} label="Collected Today" loading={loading && !d} error={error && !d} value={d ? lakh(d.collections.today.amount) : "-"}
               sub={d && <>{d.collections.today.count} receipts · this month {lakh(d.collections.month.amount)}</>} />
-            <Kpi icon={Landmark} label="Government Share (FR)" loading={loading && !d} error={error && !d} value={t ? lakh(t.govtShare) : "-"}
-              sub={t && <>received {lakh(t.govtReceived)} · pending {lakh(Math.max(0, t.govtShare - t.govtReceived))}</>} />
           </div>
 
           {d && (
             <>
+              <SectionTitle title="By Category" sub="CAT-A (FR) · CAT-A (NFR) · CAT-A (SPOT) · CAT-B (MGT)" />
+              <CategoryCards rows={d.byCategory} />
+              <CategorySummary d={d} />
+              <BranchMatrix d={d} code={code} onPick={(branch, cat) => { setPick({ cat, branch }); jumpTo("fee-balances"); }} />
+              <div className="grid gap-4 xl:grid-cols-2">
+                <WhoHasPaid rows={d.byCategory} />
+                <OverdueByCategory d={d} />
+              </div>
+              <BalanceList d={d} pick={pick} setPick={setPick} code={code} academicYear={academicYear} />
+
               <SectionTitle title="Money In" sub={`${d.collections.year.count.toLocaleString("en-IN")} receipts in ${academicYear}, ${lakh(d.collections.year.amount)}`} />
               <div className="grid gap-4 xl:grid-cols-3">
                 <Panel title="Daily Collection" sub="Last 30 days, receipts not cancelled" className="xl:col-span-2">
@@ -117,14 +150,7 @@ export function FeeDashboard({ collegeId, options, academicYear, setAcademicYear
                 </Panel>
               </div>
 
-              <SectionTitle title="Who Owes" />
               <div className="grid gap-4 xl:grid-cols-2">
-                <Panel title="By Category" sub="FR students pay only what the government does not cover">
-                  <GroupTable rows={d.byCategory} first="Category" extra={(r) => {
-                    const c = r as (typeof d.byCategory)[number];
-                    return c.key === "A-FR" ? <span className="block text-[11px] text-muted-foreground">Government {rupee(c.govtShare)} · received {rupee(c.govtReceived)}</span> : null;
-                  }} />
-                </Panel>
                 <Panel title="Instalments" sub="Per instalment, all students together">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -133,7 +159,7 @@ export function FeeDashboard({ collegeId, options, academicYear, setAcademicYear
                         {d.instalments.map((i) => (
                           <tr key={i.no}>
                             <td className="px-2 py-1.5">{i.label}</td>
-                            <td className="px-2 py-1.5 tabular-nums">{i.dueDate ? dmy(i.dueDate) : "-"}</td>
+                            <td className="px-2 py-1.5 tabular-nums">{i.dueDate ? dmy(i.dueDate) : "Not set yet"}</td>
                             <td className="px-2 py-1.5 tabular-nums">{rupee(i.payable)}</td>
                             <td className="px-2 py-1.5 tabular-nums">{rupee(i.collected)} <span className="text-xs text-muted-foreground">({pct(i.collected, i.payable)}%)</span></td>
                             <td className="px-2 py-1.5 tabular-nums">{i.overdue ? <span className="text-destructive">{rupee(i.overdue)} <span className="text-xs">({i.overdueStudents})</span></span> : "-"}</td>
@@ -143,17 +169,7 @@ export function FeeDashboard({ collegeId, options, academicYear, setAcademicYear
                     </table>
                   </div>
                 </Panel>
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-3">
-                <Panel title="Overdue by Age" sub="Days past the oldest unpaid due date">
-                  <div className="space-y-2">
-                    {d.ageing.map((a) => (
-                      <Bar key={a.key} wide label={a.label} value={a.amount} max={Math.max(1, ...d.ageing.map((x) => x.amount))} text={lakh(a.amount)} sub={`${a.students} students`} />
-                    ))}
-                  </div>
-                </Panel>
-                <Panel title="Online Payments" sub="CCAvenue payments for fees this year" className="xl:col-span-2">
+                <Panel title="Online Payments" sub="CCAvenue payments for fees this year">
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <Stat label="Successful" value={d.online.success} sub={rupee(d.online.successAmount)} />
                     <Stat label="Failed / Cancelled" value={d.online.failed} />
@@ -172,6 +188,286 @@ export function FeeDashboard({ collegeId, options, academicYear, setAcademicYear
       )}
     </div>
   );
+}
+
+function CategoryCards({ rows }: { rows: CategoryRow[] }) {
+  const of = (k: CategoryKey) => rows.find((r) => r.key === k);
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {CATEGORY_KEYS.map((k) => {
+        const r = of(k);
+        const line = (label: string, value: React.ReactNode, tone?: string) => (
+          <><span className="text-muted-foreground">{label}</span><span className={cn("text-right font-semibold tabular-nums", tone)}>{value}</span></>
+        );
+        const fr = k === "A-FR";
+        const p = r ? (fr ? pct(r.govtReceived, r.govtShare) : pct(r.collected, r.payable)) : 0;
+        return (
+          <Card key={k} className="flex flex-col gap-2.5 p-4" >
+            <div className="h-1 -mx-4 -mt-4 mb-1 rounded-t-2xl" style={{ background: CAT_COLOR[k] }} />
+            <div className="flex items-baseline justify-between"><p className="text-[15px] font-semibold">{CATEGORY_GROUP[k]}</p><p className="text-xs text-muted-foreground">{r ? `${r.students.toLocaleString("en-IN")} students` : "No students"}</p></div>
+            {r ? (
+              <>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[13px]">
+                  {line("Total Fee", lakh(r.raised))}
+                  {fr ? (
+                    <>
+                      {line("Government Pays", lakh(r.govtShare))}
+                      {line("Government Received", lakh(r.govtReceived))}
+                      {line("Student Pays", lakh(r.payable))}
+                      {line("Paid Extra (to refund)", r.paidExtra ? `${lakh(r.paidExtra)} · ${r.paidExtraStudents}` : "-", r.paidExtra ? "text-amber-700" : undefined)}
+                    </>
+                  ) : (
+                    <>
+                      {line("Collected", lakh(r.collected))}
+                      {line("Balance", lakh(r.balance))}
+                      {line("Overdue", lakh(r.overdue), r.overdue ? "text-destructive" : undefined)}
+                      {line("Paid Full · Part · None", `${r.full} · ${r.part} · ${r.none}`)}
+                    </>
+                  )}
+                </div>
+                <div className="h-1.5 rounded-full bg-muted"><div className="h-full rounded-full" style={{ width: `${Math.min(100, p)}%`, background: CAT_COLOR[k] }} /></div>
+                <p className="text-xs text-muted-foreground">{fr ? `Government ${p}% received · ${lakh(Math.max(0, r.govtShare - r.govtReceived))} pending` : `${p}% collected`}</p>
+              </>
+            ) : <p className="py-4 text-center text-xs text-muted-foreground">No fees in this category.</p>}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+function CategorySummary({ d }: { d: DashData }) {
+  const t = d.totals;
+  const sum = (f: (r: CategoryRow) => number) => d.byCategory.reduce((n, r) => n + f(r), 0);
+  const cell = "px-3 py-2 text-right tabular-nums whitespace-nowrap";
+  return (
+    <Panel title="Category Summary" sub="Student pays = fee less the government's FR share and concessions">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs text-muted-foreground"><tr>{["Category", "Students", "Total Fee", "Government (FR)", "Student Pays", "Fee Paid", "Balance", "Overdue", "Collected %", "Paid Full", "Part", "Nothing"].map((h, i) => <th key={h} className={cn("px-3 py-2 font-medium whitespace-nowrap", i ? "text-right" : "text-left")}>{h}</th>)}</tr></thead>
+          <tbody className="divide-y">
+            {d.byCategory.map((r) => (
+              <tr key={r.key}>
+                <td className="px-3 py-2 whitespace-nowrap"><span className="mr-2 inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: CAT_COLOR[r.key] }} />{r.label}</td>
+                <td className={cell}>{r.students.toLocaleString("en-IN")}</td>
+                <td className={cell}>{rupee(r.raised)}</td>
+                <td className={cell}>{rupee(r.govtShare)}</td>
+                <td className={cell}>{rupee(r.payable)}</td>
+                <td className={cell}>{rupee(r.collected)}</td>
+                <td className={cell}>{rupee(r.balance)}</td>
+                <td className={cn(cell, r.overdue && "text-destructive")}>{rupee(r.overdue)}</td>
+                <td className={cell}>{r.payable ? `${pct(r.collected, r.payable)}%` : "-"}</td>
+                <td className={cell}>{r.payable ? r.full : "-"}</td>
+                <td className={cell}>{r.payable ? r.part : "-"}</td>
+                <td className={cell}>{r.payable ? r.none : "-"}</td>
+              </tr>
+            ))}
+            <tr className="bg-muted/50 font-semibold">
+              <td className="px-3 py-2">Total</td>
+              <td className={cell}>{t.students.toLocaleString("en-IN")}</td>
+              <td className={cell}>{rupee(t.raised)}</td>
+              <td className={cell}>{rupee(t.govtShare)}</td>
+              <td className={cell}>{rupee(t.payable)}</td>
+              <td className={cell}>{rupee(t.collected)}</td>
+              <td className={cell}>{rupee(t.balance)}</td>
+              <td className={cell}>{rupee(t.overdue)}</td>
+              <td className={cell}>{t.payable ? `${pct(t.collected, t.payable)}%` : "-"}</td>
+              <td className={cell}>{sum((r) => r.full)}</td>
+              <td className={cell}>{sum((r) => r.part)}</td>
+              <td className={cell}>{sum((r) => r.none)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+function BranchMatrix({ d, code, onPick }: { d: DashData; code: (dept: string) => string; onPick: (branch: string, cat: CategoryKey | "") => void }) {
+  const [view, setView] = useState<"money" | "students" | "pct">("money");
+  const cats = CATEGORY_KEYS.filter((k) => d.byCategory.some((r) => r.key === k));
+  const cell = "px-3 py-2 text-right tabular-nums whitespace-nowrap";
+  const click = "rounded px-1 hover:bg-primary/10 hover:text-primary";
+  const show = (c: BranchCell | undefined, k: CategoryKey | "total", branch: string) => {
+    const fr = k === "A-FR";
+    if (!c) return view === "money" ? [<td key="a" className={cell}>-</td>, <td key="b" className={cell}>-</td>] : [<td key="a" className={cell}>-</td>];
+    if (view === "students") return [<td key="a" className={cell}>{c.students.toLocaleString("en-IN")}</td>];
+    if (view === "pct") return [<td key="a" className={cell}>{fr ? "-" : c.payable ? `${pct(c.collected, c.payable)}%` : "-"}</td>];
+    const pickCat = k === "total" ? "" : k;
+    return fr
+      ? [<td key="a" className={cell}>{c.students.toLocaleString("en-IN")}</td>, <td key="b" className={cell}>{lakh(c.govt)}</td>]
+      : [<td key="a" className={cell}>{lakh(c.collected)}</td>,
+         <td key="b" className={cell}>{c.balance ? <button type="button" className={click} title="Show these students" onClick={() => onPick(branch, pickCat)}>{lakh(c.balance)}</button> : lakh(0)}</td>];
+  };
+  const sub = (k: CategoryKey | "total") => view !== "money" ? [""] : k === "A-FR" ? ["Students", "Govt Due"] : ["Collected", "Balance"];
+  const totals = { cats: Object.fromEntries(cats.map((k) => [k, d.byBranch.reduce<BranchCell>((n, b) => { const c = b.cats[k]; if (c) { n.students += c.students; n.payable += c.payable; n.collected += c.collected; n.balance += c.balance; n.govt += c.govt; } return n; }, { students: 0, payable: 0, collected: 0, balance: 0, govt: 0 })])) as Record<CategoryKey, BranchCell>,
+    total: d.byBranch.reduce<BranchCell>((n, b) => ({ students: n.students + b.total.students, payable: n.payable + b.total.payable, collected: n.collected + b.total.collected, balance: n.balance + b.total.balance, govt: n.govt + b.total.govt }), { students: 0, payable: 0, collected: 0, balance: 0, govt: 0 }) };
+  return (
+    <Panel title="Branch × Category" sub="Each branch's collected and balance in each category. Click a balance to list those students.">
+      <div className="mb-3 flex flex-wrap gap-1">
+        {([["money", "Collected / Balance"], ["students", "Students"], ["pct", "Collected %"]] as const).map(([v, l]) => (
+          <Button key={v} size="sm" variant={view === v ? "default" : "outline"} onClick={() => setView(v)}>{l}</Button>
+        ))}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs text-muted-foreground">
+            <tr>
+              <th />
+              {cats.map((k) => <th key={k} colSpan={sub(k).length} className="px-3 py-1.5 text-center font-semibold whitespace-nowrap" style={{ color: CAT_COLOR[k] }}>{CATEGORY_GROUP[k]}</th>)}
+              <th colSpan={sub("total").length} className="px-3 py-1.5 text-center font-semibold">Total</th>
+            </tr>
+            {view === "money" && (
+              <tr>
+                <th className="px-3 py-1.5 text-left font-medium">Branch</th>
+                {cats.flatMap((k) => sub(k).map((h) => <th key={`${k}${h}`} className="px-3 py-1.5 text-right font-medium whitespace-nowrap">{h}</th>))}
+                {sub("total").map((h) => <th key={`t${h}`} className="px-3 py-1.5 text-right font-medium">{h}</th>)}
+              </tr>
+            )}
+          </thead>
+          <tbody className="divide-y">
+            {d.byBranch.map((b) => (
+              <tr key={b.key}>
+                <td className="px-3 py-2 whitespace-nowrap" title={b.label}>{code(b.label)}</td>
+                {cats.flatMap((k) => show(b.cats[k], k, b.key))}
+                {show(b.total, "total", b.key).map((x, i) => <Fragment key={`tt${i}`}>{x}</Fragment>)}
+              </tr>
+            ))}
+            <tr className="bg-muted/50 font-semibold">
+              <td className="px-3 py-2">Total</td>
+              {cats.flatMap((k) => show(totals.cats[k], k, ""))}
+              {show(totals.total, "total", "")}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+function WhoHasPaid({ rows }: { rows: CategoryRow[] }) {
+  const shown = rows.filter((r) => r.payable > 0);
+  return (
+    <Panel title="Who Has Paid" sub="Students by how much of their own share is paid (FR students owe nothing)">
+      <div className="space-y-3">
+        {shown.length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">No student has a share to pay.</p>}
+        {shown.map((r) => {
+          const n = r.full + r.part + r.none || 1;
+          return (
+            <div key={r.key} className="grid grid-cols-[110px_1fr_110px] items-center gap-2.5 text-[13px]" title={`${r.label}: ${r.full} paid in full, ${r.part} paid part, ${r.none} paid nothing`}>
+              <span>{r.label}</span>
+              <div className="flex h-3.5 gap-0.5 overflow-hidden rounded">
+                {r.full > 0 && <i className="block h-full" style={{ width: `${(r.full / n) * 100}%`, background: "#15803d" }} />}
+                {r.part > 0 && <i className="block h-full" style={{ width: `${(r.part / n) * 100}%`, background: "#d97706" }} />}
+                {r.none > 0 && <i className="block h-full" style={{ width: `${(r.none / n) * 100}%`, background: "#cbd5e1" }} />}
+              </div>
+              <span className="text-right tabular-nums text-muted-foreground">{r.full} · {r.part} · {r.none}</span>
+            </div>
+          );
+        })}
+      </div>
+      <Legend items={[{ color: "#15803d", label: "Paid in full" }, { color: "#d97706", label: "Paid part" }, { color: "#cbd5e1", label: "Paid nothing" }]} />
+    </Panel>
+  );
+}
+
+function OverdueByCategory({ d }: { d: DashData }) {
+  const rows = d.byCategory.filter((r) => r.payable > 0);
+  const noDates = d.instalments.some((i) => !i.dueDate) && d.totals.overdue === 0;
+  const cell = "px-3 py-2 text-right tabular-nums";
+  return (
+    <Panel id="fee-overdue-cat" title="Overdue by Category" sub="Days past the oldest unpaid due date">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-xs text-muted-foreground"><tr>{["Category", "Up to 30 days", "31-60", "61-90", "Over 90", "Students"].map((h, i) => <th key={h} className={cn("px-3 py-2 font-medium whitespace-nowrap", i ? "text-right" : "text-left")}>{h}</th>)}</tr></thead>
+          <tbody className="divide-y">
+            {rows.map((r) => (
+              <tr key={r.key}>
+                <td className="px-3 py-2 whitespace-nowrap">{r.label}</td>
+                {r.ageing.map((a) => <td key={a.key} className={cn(cell, a.amount && "text-destructive")}>{a.amount ? lakh(a.amount) : "-"}</td>)}
+                <td className={cell}>{r.overdueStudents || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {noDates && <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Due dates are not set yet, so nothing is overdue. Once instalments have dates this fills in.</p>}
+    </Panel>
+  );
+}
+
+function BalanceList({ d, pick, setPick, code, academicYear }: { d: DashData; pick: { cat: CategoryKey | ""; branch: string }; setPick: (p: { cat: CategoryKey | ""; branch: string }) => void; code: (dept: string) => string; academicYear: string }) {
+  const [all, setAll] = useState(false);
+  const inBranch = d.balances.filter((r) => !pick.branch || r.department === pick.branch);
+  const rows = inBranch.filter((r) => !pick.cat || r.category === pick.cat);
+  const shown = all ? rows : rows.slice(0, 50);
+  const count = (k: CategoryKey) => inBranch.filter((r) => r.category === k).length;
+  const cats = CATEGORY_KEYS.filter((k) => count(k) > 0);
+  const chip = (on: boolean) => cn("h-8 rounded-full border px-3 text-xs", on ? "border-primary bg-primary/10 font-medium text-primary" : "bg-background hover:bg-muted");
+  const csv = () => exportToCSV(rows.map((r) => ({ ...r, category: CATEGORY_GROUP[r.category], department: code(r.department), lastPaid: r.lastPaid ? dmy(r.lastPaid) : "" })) as unknown as Record<string, unknown>[], `fee-balances-${academicYear}.csv`, [
+    { key: "rollNumber", header: "Regd. No" }, { key: "name", header: "Name" }, { key: "department", header: "Branch" }, { key: "section", header: "Section" }, { key: "category", header: "Category" },
+    { key: "fee", header: "Fee" }, { key: "payable", header: "Student Pays" }, { key: "paid", header: "Paid" }, { key: "balance", header: "Balance" }, { key: "lastPaid", header: "Last Paid" },
+  ]);
+  return (
+    <Panel id="fee-balances" title="Students With a Balance" sub="Largest balance first">
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        <button type="button" className={chip(!pick.cat)} onClick={() => setPick({ ...pick, cat: "" })}>All ({inBranch.length.toLocaleString("en-IN")})</button>
+        {cats.map((k) => <button key={k} type="button" className={chip(pick.cat === k)} onClick={() => setPick({ ...pick, cat: k })}>{CATEGORY_GROUP[k]} ({count(k).toLocaleString("en-IN")})</button>)}
+        {pick.branch && <button type="button" className={chip(true)} onClick={() => setPick({ ...pick, branch: "" })} title="Show every branch">Branch: {code(pick.branch)} ×</button>}
+        <Button size="sm" variant="outline" className="ml-auto" disabled={!rows.length} onClick={csv}><Download className="mr-1 h-3.5 w-3.5" />Download CSV</Button>
+      </div>
+      {rows.length === 0 ? <p className="py-4 text-center text-xs text-muted-foreground">No student has a balance here.</p> : (
+        <>
+          <div className="max-h-[32rem] overflow-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-muted/80 text-xs text-muted-foreground"><tr>{["Regd. No", "Name", "Branch", "Section", "Category", "Fee", "Paid", "Balance", "Last Paid"].map((h, i) => <th key={h} className={cn("px-3 py-2 font-medium whitespace-nowrap", i >= 5 ? "text-right" : "text-left")}>{h}</th>)}</tr></thead>
+              <tbody className="divide-y">
+                {shown.map((r) => (
+                  <tr key={r.accountId}>
+                    <td className="px-3 py-1.5 tabular-nums">{r.rollNumber || "-"}</td>
+                    <td className="px-3 py-1.5">{r.name}</td>
+                    <td className="px-3 py-1.5" title={r.department}>{code(r.department)}</td>
+                    <td className="px-3 py-1.5">{r.section}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap"><span className="mr-1.5 inline-block h-2 w-2 rounded-[2px]" style={{ background: CAT_COLOR[r.category] }} />{CATEGORY_GROUP[r.category]}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{rupee(r.payable)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{rupee(r.paid)}</td>
+                    <td className="px-3 py-1.5 text-right font-medium tabular-nums">{rupee(r.balance)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{r.lastPaid ? dmy(r.lastPaid) : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rows.length > 50 && <Button size="sm" variant="ghost" className="mt-2" onClick={() => setAll((v) => !v)}>{all ? "Show First 50" : `Show All ${rows.length.toLocaleString("en-IN")}`}</Button>}
+        </>
+      )}
+    </Panel>
+  );
+}
+
+/** The category view as an Excel workbook: Category Summary, Branch x Category, Students With a Balance. */
+async function downloadExcel(d: DashData, academicYear: string, code: (dept: string) => string) {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const bold = (ws: import("exceljs").Worksheet) => { ws.getRow(1).font = { bold: true }; ws.columns.forEach((c) => { c.width = Math.max(12, String(c.header ?? "").length + 2); }); };
+  const s1 = wb.addWorksheet("Category Summary");
+  s1.columns = ["Category", "Students", "Total Fee", "Government (FR)", "Student Pays", "Fee Paid", "Balance", "Overdue", "Collected %", "Paid Full", "Part", "Nothing"].map((h) => ({ header: h }));
+  for (const r of d.byCategory) s1.addRow([r.label, r.students, r.raised, r.govtShare, r.payable, r.collected, r.balance, r.overdue, r.payable ? pct(r.collected, r.payable) : null, r.full, r.part, r.none]);
+  const t = d.totals;
+  s1.addRow(["Total", t.students, t.raised, t.govtShare, t.payable, t.collected, t.balance, t.overdue, t.payable ? pct(t.collected, t.payable) : null]).font = { bold: true };
+  bold(s1);
+  const s2 = wb.addWorksheet("Branch x Category");
+  const cats = CATEGORY_KEYS.filter((k) => d.byCategory.some((r) => r.key === k));
+  s2.columns = ["Branch", ...cats.flatMap((k) => (k === "A-FR" ? [`${CATEGORY_GROUP[k]} Students`, `${CATEGORY_GROUP[k]} Govt Due`] : [`${CATEGORY_GROUP[k]} Collected`, `${CATEGORY_GROUP[k]} Balance`])), "Total Collected", "Total Balance"].map((h) => ({ header: h }));
+  for (const b of d.byBranch) s2.addRow([code(b.label), ...cats.flatMap((k) => { const c = b.cats[k]; return k === "A-FR" ? [c?.students ?? 0, c?.govt ?? 0] : [c?.collected ?? 0, c?.balance ?? 0]; }), b.total.collected, b.total.balance]);
+  bold(s2);
+  const s3 = wb.addWorksheet("Students With a Balance");
+  s3.columns = ["Regd. No", "Name", "Branch", "Section", "Category", "Fee", "Student Pays", "Paid", "Balance", "Last Paid"].map((h) => ({ header: h }));
+  for (const r of d.balances) s3.addRow([r.rollNumber, r.name, code(r.department), r.section, CATEGORY_GROUP[r.category], r.fee, r.payable, r.paid, r.balance, r.lastPaid ? dmy(r.lastPaid) : ""]);
+  bold(s3);
+  const blob = new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `Fees_Dashboard_${academicYear}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 function Stat({ label, value, sub, tone }: { label: string; value: number; sub?: string; tone?: "crit" }) {
