@@ -12,6 +12,7 @@ import { FeeDayBook } from "./FeeDayBook";
 import { FeeStructures } from "./FeeStructures";
 import { FeeSetup } from "./FeeSetup";
 import { RaiseFees } from "./RaiseFees";
+import { FeeImportPrevious } from "./FeeImportPrevious";
 
 // Accounts (location) > Fees: student fee collection for each college of the location - fee structures, raising a
 // class's fees, counter collection with receipts, concessions, dues and the day book (lib/fees, types/fees.ts).
@@ -24,6 +25,7 @@ const TABS = [
   { key: "structures", label: "Fee Structures" },
   { key: "setup", label: "Setup" },
   { key: "raise", label: "Raise Fees" },
+  { key: "import", label: "Import Previous" },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
@@ -78,6 +80,7 @@ export function AccountsFees() {
           {tab === "daybook" && <FeeDayBook key={`b-${collegeId}`} collegeId={collegeId} today={options.today} />}
           {tab === "structures" && <FeeStructures key={`s-${collegeId}`} collegeId={collegeId} options={options} academicYear={academicYear} setAcademicYear={setAcademicYear} />}
           {tab === "setup" && <FeeSetup key={`u-${collegeId}`} collegeId={collegeId} />}
+          {tab === "import" && <FeeImportPrevious key={`i-${collegeId}`} collegeId={collegeId} options={options} academicYear={academicYear} setAcademicYear={setAcademicYear} />}
           {tab === "raise" && <RaiseFees key={`r-${collegeId}`} collegeId={collegeId} options={options} academicYear={academicYear} setAcademicYear={setAcademicYear} />}
         </>
       )}

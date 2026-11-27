@@ -30,7 +30,7 @@ export const accountId = (academicYear: string, studentId: string) => `${academi
 export const FeeError = PaymentError;
 export const todayIst = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 
-const step = (a: Pick<StudentFeeAccount, "history"> | null, at: string, byName: string, action: string, detail?: string) =>
+export const step = (a: Pick<StudentFeeAccount, "history"> | null, at: string, byName: string, action: string, detail?: string) =>
   [...(a?.history ?? []), { at, byName, action, ...(detail ? { detail } : {}) }].slice(-50);
 
 /** The course key of each course doc (catalog id, else "name:<lower name>") - as the course groups use. */
@@ -119,6 +119,7 @@ export async function raiseFees(db: Db, c: string, q: { academicYear: string; co
     if (!st) { rows.push({ ...base, outcome: "NO_STRUCTURE", note: `No published ${CATEGORY_LABEL[structureCategory(category)]} fee for this batch` }); continue; }
     const id = accountId(q.academicYear, s.id);
     const cur = existing.get(id);
+    if (cur?.source === "IMPORT") { rows.push({ ...base, outcome: "KEPT", funding: cur.funding, structureId: cur.structureId, total: cur.gross, studentShare: cur.studentShare, note: "Imported from the previous system - fee left as it is" }); continue; }
     if (cur && cur.paid > 0) { rows.push({ ...base, outcome: "KEPT", funding: cur.funding, structureId: cur.structureId, total: cur.gross, studentShare: cur.studentShare, note: "Has payments - fee left as it is" }); continue; }
     const funding: FeeFunding = canBeFr(category) && cur?.funding === "FR" ? "FR" : "NFR";
     const accHeads = st.heads.map((h) => {
