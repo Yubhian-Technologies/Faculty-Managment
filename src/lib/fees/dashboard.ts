@@ -12,11 +12,28 @@ export interface DashPayment { status: PaymentStatus; amount: number; needsRefun
 export interface FeeMoney { students: number; raised: number; payable: number; collected: number; balance: number }
 export interface FeeGroupRow extends FeeMoney { key: string; label: string; overdue: number; overdueStudents: number }
 
+/** The four fee categories the college reports by: CAT-A (FR), CAT-A (NFR), CAT-A (SPOT), CAT-B (MGT). */
+export type CategoryKey = "A-FR" | "A-NFR" | "SPOT" | "B";
+export const CATEGORY_KEYS: CategoryKey[] = ["A-FR", "A-NFR", "SPOT", "B"];
+export interface CategoryRow extends FeeGroupRow {
+  key: CategoryKey; govtShare: number; govtReceived: number;
+  /** Students with a share to pay: paid all of it / some / nothing (FR students owe nothing and are not counted). */
+  full: number; part: number; none: number;
+  /** Paid more than their share (to refund or carry forward). */
+  paidExtra: number; paidExtraStudents: number;
+  ageing: { key: string; amount: number; students: number }[];
+}
+export interface BranchCell { students: number; payable: number; collected: number; balance: number; govt: number }
+export interface BranchRow { key: string; label: string; cats: Partial<Record<CategoryKey, BranchCell>>; total: BranchCell }
+export interface BalanceRow { accountId: string; rollNumber: string; name: string; department: string; section: string; category: CategoryKey; fee: number; payable: number; paid: number; balance: number; lastPaid: string | null }
+
 export interface FeeDashboard {
   today: string;
   totals: FeeMoney & {
     concession: number; govtShare: number; govtReceived: number; overdue: number; overdueStudents: number;
     cleared: number; paidExtra: number; paidExtraStudents: number; notStarted: number;
+    /** Students who still owe something (FR students who owe nothing are not counted). */
+    yetToClear: number;
   };
   collections: {
     today: { amount: number; count: number }; month: { amount: number; count: number }; year: { amount: number; count: number };
@@ -25,7 +42,10 @@ export interface FeeDashboard {
   };
   byBank: { key: string; label: string; payable: number; collected: number; balance: number }[];
   byHead: { key: string; label: string; payable: number; collected: number; balance: number }[];
-  byCategory: (FeeGroupRow & { govtShare: number; govtReceived: number })[];
+  byCategory: CategoryRow[];
+  byBranch: BranchRow[];
+  /** Students who still owe something, largest balance first. */
+  balances: BalanceRow[];
   byClass: FeeGroupRow[];
   byDepartment: FeeGroupRow[];
   instalments: { no: number; label: string; dueDate: string; payable: number; collected: number; balance: number; overdue: number; overdueStudents: number }[];
@@ -35,8 +55,9 @@ export interface FeeDashboard {
   pendingConcessions: number;
 }
 
-export const CATEGORY_GROUP: Record<string, string> = { "A-FR": "Category A - FR", "A-NFR": "Category A - NFR", SPOT: "Spot", B: "Category B" };
-const groupOfAccount = (a: Pick<StudentFeeAccount, "category" | "funding">) => (a.category === "A" ? `A-${a.funding === "FR" ? "FR" : "NFR"}` : a.category);
+export const CATEGORY_GROUP: Record<CategoryKey, string> = { "A-FR": "CAT-A (FR)", "A-NFR": "CAT-A (NFR)", SPOT: "CAT-A (SPOT)", B: "CAT-B (MGT)" };
+export const categoryKeyOf = (a: Pick<StudentFeeAccount, "category" | "funding">): CategoryKey => (a.category === "A" ? (a.funding === "FR" ? "A-FR" : "A-NFR") : a.category);
+const emptyCell = (): BranchCell => ({ students: 0, payable: 0, collected: 0, balance: 0, govt: 0 });
 
 const AGEING = [
   { key: "0-30", label: "Up to 30 days", max: 30 },
@@ -57,10 +78,14 @@ export function buildFeeDashboard(input: {
 }): FeeDashboard {
   const { accounts, receipts, payments, today } = input;
   const days = input.days ?? 30;
-  const t = { students: 0, raised: 0, payable: 0, collected: 0, balance: 0, concession: 0, govtShare: 0, govtReceived: 0, overdue: 0, overdueStudents: 0, cleared: 0, paidExtra: 0, paidExtraStudents: 0, notStarted: 0 };
+  const t = { students: 0, raised: 0, payable: 0, collected: 0, balance: 0, concession: 0, govtShare: 0, govtReceived: 0, overdue: 0, overdueStudents: 0, cleared: 0, paidExtra: 0, paidExtraStudents: 0, notStarted: 0, yetToClear: 0 };
   const bank = new Map<string, { key: string; label: string; payable: number; collected: number }>();
   const head = new Map<string, { key: string; label: string; payable: number; collected: number }>();
-  const cats = new Map<string, FeeGroupRow & { govtShare: number; govtReceived: number }>();
+  const cats = new Map<CategoryKey, CategoryRow>();
+  const branches = new Map<string, BranchRow>();
+  const balances: BalanceRow[] = [];
+  const lastPaid = new Map<string, string>();
+  for (const r of receipts) if (!r.cancelled && (lastPaid.get(r.accountId) ?? "") < r.paidOn) lastPaid.set(r.accountId, r.paidOn);
   const classes = new Map<string, FeeGroupRow>();
   const depts = new Map<string, FeeGroupRow>();
   const inst = new Map<number, { no: number; label: string; dates: Map<string, number>; payable: number; collected: number; overdue: number; overdueStudents: number }>();
@@ -80,6 +105,7 @@ export function buildFeeDashboard(input: {
     if (a.balance <= 0 && a.studentShare > 0) t.cleared++;
     if (a.balance < 0) { t.paidExtra += -a.balance; t.paidExtraStudents++; }
     if (a.paid <= 0 && a.studentShare > 0) t.notStarted++;
+    if (a.balance > 0) t.yetToClear++;
 
     // Heads and bank accounts: the student's share of each head, and what has been paid against it.
     const paidByHead: Record<string, number> = {};
@@ -100,11 +126,22 @@ export function buildFeeDashboard(input: {
       m.set(key, g);
       return g;
     };
-    const ck = groupOfAccount(a);
-    const cg = (cats.get(ck) ?? { ...emptyGroup(ck, CATEGORY_GROUP[ck] ?? ck), govtShare: 0, govtReceived: 0 });
+    const ck = categoryKeyOf(a);
+    const cg: CategoryRow = cats.get(ck) ?? { ...emptyGroup(ck, CATEGORY_GROUP[ck]), key: ck, govtShare: 0, govtReceived: 0, full: 0, part: 0, none: 0, paidExtra: 0, paidExtraStudents: 0, ageing: AGEING.map((g) => ({ key: g.key, amount: 0, students: 0 })) };
     cats.set(ck, cg);
-    add(cats as Map<string, FeeGroupRow>, ck, CATEGORY_GROUP[ck] ?? ck);
-    if (ck === "A-FR") { cg.govtShare += a.govtShare; cg.govtReceived += a.govtReceived; }
+    cg.students++; cg.raised += a.gross; cg.payable += a.studentShare; cg.collected += a.paid; cg.balance += balance; cg.overdue += overdue;
+    if (overdue > 0) cg.overdueStudents++;
+    cg.govtShare += a.govtShare; cg.govtReceived += a.govtReceived;
+    if (a.studentShare > 0) { if (a.paid >= a.studentShare) cg.full++; else if (a.paid > 0) cg.part++; else cg.none++; }
+    if (a.balance < 0) { cg.paidExtra += -a.balance; cg.paidExtraStudents++; }
+    // Branch x category.
+    const bk = a.department || "-";
+    const brow = branches.get(bk) ?? { key: bk, label: a.department || "Not on record", cats: {}, total: emptyCell() };
+    for (const cell of [(brow.cats[ck] ??= emptyCell()), brow.total]) {
+      cell.students++; cell.payable += a.studentShare; cell.collected += a.paid; cell.balance += balance; cell.govt += a.govtShare;
+    }
+    branches.set(bk, brow);
+    if (balance > 0) balances.push({ accountId: a.id, rollNumber: a.rollNumber, name: a.name, department: a.department, section: a.section, category: ck, fee: a.gross, payable: a.studentShare, paid: a.paid, balance, lastPaid: lastPaid.get(a.id) ?? null });
     add(classes, `${a.courseKey}__${a.batch}`, `${a.courseName} ${a.batch}`);
     add(depts, a.department || "-", a.department || "Not on record");
 
@@ -121,6 +158,7 @@ export function buildFeeDashboard(input: {
       const late = dayNo(today) - dayNo(oldest);
       const g = AGEING.findIndex((x) => late <= x.max);
       ageing[g].amount += overdue; ageing[g].students++;
+      cg.ageing[g].amount += overdue; cg.ageing[g].students++;
       defaulters.push({ accountId: a.id, rollNumber: a.rollNumber, name: a.name, department: a.department, section: a.section, courseName: a.courseName, batch: a.batch, category: a.category, funding: a.funding, overdue, balance, oldestDue: oldest, days: late });
     }
   }
@@ -165,7 +203,9 @@ export function buildFeeDashboard(input: {
     },
     byBank: [...bank.values()].map(money).sort(byBalance),
     byHead: [...head.values()].map(money).sort(byBalance),
-    byCategory: ["A-FR", "A-NFR", "SPOT", "B"].map((k) => cats.get(k)).filter((x): x is NonNullable<typeof x> => !!x),
+    byCategory: CATEGORY_KEYS.map((k) => cats.get(k)).filter((x): x is CategoryRow => !!x),
+    byBranch: [...branches.values()].sort((a, b) => b.total.balance - a.total.balance || a.label.localeCompare(b.label)),
+    balances: balances.sort((a, b) => b.balance - a.balance || a.rollNumber.localeCompare(b.rollNumber)),
     byClass: [...classes.values()].sort((a, b) => a.label.localeCompare(b.label)),
     byDepartment: [...depts.values()].sort(byBalance),
     instalments: [...inst.values()].sort((a, b) => a.no - b.no).map((r) => ({

@@ -10,7 +10,7 @@ import { buildFeeDashboard, type DashPayment } from "@/lib/fees/dashboard";
 import type { FeeConcessionRequest, FeeReceipt, StudentFeeAccount } from "@/types/fees";
 import type { Payment } from "@/types/payments";
 
-// Accounts > Fees > Dashboard (?collegeId): GET ?academicYear=&courseKey=&batch= - the year's fee position (raised,
+// Accounts > Fees > Dashboard (?collegeId): GET ?academicYear=&courseKey=&batch=&department=&year= - the year's fee position (raised,
 // collected, balance, overdue, by bank account / head / category / class / department / instalment, overdue ageing,
 // defaulters), money in by date and mode, and the online payments' outcomes. Read only. lib/fees/dashboard.ts.
 export async function GET(request: Request) {
@@ -20,20 +20,28 @@ export async function GET(request: Request) {
     const sp = new URL(request.url).searchParams;
     const academicYear = sp.get("academicYear") ?? "";
     if (!ACADEMIC_YEAR_RE.test(academicYear)) throw new FeeError("Select the academic year.");
-    const courseKey = sp.get("courseKey") ?? "", batch = sp.get("batch") ?? "";
+    const courseKey = sp.get("courseKey") ?? "", batch = sp.get("batch") ?? "", department = sp.get("department") ?? "", year = Number(sp.get("year") ?? "") || null;
     const refs = feeRefs(db, session.collegeId);
     let q = refs.accounts.where("academicYear", "==", academicYear);
     if (courseKey) q = q.where("courseKey", "==", courseKey);
     if (batch) q = q.where("batch", "==", batch);
-    const [acc, rec, pay, conc] = await Promise.all([
+    const [acc, rec, pay, conc, depts] = await Promise.all([
       q.get(),
       refs.receipts.where("academicYear", "==", academicYear).get(),
       refs.college.collection("payments").where("purpose.kind", "==", "FEE").get(),
       refs.concessionRequests.where("status", "==", "PENDING").get(),
+      refs.college.collection("departments").get(),
     ]);
-    const accounts = acc.docs.map((d) => d.data() as StudentFeeAccount);
+    const all = acc.docs.map((d) => d.data() as StudentFeeAccount);
+    // Branch / year of study pickers come from the year's fees before those two filters.
+    const options = {
+      departments: [...new Set(all.map((a) => a.department).filter(Boolean))].sort(),
+      years: [...new Set(all.map((a) => a.year).filter((y): y is number => typeof y === "number"))].sort((a, b) => a - b),
+    };
+    const accounts = all.filter((a) => (!department || a.department === department) && (!year || a.year === year));
+    const deptCodes = Object.fromEntries(depts.docs.map((d) => [String(d.get("name") ?? ""), String(d.get("code") ?? d.get("shortName") ?? "")]).filter(([n, c]) => n && c));
     const ids = new Set(accounts.map((a) => a.id));
-    const filtered = !!(courseKey || batch);
+    const filtered = !!(courseKey || batch || department || year);
     const receipts = rec.docs.map((d) => d.data() as FeeReceipt).filter((r) => !filtered || ids.has(r.accountId));
     const payments: DashPayment[] = pay.docs.map((d) => d.data() as Payment)
       .filter((p) => p.purpose.kind === "FEE" && p.purpose.academicYear === academicYear && (!filtered || ids.has(p.purpose.accountId)))
@@ -41,7 +49,7 @@ export async function GET(request: Request) {
     const pendingConcessions = conc.docs.map((d) => d.data() as FeeConcessionRequest)
       .filter((r) => r.academicYear === academicYear && (!filtered || ids.has(r.accountId))).length;
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
-    return NextResponse.json(buildFeeDashboard({ accounts, receipts, payments, pendingConcessions, today }));
+    return NextResponse.json({ ...buildFeeDashboard({ accounts, receipts, payments, pendingConcessions, today }), options, deptCodes });
   } catch (err) {
     return paymentErrorResponse(err, "[college/fees/dashboard GET]");
   }

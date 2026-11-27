@@ -88,4 +88,20 @@ describe("fee dashboard", () => {
     expect(d.online).toMatchObject({ success: 2, failed: 1, needsRefund: 1 });
     expect(d.pendingConcessions).toBe(2);
   });
+  it("counts only students who still owe as yet to clear, and splits each category by who has paid", () => {
+    expect(d.totals.yetToClear).toBe(3);                     // NFR part-paid, NFR nothing, FR (owes Special + Bus); Spot cleared
+    const nfr = d.byCategory.find((c) => c.key === "A-NFR")!;
+    expect(nfr).toMatchObject({ label: "CAT-A (NFR)", full: 0, part: 1, none: 1 });
+    expect(d.byCategory.find((c) => c.key === "SPOT")).toMatchObject({ label: "CAT-A (SPOT)", full: 1 });
+    expect(nfr.ageing.find((a) => a.key === "90+")).toMatchObject({ students: 1, amount: 47500 });
+  });
+
+  it("builds branch x category cells and the balance list", () => {
+    const cse = d.byBranch.find((b) => b.key === "CSE")!, ece = d.byBranch.find((b) => b.key === "ECE")!;
+    expect(cse.cats["A-FR"]).toMatchObject({ students: 1, govt: 70000 });
+    expect(ece.cats["A-NFR"]).toMatchObject({ students: 1, collected: 0, balance: 95000 });
+    expect(cse.total.collected + ece.total.collected).toBe(d.totals.collected);
+    expect(d.balances.map((b) => [b.rollNumber, b.balance])).toEqual([[nfrNothing.rollNumber, 95000], [fr.rollNumber, 25000], [nfrPaidFirst.rollNumber, 47500]].sort((a, b) => (b[1] as number) - (a[1] as number)));
+    expect(d.balances.find((b) => b.rollNumber === nfrPaidFirst.rollNumber)?.lastPaid).toBe("2026-11-27");
+  });
 });
