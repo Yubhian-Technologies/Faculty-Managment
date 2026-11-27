@@ -116,7 +116,7 @@ export function AccountPanel({ collegeId, accountId, today }: { collegeId: strin
               <tbody className="divide-y">{d.instalments.map((x) => (
                 <tr key={x.no}>
                   <td className="py-1.5">{x.label}</td>
-                  <td className={cn("py-1.5", x.overdue && "font-medium text-destructive")}>{dmy(x.dueDate)}{x.overdue && <span className="block text-[11px]">Overdue</span>}</td>
+                  <td className={cn("py-1.5", x.overdue && "font-medium text-destructive")}>{x.dueDate ? dmy(x.dueDate) : "Not set yet"}{x.overdue && <span className="block text-[11px]">Overdue</span>}</td>
                   <td className="py-1.5 text-right tabular-nums">{rupee(x.amount)}</td>
                   <td className="py-1.5 text-right tabular-nums">{rupee(x.paid)}</td>
                   <td className="py-1.5 text-right font-medium tabular-nums">{x.due ? rupee(x.due) : <span className="text-emerald-700 dark:text-emerald-300">Paid</span>}</td>

@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { InstalmentState } from "@/lib/fees/rules";
 
+const MODE_LABEL: Record<string, string> = { CASH: "Cash", DD: "Demand Draft", UPI: "UPI", BANK: "Bank Transfer", CHEQUE: "Cheque", ONLINE: "Paid Online" };
+
 // Student > Fees: my fee for each academic year - by fee head, the part the government pays the college (FR -
 // fee reimbursement), concessions, what I pay, instalments with due dates (paid / due / overdue) - and my receipts to print.
 
@@ -73,7 +75,7 @@ export default function StudentFeesPage() {
                   <tbody className="divide-y">{a.instalments.map((x) => (
                     <tr key={x.no}>
                       <td className="py-1.5">{x.label} <span className="text-xs text-muted-foreground">{rupee(x.amount)}</span></td>
-                      <td className={cn("py-1.5", x.overdue && "font-medium text-destructive")}>{dmy(x.dueDate)}{x.overdue && <span className="block text-[11px]">Overdue</span>}</td>
+                      <td className={cn("py-1.5", x.overdue && "font-medium text-destructive")}>{x.dueDate ? dmy(x.dueDate) : "Not set yet"}{x.overdue && <span className="block text-[11px]">Overdue</span>}</td>
                       <td className="py-1.5 text-right tabular-nums">{x.due ? rupee(x.due) : <span className="text-emerald-700 dark:text-emerald-300">Paid</span>}</td>
                     </tr>
                   ))}</tbody>
@@ -88,7 +90,7 @@ export default function StudentFeesPage() {
           <p className="font-semibold">Receipts</p>
           <ul className="divide-y">{d.receipts.map((r) => (
             <li key={r.id} className={cn("flex flex-wrap items-center justify-between gap-2 py-2 text-sm", r.cancelled && "opacity-60")}>
-              <span><span className="font-medium">{r.receiptNo}</span> · {rupee(r.amount)} · {dmy(r.paidOn)} · {r.academicYear}{r.cancelled ? " · cancelled" : ""}</span>
+              <span><span className="font-medium">{r.receiptNo}</span> · {rupee(r.amount)} · {dmy(r.paidOn)} · {MODE_LABEL[r.mode] ?? r.mode} · {r.academicYear}{r.cancelled ? " · cancelled" : ""}</span>
               <Button size="sm" variant="ghost" onClick={() => void print(r)}><Printer className="mr-1 h-4 w-4" />Print</Button>
             </li>
           ))}</ul>

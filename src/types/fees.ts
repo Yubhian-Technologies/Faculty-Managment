@@ -147,6 +147,11 @@ export interface StudentFeeAccount {
   funding: FeeFunding;
   fundingNote?: string;
   structureId: string;
+  /** IMPORT = taken from the college's previous system (debit notes, lib/fees/importPrevious.ts) - Raise Fees never
+   *  overwrites it. Absent = raised from a fee structure. */
+  source?: "IMPORT";
+  /** The debit note it came from. */
+  importRef?: { voucherNo: string; voucherDate: string };
   /** The structure's instalment plan (percent + due dates), kept to re-split when shares change. */
   plan: FeeStructureInstalment[];
   heads: StudentFeeHead[];
@@ -201,6 +206,8 @@ export interface FeeReceipt {
   /** Instalment x head (with its bank account) it went to. */
   allocation: FeeAllocation[];
   paymentId?: string;
+  /** Recorded from the college's previous system (Import Previous Fees); `receiptNo` is that system's voucher number. */
+  imported?: boolean;
   remarks?: string;
   cancelled?: { at: string; byName: string; reason: string } | null;
   createdAt: string;

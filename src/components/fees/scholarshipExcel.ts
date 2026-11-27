@@ -6,6 +6,7 @@
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 const text = (v: unknown): string => {
   if (v == null) return "";
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? "" : v.toISOString().slice(0, 10);
   if (typeof v === "object") {
     const o = v as { result?: unknown; richText?: { text: string }[]; text?: unknown };
     if (o.richText) return o.richText.map((t) => t.text).join("").trim();
@@ -15,26 +16,37 @@ const text = (v: unknown): string => {
   return String(v).trim();
 };
 
-/** Rows of { [wanted key]: cell text }; `columns` maps a key to the header names it may have. */
-export async function readSheet(file: File, columns: Record<string, string[]>): Promise<{ rows: Record<string, string>[] } | { error: string }> {
+/** Rows of { [wanted key]: cell text }; `columns` maps a key to the header names it may have (required), `optional`
+ *  likewise (blank when the file has no such column). The header row is the first of the top 10 rows holding every
+ *  required column, so a title line above it (or a blank first row) is fine. Date cells come back as YYYY-MM-DD.
+ *  Each row carries its sheet row number as `_row`. */
+export async function readSheet(file: File, columns: Record<string, string[]>, optional: Record<string, string[]> = {}): Promise<{ rows: Record<string, string>[] } | { error: string }> {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
   try { await wb.xlsx.load(await file.arrayBuffer()); } catch { return { error: "Unable to read the file. Save it as .xlsx and try again." }; }
   const ws = wb.worksheets[0];
   if (!ws) return { error: "The file has no sheet." };
-  const header: string[] = [];
-  ws.getRow(1).eachCell({ includeEmpty: true }, (cell, i) => { header[i] = norm(text(cell.value)); });
-  const at: Record<string, number> = {};
-  for (const [key, names] of Object.entries(columns)) {
-    const i = header.findIndex((h) => h && names.map(norm).includes(h));
-    if (i < 0) return { error: `The first row must have a "${names[0]}" column.` };
-    at[key] = i;
+  const headerOf = (n: number) => { const h: string[] = []; ws.getRow(n).eachCell({ includeEmpty: true }, (cell, i) => { h[i] = norm(text(cell.value)); }); return h; };
+  const find = (header: string[], names: string[]) => header.findIndex((h) => h && names.map(norm).includes(h));
+  let headAt = 0, header: string[] = [];
+  for (let n = 1; n <= Math.min(10, ws.rowCount); n++) {
+    const h = headerOf(n);
+    if (Object.values(columns).every((names) => find(h, names) >= 0)) { headAt = n; header = h; break; }
   }
+  if (!headAt) {
+    const first = Object.values(columns)[0]?.[0] ?? "";
+    const h1 = headerOf(1);
+    const missing = Object.values(columns).find((names) => find(h1, names) < 0)?.[0] ?? first;
+    return { error: `The header row must have a "${missing}" column.` };
+  }
+  const at: Record<string, number> = {};
+  for (const [key, names] of Object.entries(columns)) at[key] = find(header, names);
+  for (const [key, names] of Object.entries(optional)) { const i = find(header, names); if (i >= 0) at[key] = i; }
   const rows: Record<string, string>[] = [];
   ws.eachRow((row, n) => {
-    if (n === 1) return;
-    const r = Object.fromEntries(Object.entries(at).map(([k, i]) => [k, text(row.getCell(i).value)]));
-    if (Object.values(r).some(Boolean)) rows.push(r);
+    if (n <= headAt) return;
+    const r = Object.fromEntries(Object.keys({ ...columns, ...optional }).map((k) => [k, at[k] === undefined ? "" : text(row.getCell(at[k]).value)]));
+    if (Object.values(r).some(Boolean)) rows.push({ ...r, _row: String(n) });
   });
   return { rows };
 }

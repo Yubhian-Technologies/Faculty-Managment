@@ -189,7 +189,8 @@ export function instalmentStates(a: Pick<StudentFeeAccount, "instalments" | "pai
     }
     const paid = Object.values(paidByHead).reduce((n, v) => n + v, 0);
     const due = x.amount - paid;
-    const overdue = due > 0 && today > x.dueDate;
+    // A blank due date (imported fees, dates not set yet) is never overdue.
+    const overdue = due > 0 && !!x.dueDate && today > x.dueDate;
     return { ...x, paid, paidByHead, due, overdue };
   });
 }
