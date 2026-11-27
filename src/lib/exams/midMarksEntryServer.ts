@@ -5,6 +5,7 @@ import { questionSheetsFor } from "@/lib/exams/questionMarksServer";
 import type { QuestionSheet } from "@/lib/exams/questionMarks";
 import type { MidSheetFormat } from "@/types/midMarks";
 import { coPendingCount } from "@/lib/midMarks/format";
+import { dropCoveredSections } from "./midProgressRows";
 import { entryStateFor, sheetFromLayout, MID_MARKS_MODES, type MidEntryState, type MidMarksLayout, type MidMarksMode } from "@/lib/exams/midMarksEntry";
 
 // Storage behind midMarksEntry.ts:
@@ -221,5 +222,7 @@ export async function midProgress(
     const key = `${r.subjectId}|${r.branch}`;
     out.set(key, [...(out.get(key) ?? []), p].sort((x, y) => x.section.localeCompare(y.section)));
   }
+  // A section taught by two faculty: its marks are on one sheet - the other faculty's empty row is left out.
+  for (const [k, list] of out) out.set(k, dropCoveredSections(list));
   return out;
 }
