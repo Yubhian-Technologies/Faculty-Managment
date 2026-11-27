@@ -78,8 +78,10 @@ export async function PUT(request: Request) {
       const r = (r0 ?? {}) as { subjectCode?: unknown; components?: unknown };
       const code = typeof r.subjectCode === "string" ? r.subjectCode.trim().toUpperCase() : "";
       if (!code) throw new MidMarksError("Enter the subject code of each subject with its own components.");
-      const snap = await db.collection("colleges").doc(c).collection("subjects").where("subjectCode", "==", code).get();
-      const subject = snap.docs.map((d) => ({ ...(d.data() as Subject), id: d.id }))
+      // Master subjects keep their code in `code` (SubjectMasterService); `subjectCode` is read too for older docs.
+      const subjectsCol = db.collection("colleges").doc(c).collection("subjects");
+      const [byCode, byOld] = await Promise.all([subjectsCol.where("code", "==", code).get(), subjectsCol.where("subjectCode", "==", code).get()]);
+      const subject = [...byCode.docs, ...byOld.docs].map((d) => ({ ...(d.data() as Subject), id: d.id }))
         .find((s) => regulation === "ALL" || String(s.regulation ?? "").trim().toUpperCase() === regulation) ?? null;
       if (!subject) throw new MidMarksError(`Subject ${code} not found${regulation === "ALL" ? "" : ` in ${regulation}`}.`);
       const comps = cleanComponents(r.components);
