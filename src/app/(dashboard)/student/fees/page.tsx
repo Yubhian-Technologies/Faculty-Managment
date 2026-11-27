@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import type { InstalmentState } from "@/lib/fees/rules";
 
 // Student > Fees: my fee for each academic year - by fee head, the part the government pays the college (FR -
-// fee reimbursement), concessions, what I pay, instalments with due dates (paid / due / overdue + late fine) - and my receipts to print.
+// fee reimbursement), concessions, what I pay, instalments with due dates (paid / due / overdue) - and my receipts to print.
 
 interface Account {
   id: string; academicYear: string; courseName: string; batch: string; category: "A" | "B" | "SPOT"; funding: "FR" | "NFR";
@@ -43,14 +43,13 @@ export default function StudentFeesPage() {
       {error ? <p className="text-sm text-destructive">{error}</p> : !d ? <div className="h-40 animate-pulse rounded-2xl bg-muted/40" /> : d.accounts.length === 0 ? (
         <p className="text-sm text-muted-foreground">No fees are listed for you yet.</p>
       ) : d.accounts.map((a) => {
-        const fine = a.instalments.reduce((n, x) => n + x.fine, 0);
         return (
           <Card key={a.id} className="rounded-2xl"><CardContent className="space-y-4 p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="font-semibold">{a.academicYear} <span className="text-sm font-normal text-muted-foreground">· {a.courseName} · Batch {a.batch}</span></p>
               <div className="flex flex-wrap items-center gap-3">
               {d.onlinePay && a.balance > 0 && <Button size="sm" onClick={() => setPaying(a)}><CreditCard className="mr-1 h-4 w-4" />Pay Online</Button>}
-              <p className="text-sm">{a.balance > 0 ? <>Balance <span className="text-lg font-semibold tabular-nums">{rupee(a.balance)}</span>{fine ? <span className="text-destructive"> + late fine {rupee(fine)}</span> : null}</> : <span className="font-semibold text-emerald-700 dark:text-emerald-300">Fully paid</span>}</p>
+              <p className="text-sm">{a.balance > 0 ? <>Balance <span className="text-lg font-semibold tabular-nums">{rupee(a.balance)}</span></> : <span className="font-semibold text-emerald-700 dark:text-emerald-300">Fully paid</span>}</p>
               </div>
             </div>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
@@ -74,7 +73,7 @@ export default function StudentFeesPage() {
                   <tbody className="divide-y">{a.instalments.map((x) => (
                     <tr key={x.no}>
                       <td className="py-1.5">{x.label} <span className="text-xs text-muted-foreground">{rupee(x.amount)}</span></td>
-                      <td className={cn("py-1.5", x.overdue && "font-medium text-destructive")}>{dmy(x.dueDate)}{x.overdue && <span className="block text-[11px]">Overdue{x.fine ? ` · fine ${rupee(x.fine)}` : ""}</span>}</td>
+                      <td className={cn("py-1.5", x.overdue && "font-medium text-destructive")}>{dmy(x.dueDate)}{x.overdue && <span className="block text-[11px]">Overdue</span>}</td>
                       <td className="py-1.5 text-right tabular-nums">{x.due ? rupee(x.due) : <span className="text-emerald-700 dark:text-emerald-300">Paid</span>}</td>
                     </tr>
                   ))}</tbody>

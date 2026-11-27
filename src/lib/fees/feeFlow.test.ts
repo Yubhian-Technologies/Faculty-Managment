@@ -13,7 +13,7 @@ const plan = [{ no: 1, label: "First", dueDate: "2026-08-01", percent: 60 }, { n
 const structure = (id: string, category: "A" | "B", tuition: number): FeeStructure => ({
   id, academicYear: "2026-27", courseKey: "cat-btech", courseName: "B.Tech", batch: "2026-2030", category,
   heads: [{ headId: "t", name: "Tuition", amount: tuition, frCovered: category === "A" }, { headId: "s", name: "Special Fee", amount: 5000, frCovered: false }], total: tuition + 5000,
-  instalments: plan, lateFine: null, status: "PUBLISHED", rev: 1, createdAt: "", updatedAt: "", updatedByName: "A",
+  instalments: plan, status: "PUBLISHED", rev: 1, createdAt: "", updatedAt: "", updatedByName: "A",
 });
 
 function setup() {

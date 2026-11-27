@@ -17,7 +17,7 @@ import { feeGet, feeSend, rupee, selectClass, yearChoices, type FeeOptions } fro
 
 // Accounts > Fees > Collect: find a student (Regd. No or name), see their fee account - category, FR / NFR, each
 // head (government part, concession, what the student pays, its bank account), instalments (paid / due / overdue +
-// late fine) - record a payment taken at the counter (receipt printed, split by bank account) and cancel a receipt.
+// what is overdue) - record a payment taken at the counter (receipt printed, split by bank account) and cancel a receipt.
 // Concessions come only from requests Management approved.
 
 interface Hit { id: string; rollNumber: string; name: string; department: string; section: string; balance: number; status: string }
@@ -79,7 +79,6 @@ export function AccountPanel({ collegeId, accountId, today }: { collegeId: strin
   }, [collegeId, accountId, tick]);
   if (!d) return <div className="h-48 animate-pulse rounded-lg bg-muted" />;
   const a = d.account;
-  const fine = d.instalments.reduce((n, x) => n + x.fine, 0);
   const print = (r: FeeReceipt) => printStudentFeeReceipt({ receipt: r, college: d.college }).catch((e: Error) => toast({ variant: "destructive", title: e.message }));
 
   return (
@@ -106,7 +105,7 @@ export function AccountPanel({ collegeId, accountId, today }: { collegeId: strin
           <Tile label="Concession" value={a.concessionTotal ? `− ${rupee(a.concessionTotal)}` : "-"} sub={a.concessionUnused ? `${rupee(a.concessionUnused)} not used` : undefined} />
           <Tile label="Student Pays" value={rupee(a.studentShare)} />
           <Tile label="Paid" value={rupee(a.paid)} tone="text-emerald-700 dark:text-emerald-300" />
-          <Tile label={a.balance < 0 ? "Paid Extra" : "Balance"} value={rupee(Math.abs(a.balance))} tone={a.balance > 0 ? "text-amber-700 dark:text-amber-300" : a.balance < 0 ? "text-destructive" : "text-emerald-700 dark:text-emerald-300"} sub={fine ? `+ late fine ${rupee(fine)}` : undefined} />
+          <Tile label={a.balance < 0 ? "Paid Extra" : "Balance"} value={rupee(Math.abs(a.balance))} tone={a.balance > 0 ? "text-amber-700 dark:text-amber-300" : a.balance < 0 ? "text-destructive" : "text-emerald-700 dark:text-emerald-300"} />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -117,7 +116,7 @@ export function AccountPanel({ collegeId, accountId, today }: { collegeId: strin
               <tbody className="divide-y">{d.instalments.map((x) => (
                 <tr key={x.no}>
                   <td className="py-1.5">{x.label}</td>
-                  <td className={cn("py-1.5", x.overdue && "font-medium text-destructive")}>{dmy(x.dueDate)}{x.overdue && <span className="block text-[11px]">Overdue{x.fine ? ` · fine ${rupee(x.fine)}` : ""}</span>}</td>
+                  <td className={cn("py-1.5", x.overdue && "font-medium text-destructive")}>{dmy(x.dueDate)}{x.overdue && <span className="block text-[11px]">Overdue</span>}</td>
                   <td className="py-1.5 text-right tabular-nums">{rupee(x.amount)}</td>
                   <td className="py-1.5 text-right tabular-nums">{rupee(x.paid)}</td>
                   <td className="py-1.5 text-right font-medium tabular-nums">{x.due ? rupee(x.due) : <span className="text-emerald-700 dark:text-emerald-300">Paid</span>}</td>

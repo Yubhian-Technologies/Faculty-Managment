@@ -58,14 +58,6 @@ export interface FeeStructureInstalment {
   percent: number;
 }
 
-export interface FeeLateFine {
-  /** PER_DAY: `amount` per day overdue after `graceDays`; FLAT: `amount` once overdue after `graceDays`. */
-  kind: "PER_DAY" | "FLAT";
-  amount: number;
-  graceDays: number;
-  /** Most it can come to per instalment (PER_DAY). */
-  cap?: number;
-}
 
 export type FeeStructureStatus = "DRAFT" | "PUBLISHED";
 
@@ -84,7 +76,6 @@ export interface FeeStructure {
   heads: FeeStructureHead[];
   total: number;
   instalments: FeeStructureInstalment[];
-  lateFine?: FeeLateFine | null;
   status: FeeStructureStatus;
   rev: number;
   createdAt: string;
@@ -172,7 +163,6 @@ export interface StudentFeeAccount {
   /** What the student pays (all heads). */
   studentShare: number;
   instalments: StudentFeeInstalment[];
-  lateFine?: FeeLateFine | null;
   /** Paid by the student (receipts not cancelled). */
   paid: number;
   /** studentShare - paid (negative = paid more than owed - to refund or carry forward). */
