@@ -15,7 +15,7 @@ import { feeGet, feeSend, rupee, selectClass, yearChoices, type FeeOptions } fro
 
 // Accounts > Fees > Fee Structures: each academic year's fee per course + batch + category - A (Convenor students,
 // FR or NFR, and Spot students) or B (Management) - by fee head; for Category A, which heads FR covers (the government
-// pays them for FR students). Split into instalments with due dates; optional late fine. A draft can change freely;
+// pays them for FR students). Split into instalments with due dates. A draft can change freely;
 // a published one needs a reason (accounts already raised keep their fee until fees are raised again).
 
 interface Props { collegeId: string; options: FeeOptions; academicYear: string; setAcademicYear: (y: string) => void }
@@ -104,8 +104,6 @@ function StructureDialog({ collegeId, options, heads, initial, onClose, onSaved 
   const [amounts, setAmounts] = useState<Record<string, string>>(() => Object.fromEntries((initial.heads ?? []).map((h) => [h.headId, String(h.amount)])));
   const [fr, setFr] = useState<Record<string, boolean>>(() => Object.fromEntries((initial.heads ?? []).map((h) => [h.headId, !!h.frCovered])));
   const [inst, setInst] = useState<InstDraft[]>(() => (initial.instalments?.length ? initial.instalments.map((x) => ({ label: x.label, dueDate: x.dueDate, percent: String(x.percent) })) : [{ label: "First Instalment", dueDate: "", percent: "100" }]));
-  const [fineOn, setFineOn] = useState(!!initial.lateFine);
-  const [fine, setFine] = useState({ kind: initial.lateFine?.kind ?? "PER_DAY", amount: String(initial.lateFine?.amount ?? ""), graceDays: String(initial.lateFine?.graceDays ?? "0"), cap: String(initial.lateFine?.cap ?? "") });
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const total = useMemo(() => Object.values(amounts).reduce((n, v) => n + (Number(v) || 0), 0), [amounts]);
@@ -121,7 +119,6 @@ function StructureDialog({ collegeId, options, heads, initial, onClose, onSaved 
         ...(isEdit ? { id: initial.id, rev: initial.rev } : {}), academicYear, courseKey, courseName: options.courses.find((c) => c.key === courseKey)?.name ?? "", batch, category,
         heads: Object.entries(amounts).map(([headId, v]) => ({ headId, amount: Number(v) || 0, frCovered: category === "A" && !!fr[headId] })),
         instalments: inst.map((x) => ({ label: x.label, dueDate: x.dueDate, percent: Number(x.percent) })),
-        lateFine: fineOn ? { kind: fine.kind, amount: Number(fine.amount), graceDays: Number(fine.graceDays || 0), ...(fine.cap ? { cap: Number(fine.cap) } : {}) } : null,
         publish, ...(reason ? { reason } : {}),
       });
       toast({ variant: "success", title: publish && !published ? "Fee structure published." : "Fee structure saved." });
@@ -175,17 +172,6 @@ function StructureDialog({ collegeId, options, heads, initial, onClose, onSaved 
             <Button size="sm" variant="outline" disabled={inst.length >= 12} onClick={() => setInst((p) => [...p, { label: `Instalment ${p.length + 1}`, dueDate: "", percent: "" }])}><Plus className="mr-1 h-4 w-4" />Add Instalment</Button>
           </div>
 
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={fineOn} onChange={(e) => setFineOn(e.target.checked)} />Late Fine</label>
-            {fineOn && (
-              <div className="grid gap-2 sm:grid-cols-4">
-                <div className="space-y-1"><Label className="text-xs">Charged</Label><select className={selectClass} value={fine.kind} onChange={(e) => setFine({ ...fine, kind: e.target.value as "PER_DAY" | "FLAT" })}><option value="PER_DAY">Per day late</option><option value="FLAT">Once</option></select></div>
-                <div className="space-y-1"><Label className="text-xs">Amount (₹)</Label><Input type="number" min={1} value={fine.amount} onChange={(e) => setFine({ ...fine, amount: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">Grace Days</Label><Input type="number" min={0} value={fine.graceDays} onChange={(e) => setFine({ ...fine, graceDays: e.target.value })} /></div>
-                {fine.kind === "PER_DAY" && <div className="space-y-1"><Label className="text-xs">Most per Instalment (₹)</Label><Input type="number" min={1} value={fine.cap} onChange={(e) => setFine({ ...fine, cap: e.target.value })} /></div>}
-              </div>
-            )}
-          </div>
           {published && <div className="space-y-1"><Label htmlFor="fs-reason">Reason for the Change</Label><Input id="fs-reason" value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} /></div>}
         </div>
         <DialogFooter>

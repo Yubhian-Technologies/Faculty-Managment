@@ -11,13 +11,13 @@ import { feeGet, rupee, selectClass, yearChoices, type FeeOptions } from "./feeA
 import { AccountPanel } from "./FeeCollect";
 
 // Accounts > Fees > Dues: every fee account of the year (optionally one course / batch / category / FR-NFR) - fee,
-// government share (FR) and what arrived, concession, paid, balance, overdue now with late fine - totals, filters (overdue / balance / cleared) and CSV.
+// government share (FR) and what arrived, concession, paid, balance, overdue now - totals, filters (overdue / balance / cleared) and CSV.
 // A row opens the student's account.
 
 interface Row {
   id: string; rollNumber: string; name: string; department: string; section: string; courseName: string; batch: string; admissionType: string;
   category: "A" | "B" | "SPOT"; funding: "FR" | "NFR"; gross: number; concessionTotal: number; govtShare: number; govtReceived: number; studentShare: number; paid: number; balance: number;
-  status: string; overdue: number; fine: number; nextDue: string | null;
+  status: string; overdue: number; nextDue: string | null;
 }
 type Filter = "OVERDUE" | "DUE" | "CLEARED" | "ALL";
 
@@ -50,7 +50,7 @@ export function FeeDues({ collegeId, options, academicYear, setAcademicYear }: {
     { key: "category", header: "Category" }, { key: "funding", header: "FR / NFR" }, { key: "govtShare", header: "Government (FR)" }, { key: "govtReceived", header: "Government Received" },
     { key: "concessionTotal", header: "Concession" },
     { key: "studentShare", header: "Student Pays" }, { key: "paid", header: "Paid" }, { key: "balance", header: "Balance" }, { key: "overdue", header: "Overdue" },
-    { key: "fine", header: "Late Fine" }, { key: "nextDue", header: "Next Due" },
+    { key: "nextDue", header: "Next Due" },
   ]);
 
   return (
@@ -90,7 +90,7 @@ export function FeeDues({ collegeId, options, academicYear, setAcademicYear }: {
                   <td className="px-3 py-1.5 tabular-nums">{rupee(r.studentShare)}</td>
                   <td className="px-3 py-1.5 tabular-nums">{rupee(r.paid)}</td>
                   <td className={cn("px-3 py-1.5 font-medium tabular-nums", r.balance < 0 && "text-destructive")}>{r.balance < 0 ? `Extra ${rupee(-r.balance)}` : rupee(r.balance)}</td>
-                  <td className={cn("px-3 py-1.5 tabular-nums", r.overdue > 0 && "font-medium text-destructive")}>{r.overdue ? `${rupee(r.overdue)}${r.fine ? ` + ${rupee(r.fine)}` : ""}` : "-"}</td>
+                  <td className={cn("px-3 py-1.5 tabular-nums", r.overdue > 0 && "font-medium text-destructive")}>{r.overdue ? rupee(r.overdue) : "-"}</td>
                   <td className="px-3 py-1.5">{r.nextDue ? dmy(r.nextDue) : "-"}</td>
                 </tr>
               ))}</tbody>

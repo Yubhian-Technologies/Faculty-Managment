@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  academicYearOf, allocationOf, byBankAccount, categoryOfType, cleanStructure, defaultCategory, fundingError, headShares, instalmentStates, lateFineFor,
+  academicYearOf, allocationOf, byBankAccount, categoryOfType, cleanStructure, defaultCategory, fundingError, headShares, instalmentStates,
   inFeeBatch, paymentError, recompute, splitInstalments, spread, structureCategory, studentFeeBatch, yearOfBatch,
 } from "./rules";
 import type { FeeStructureInstalment, StudentFeeAccount } from "@/types/fees";
@@ -18,7 +18,7 @@ const heads = [
   { headId: "b", name: "Bus Fee", amount: 20000, frCovered: false, bankAccountId: "tr", bankAccountName: "Transport A/c" },
 ];
 const acct = (over: Partial<StudentFeeAccount> = {}) => {
-  const base = { heads: heads.map((h) => ({ ...h, govt: 0, concession: 0, student: h.amount })), funding: "NFR" as const, concessions: [], paid: 0, plan, lateFine: null, ...over };
+  const base = { heads: heads.map((h) => ({ ...h, govt: 0, concession: 0, student: h.amount })), funding: "NFR" as const, concessions: [], paid: 0, plan, ...over };
   return { ...base, ...recompute(base) };
 };
 
@@ -38,7 +38,8 @@ describe("fee structure", () => {
   it("cleans a good structure; FR only on Category A", () => {
     const r = cleanStructure(base, headNames);
     if ("error" in r) throw new Error(r.error);
-    expect(r.value).toMatchObject({ category: "A", total: 75000, heads: [{ name: "Tuition", frCovered: true }, { name: "Special Fee", frCovered: false }], lateFine: null });
+    expect(r.value).toMatchObject({ category: "A", total: 75000, heads: [{ name: "Tuition", frCovered: true }, { name: "Special Fee", frCovered: false }] });
+    expect(r.value).not.toHaveProperty("lateFine");
     const b = cleanStructure({ ...base, category: "B" }, headNames);
     if ("error" in b) throw new Error(b.error);
     expect(b.value.heads.every((h) => !h.frCovered)).toBe(true);
@@ -95,19 +96,16 @@ describe("shares", () => {
 
 describe("paying", () => {
   it("fills instalments oldest first, head by head, and says which bank account each rupee went to", () => {
-    const a = acct({ funding: "FR", paid: 10000, lateFine: { kind: "PER_DAY", amount: 50, graceDays: 10, cap: 1000 } });
+    const a = acct({ funding: "FR", paid: 10000 });
     // FR student pays Special 5,000 + Bus 20,000: instalment 1 = 2,500 + 10,000.
     const st = instalmentStates(a, "2026-12-20");
-    expect(st.map((x) => [x.amount, x.paid, x.due, x.overdue, x.fine])).toEqual([[12500, 10000, 2500, true, 1000], [7500, 0, 7500, true, 450], [5000, 0, 5000, false, 0]]);
+    expect(st.map((x) => [x.amount, x.paid, x.due, x.overdue])).toEqual([[12500, 10000, 2500, true], [7500, 0, 7500, true], [5000, 0, 5000, false]]);
     const alloc = allocationOf(a, 4000);
     expect(alloc.map((x) => [x.no, x.headName, x.bankAccountName, x.amount])).toEqual([[1, "Bus Fee", "Transport A/c", 2500], [2, "Special Fee", "College A/c", 1500]]);
     expect(byBankAccount(alloc)).toEqual([{ account: "Transport A/c", amount: 2500 }, { account: "College A/c", amount: 1500 }]);
   });
 
-  it("charges late fines and checks counter payments", () => {
-    expect(lateFineFor({ kind: "FLAT", amount: 500, graceDays: 0 }, "2026-08-01", "2026-08-02")).toBe(500);
-    expect(lateFineFor({ kind: "PER_DAY", amount: 20, graceDays: 5, cap: 300 }, "2026-08-01", "2026-09-30")).toBe(300);
-    expect(lateFineFor(null, "2026-08-01", "2027-01-01")).toBe(0);
+  it("checks counter payments", () => {
     expect(paymentError(100.5, 1000)).toMatch(/whole/);
     expect(paymentError(1001, 1000)).toMatch(/more than the balance/);
     expect(paymentError(100, 0)).toMatch(/Nothing is due/);

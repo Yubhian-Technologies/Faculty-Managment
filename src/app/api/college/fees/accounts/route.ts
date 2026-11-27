@@ -10,7 +10,7 @@ import type { StudentFeeAccount } from "@/types/fees";
 
 // Accounts > Fees > Dues / Collect (?collegeId): the fee accounts of an academic year.
 // GET ?academicYear=&courseKey=&batch=&q=   q = Regd. No / name / mobile (Regd. No and name match the start)
-// Each row: the account's totals + what is due now (overdue instalments and late fines as of today, IST).
+// Each row: the account's totals + what is due now (overdue instalments as of today, IST).
 export async function GET(request: Request) {
   try {
     const db = getAdminDb();
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
           id: a.id, rollNumber: a.rollNumber, name: a.name, department: a.department, section: a.section, courseName: a.courseName, batch: a.batch,
           admissionType: a.admissionType, category: a.category, funding: a.funding, gross: a.gross, concessionTotal: a.concessionTotal,
           govtShare: a.govtShare, govtReceived: a.govtReceived, studentShare: a.studentShare, paid: a.paid, balance: a.balance, status: a.status,
-          overdue: overdue.reduce((n, x) => n + x.due, 0), fine: overdue.reduce((n, x) => n + x.fine, 0),
+          overdue: overdue.reduce((n, x) => n + x.due, 0),
           nextDue: st.find((x) => x.due > 0)?.dueDate ?? null,
         };
       });

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { feeGet, selectClass, type FeeOptions } from "./feeApi";
 import { FeeCollect } from "./FeeCollect";
+import { FeeDashboard } from "./FeeDashboard";
 import { FeeDues } from "./FeeDues";
 import { FeeDayBook } from "./FeeDayBook";
 import { FeeStructures } from "./FeeStructures";
@@ -16,6 +17,7 @@ import { RaiseFees } from "./RaiseFees";
 // class's fees, counter collection with receipts, concessions, dues and the day book (lib/fees, types/fees.ts).
 
 const TABS = [
+  { key: "dashboard", label: "Dashboard" },
   { key: "collect", label: "Collect" },
   { key: "dues", label: "Dues" },
   { key: "daybook", label: "Day Book" },
@@ -30,7 +32,7 @@ export function AccountsFees() {
   const [collegeId, setCollegeId] = useState("");
   const [options, setOptions] = useState<FeeOptions | null>(null);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<Tab>("collect");
+  const [tab, setTab] = useState<Tab>("dashboard");
   const [academicYear, setAcademicYear] = useState("");
 
   useEffect(() => {
@@ -70,7 +72,8 @@ export function AccountsFees() {
               </button>
             ))}
           </div>
-          {tab === "collect" && <FeeCollect key={`c-${collegeId}`} collegeId={collegeId} options={options} academicYear={academicYear} setAcademicYear={setAcademicYear} />}
+          {tab === "dashboard" && <FeeDashboard key={`h-${collegeId}`} collegeId={collegeId} options={options} academicYear={academicYear} setAcademicYear={setAcademicYear} />}
+          {tab === "collect" &&<FeeCollect key={`c-${collegeId}`} collegeId={collegeId} options={options} academicYear={academicYear} setAcademicYear={setAcademicYear} />}
           {tab === "dues" && <FeeDues key={`d-${collegeId}`} collegeId={collegeId} options={options} academicYear={academicYear} setAcademicYear={setAcademicYear} />}
           {tab === "daybook" && <FeeDayBook key={`b-${collegeId}`} collegeId={collegeId} today={options.today} />}
           {tab === "structures" && <FeeStructures key={`s-${collegeId}`} collegeId={collegeId} options={options} academicYear={academicYear} setAcademicYear={setAcademicYear} />}

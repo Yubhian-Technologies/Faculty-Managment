@@ -13,7 +13,7 @@ import type { FeeStructure } from "@/types/fees";
 
 // Accounts > Fees > Fee Structures (?collegeId): the year's fee for academic year + course + batch + category
 // (A - also used for Spot students - or B), by fee head (Category A: which heads FR covers), split into instalments
-// with due dates, optional late fine. Publishing needs every head to have its bank account.
+// with due dates. Publishing needs every head to have its bank account.
 // GET ?academicYear=   the structures of that year
 // POST { id?, rev?, ...fields, publish?: boolean, reason? }   add / edit (a published one needs a reason; accounts
 //      already raised keep their fee until fees are raised again)

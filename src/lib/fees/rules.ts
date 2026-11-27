@@ -1,5 +1,5 @@
 import type {
-  FeeAllocation, FeeCategory, FeeConcession, FeeFunding, FeeLateFine, FeeStructure, FeeStructureInstalment, StudentFeeAccount, StudentFeeHead, StudentFeeInstalment,
+  FeeAllocation, FeeCategory, FeeConcession, FeeFunding, FeeStructure, FeeStructureInstalment, StudentFeeAccount, StudentFeeHead, StudentFeeInstalment,
 } from "@/types/fees";
 
 // Student fee rules (pure, browser + server). Whole rupees. Per head the student's amount = head - government part
@@ -68,12 +68,12 @@ export const CATEGORY_LABEL: Record<FeeCategory, string> = { A: "Category A", B:
 
 export interface StructureInput {
   academicYear: unknown; courseKey: unknown; courseName: unknown; batch: unknown; category: unknown;
-  heads: unknown; instalments: unknown; lateFine?: unknown;
+  heads: unknown; instalments: unknown;
 }
 
 /** Checks a structure from the form; returns its fields cleaned, or the first problem. */
 export function cleanStructure(raw: StructureInput, headNames: Map<string, string>):
-  { value: Pick<FeeStructure, "academicYear" | "courseKey" | "courseName" | "batch" | "category" | "heads" | "total" | "instalments" | "lateFine"> } | { error: string } {
+  { value: Pick<FeeStructure, "academicYear" | "courseKey" | "courseName" | "batch" | "category" | "heads" | "total" | "instalments"> } | { error: string } {
   const academicYear = String(raw.academicYear ?? "").trim();
   if (!ACADEMIC_YEAR_RE.test(academicYear)) return { error: "Select the academic year (for example 2026-27)." };
   const courseKey = String(raw.courseKey ?? "").trim(), courseName = String(raw.courseName ?? "").trim();
@@ -112,17 +112,7 @@ export function cleanStructure(raw: StructureInput, headNames: Map<string, strin
   const pct = Math.round(instalments.reduce((n, x) => n + x.percent, 0) * 100) / 100;
   if (pct !== 100) return { error: `The instalments add up to ${pct}% - they must add up to 100%.` };
 
-  let lateFine: FeeLateFine | null = null;
-  if (raw.lateFine && typeof raw.lateFine === "object") {
-    const f = raw.lateFine as { kind?: unknown; amount?: unknown; graceDays?: unknown; cap?: unknown };
-    const amount = rupees(f.amount), graceDays = rupees(f.graceDays ?? 0), cap = f.cap == null || f.cap === "" ? undefined : rupees(f.cap);
-    if (f.kind !== "PER_DAY" && f.kind !== "FLAT") return { error: "Choose how the late fine is charged." };
-    if (!isWhole(amount) || amount === 0) return { error: "Enter the late fine in whole rupees." };
-    if (!isWhole(graceDays) || graceDays > 365) return { error: "Grace days must be from 0 to 365." };
-    if (cap !== undefined && (!isWhole(cap) || cap < amount)) return { error: "The late fine cap must be at least the fine." };
-    lateFine = { kind: f.kind, amount, graceDays, ...(cap !== undefined ? { cap } : {}) };
-  }
-  return { value: { academicYear, courseKey, courseName, batch, category, heads, total, instalments, lateFine } };
+  return { value: { academicYear, courseKey, courseName, batch, category, heads, total, instalments } };
 }
 
 /** Splits `total` over `weights` in proportion (rounded down; the largest remainders get the leftover rupees). */
@@ -185,10 +175,10 @@ export function recompute(a: Pick<StudentFeeAccount, "heads" | "funding" | "conc
   return { heads, gross, concessionTotal, concessionUnused: unused, govtShare, studentShare, instalments: splitInstalments(heads, a.plan), balance, status: balance <= 0 ? "CLEARED" : "OPEN" };
 }
 
-export interface InstalmentState extends StudentFeeInstalment { paid: number; due: number; overdue: boolean; fine: number; paidByHead: Record<string, number> }
+export interface InstalmentState extends StudentFeeInstalment { paid: number; due: number; overdue: boolean; paidByHead: Record<string, number> }
 
-/** Each instalment's paid / due (what was paid fills them oldest first, head by head), overdue as of `today`, late fine. */
-export function instalmentStates(a: Pick<StudentFeeAccount, "instalments" | "paid" | "lateFine" | "heads">, today: string): InstalmentState[] {
+/** Each instalment's paid / due (what was paid fills them oldest first, head by head), overdue as of `today`. */
+export function instalmentStates(a: Pick<StudentFeeAccount, "instalments" | "paid" | "heads">, today: string): InstalmentState[] {
   let left = Math.max(0, a.paid);
   return a.instalments.map((x) => {
     const paidByHead: Record<string, number> = {};
@@ -200,25 +190,14 @@ export function instalmentStates(a: Pick<StudentFeeAccount, "instalments" | "pai
     const paid = Object.values(paidByHead).reduce((n, v) => n + v, 0);
     const due = x.amount - paid;
     const overdue = due > 0 && today > x.dueDate;
-    return { ...x, paid, paidByHead, due, overdue, fine: overdue ? lateFineFor(a.lateFine, x.dueDate, today) : 0 };
+    return { ...x, paid, paidByHead, due, overdue };
   });
-}
-
-const daysBetween = (from: string, to: string) => Math.round((Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10)) - Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10))) / 86_400_000);
-
-/** The late fine on one instalment due on `dueDate`, as of `today` (none within the grace days). */
-export function lateFineFor(f: FeeLateFine | null | undefined, dueDate: string, today: string): number {
-  if (!f) return 0;
-  const late = daysBetween(dueDate, today) - f.graceDays;
-  if (late <= 0) return 0;
-  const fine = f.kind === "FLAT" ? f.amount : f.amount * late;
-  return f.cap ? Math.min(fine, f.cap) : fine;
 }
 
 /** Where a new payment of `amount` lands: instalment x head (with its bank account), oldest first. */
 export function allocationOf(a: Pick<StudentFeeAccount, "instalments" | "paid" | "heads">, amount: number): FeeAllocation[] {
-  const before = instalmentStates({ ...a, lateFine: null }, "0000-00-00");
-  const after = instalmentStates({ ...a, paid: a.paid + amount, lateFine: null }, "0000-00-00");
+  const before = instalmentStates(a, "0000-00-00");
+  const after = instalmentStates({ ...a, paid: a.paid + amount }, "0000-00-00");
   const out: FeeAllocation[] = [];
   after.forEach((x, i) => {
     for (const h of a.heads) {

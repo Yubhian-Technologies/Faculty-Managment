@@ -133,7 +133,7 @@ export async function raiseFees(db: Db, c: string, q: { academicYear: string; co
       department: s.department ?? "", section: s.section ?? "", year: s.year ?? null, courseId: s.courseId ?? "", courseKey: q.courseKey,
       courseName: keys.get(s.courseId ?? "")?.name ?? st.courseName, batch: q.batch, admissionType: type, category, funding,
       ...(cur?.fundingNote ? { fundingNote: cur.fundingNote } : {}), structureId: st.id, plan: st.instalments,
-      ...totals, concessions, govtReceived: cur?.govtReceived ?? 0, lateFine: st.lateFine ?? null, paid: 0,
+      ...totals, concessions, govtReceived: cur?.govtReceived ?? 0, paid: 0,
       rev: (cur?.rev ?? 0) + 1, createdAt: cur?.createdAt ?? at, updatedAt: at, updatedByName: q.byName,
       history: step(cur ?? null, at, q.byName, cur ? "FEE_UPDATED" : "FEE_RAISED", `${CATEGORY_LABEL[category]} ${funding}: Rs. ${totals.gross}`),
     };
