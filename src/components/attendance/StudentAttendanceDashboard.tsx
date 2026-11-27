@@ -321,7 +321,7 @@ function SubjectList({ subjects }: { subjects: DashData["subjects"] }) {
             <span className="min-w-0"><b>{s.name || s.code}</b> <span className="text-xs text-muted-foreground">· {s.faculty.slice(0, 2).join(", ")}{s.faculty.length > 2 ? ` +${s.faculty.length - 2}` : ""} · {s.sections} section{s.sections === 1 ? "" : "s"}</span></span>
             <b className={cn("shrink-0 tabular-nums", s.pct < 75 && "text-red-700 dark:text-red-400")}>{fmtPct(s.pct)}</b>
           </div>
-          <div className="mt-1 h-2 rounded bg-muted"><div className="h-2 rounded" style={{ width: `${Math.min(100, s.pct)}%`, background: s.pct < 75 ? "#d03b3b" : "hsl(var(--primary))" }} /></div>
+          <div className="mt-1 h-2 rounded bg-muted"><div className="h-2 rounded" style={{ width: `${Math.min(100, s.pct)}%`, background: s.pct < 75 ? "#d03b3b" : "var(--primary)" }} /></div>
         </div>
       ))}
     </div>

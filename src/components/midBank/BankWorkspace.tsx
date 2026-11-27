@@ -310,7 +310,7 @@ export function BankWorkspace({ detail, initialQ }: { detail: MidBankDetail; ini
       {/* Bank progress, per unit */}
       <div className="flex flex-wrap items-center gap-4 rounded-2xl border bg-card p-4 shadow-sm">
         <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full text-sm font-bold text-primary"
-          style={{ background: `conic-gradient(hsl(var(--primary)) ${pct * 3.6}deg, hsl(var(--muted)) 0deg)` }}>
+          style={{ background: `conic-gradient(var(--primary) ${pct * 3.6}deg, var(--muted) 0deg)` }}>
           <span className="grid h-11 w-11 place-items-center rounded-full bg-card">{pct}%</span>
         </div>
         <div className="min-w-48 flex-1 space-y-2">

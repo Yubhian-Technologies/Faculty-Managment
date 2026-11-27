@@ -51,7 +51,7 @@ export function FormulaPanel({ initial, onSubmit, onRemove, onClose }: {
       mf.style.width = "100%";
       mf.style.fontSize = "1.25rem";
       mf.style.padding = "0.25rem 0.5rem";
-      mf.style.border = "1px solid hsl(var(--input))";
+      mf.style.border = "1px solid var(--input)";
       mf.style.borderRadius = "0.375rem";
       if (initial?.latex) mf.value = initial.latex;
       mf.addEventListener("input", () => { setEmpty(!mf.value.trim()); setProblem(""); });

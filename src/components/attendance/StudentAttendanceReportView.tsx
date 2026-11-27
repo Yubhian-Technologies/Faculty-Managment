@@ -815,7 +815,7 @@ export function StudentAttendanceReportView({ title = "Student Attendance", scop
         // row has none of its own), or the subject columns show through them while the table scrolls sideways.
         const stick1 = "sticky left-0 z-[1] w-12 min-w-12 bg-background group-hover/row:bg-slate-50";
         const stick2 = "sticky left-12 z-[1] w-32 min-w-32 bg-background group-hover/row:bg-slate-50";
-        const stick3 = "sticky left-44 z-[1] min-w-44 bg-background group-hover/row:bg-slate-50 shadow-[1px_0_0_0_hsl(var(--border))]";
+        const stick3 = "sticky left-44 z-[1] min-w-44 bg-background group-hover/row:bg-slate-50 shadow-[1px_0_0_0_var(--border)]";
         const headStick = "!bg-muted z-[2]";
         return (
         <Card key={r.section.id} className="overflow-hidden">
