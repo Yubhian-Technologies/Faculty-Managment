@@ -15,7 +15,7 @@ import { selectClass } from "./payrollClient";
 // structures and rules. The College Office prepares and submits its own college's months and reads pay
 // structures / rules. The Principal / VP read the months only (`viewOnly`).
 
-const TABS = [{ id: "runs", label: "Monthly salaries" }, { id: "pay", label: "Pay structures" }, { id: "advances", label: "Salary advances" }, { id: "tax", label: "Income tax" }, { id: "rules", label: "Pay parts & rules" }] as const;
+const TABS = [{ id: "runs", label: "Monthly Salary Statements" }, { id: "pay", label: "Pay Structure" }, { id: "advances", label: "Salary Advance" }, { id: "tax", label: "Income Tax" }, { id: "rules", label: "Pay Scales & HR Policy" }] as const;
 type Tab = (typeof TABS)[number]["id"];
 
 export function PayrollHome({ pickCollege, viewOnly = false }: { pickCollege: boolean; viewOnly?: boolean }) {
@@ -31,7 +31,7 @@ export function PayrollHome({ pickCollege, viewOnly = false }: { pickCollege: bo
 
   return (
     <div className="max-w-7xl space-y-6">
-      <PageHeader title="Payroll" description={viewOnly ? "Monthly salaries of the college, as prepared by the College Office and released by Accounts." : pickCollege ? "Monthly salaries, pay structures and salary rules of each college in your location." : "Prepare each month's salaries for Accounts. Pay structures and rules are set by Accounts."} />
+      <PageHeader title="Payroll" description={viewOnly ? "Monthly salaries of the college, as prepared by the College Office and released by Accounts." : pickCollege ? "Monthly Salary Statements and Pay Structure (Institution-wise)." : "Prepare each month's salaries for Accounts. Pay structures and rules are set by Accounts."} />
       {pickCollege && (
         <div className="max-w-sm space-y-1.5">
           <Label htmlFor="pr-college">College</Label>

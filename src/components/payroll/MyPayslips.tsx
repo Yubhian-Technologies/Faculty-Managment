@@ -36,7 +36,7 @@ export function MyPayslips() {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <PageHeader title="My Payslips" description="Your salary for each month once released by Accounts, and your income tax for the year." />
+      <PageHeader title="My Payslips" description="View your monthly payslips once released by the Accounts Department, along with your annual income tax details." />
       {error ? <p className="text-sm text-destructive">{error}</p> : !d ? <div className="h-40 animate-pulse rounded-2xl bg-muted/40" /> : !d.employee ? (
         <p className="text-sm text-muted-foreground">Your login is not linked to a faculty or staff record, so there are no payslips to show. Contact the College Office.</p>
       ) : (

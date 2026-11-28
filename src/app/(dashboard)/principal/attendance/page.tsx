@@ -126,7 +126,7 @@ export default function PrincipalAttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="My Attendance"
-        description="Your monthly attendance record."
+        description="Staff monthly attendance record."
       />
 
       {isCurrentMonth && (

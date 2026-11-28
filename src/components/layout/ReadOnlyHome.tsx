@@ -11,7 +11,7 @@ import type { FacultyStatus } from "@/types";
 
 const SECTIONS = [
   { href: "/panel/profile", title: "My Profile", text: "Your personal, academic and employment details.", Icon: UserCircle },
-  { href: "/panel/attendance", title: "My Attendance", text: "Your monthly attendance record and summary.", Icon: ClipboardCheck },
+  { href: "/panel/attendance", title: "My Attendance", text: "Staff monthly attendance record and summary.", Icon: ClipboardCheck },
   { href: "/panel/leave", title: "My Leave", text: "Your leave balances and past applications.", Icon: CalendarClock },
 ] as const;
 

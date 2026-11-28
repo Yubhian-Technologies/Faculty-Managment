@@ -130,7 +130,7 @@ export function ClassAdjustmentsPanel() {
         <div>
           <CardTitle className="text-base">Adjust or Swap a Class</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            Hand a period to a colleague who teaches the same section - they teach their own subject in it - or swap periods with them on the same day.
+            Assign a class period to a colleague teaching the same section, allowing them to teach their own subject, or exchange class periods with a colleague on the same day.
           </p>
         </div>
         <Button size="sm" onClick={() => setOpen(true)} className="shrink-0"><CalendarClock className="h-4 w-4 mr-1.5" />Adjust or Swap</Button>
@@ -281,7 +281,7 @@ function AdjustDialog({ onClose, onDone, myFacultyId, departmentFaculty, initial
         <DialogHeader>
           <DialogTitle>Adjust or Swap a Class</DialogTitle>
           <DialogDescription>
-            {forOther ? "In force at once; both faculty are told." : "Your colleague accepts or declines; your HOD is told once it is accepted."}
+            {forOther ? "In force at once; both faculty are told." : "The colleague can accept or decline the adjustment request. Once accepted, the HOD is automatically notified."}
           </DialogDescription>
         </DialogHeader>
 

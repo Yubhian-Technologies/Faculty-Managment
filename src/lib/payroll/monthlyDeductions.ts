@@ -46,7 +46,7 @@ export function planMonthlyDeductions(
   });
   const retired = columns.filter((c) => !c.active).map((c) => c.header);
   const problem = columns.length === 0
-    ? "The file has no column for a deduction entered each month. Add it in Pay parts & rules (e.g. MediClaim, entered each month); if you added it after this month was prepared, Recalculate the month first"
+    ? "The file has no column for a deduction entered each month. Add it in Pay Scales & HR Policy (e.g. MediClaim, entered each month); if you added it after this month was prepared, Recalculate the month first"
     : retired.length ? `${retired.join(", ")} is no longer in use - remove the column` : null;
 
   const byCode = new Map<string, typeof lines>();
