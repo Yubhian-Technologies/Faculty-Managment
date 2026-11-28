@@ -40,7 +40,7 @@ interface LeaveUsageBarProps {
   emptyLabel?: string;
 }
 
-export function LeaveUsageBar({ order, segments, totalLabel, emptyLabel = "No leave taken yet" }: LeaveUsageBarProps) {
+export function LeaveUsageBar({ order, segments, totalLabel, emptyLabel = "No leave availed yet" }: LeaveUsageBarProps) {
   const byKey = new Map(segments.map((s) => [s.key, s]));
   const ordered = order.map((k) => byKey.get(k)).filter((s): s is LeaveUsageSegment => !!s && s.value > 0);
   const total = ordered.reduce((sum, s) => sum + s.value, 0);

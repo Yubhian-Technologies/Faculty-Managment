@@ -23,7 +23,6 @@ import { HANDOVER_ENABLED } from "@/lib/leave/featureFlags";
 import { LEAVE_TYPE_LABELS } from "@/types/leave";
 import type { LeaveRequest, LeaveTypeCode } from "@/types/leave";
 import type { Holiday, SummerHoliday, WorkingDayOverride } from "@/types";
-import { ROLE_LABELS, type UserRole } from "@/types/core";
 
 interface BalanceEntry {
   code: LeaveTypeCode;
@@ -944,16 +943,12 @@ export function LeaveApplyForm({ backHref }: LeaveApplyFormProps) {
 
           {handoverRoles.length > 0 && handoverDepts.length > 0 && (
             <div className="space-y-2">
-              <Label>Role Adjustment (Optional)</Label>
-              <p className="text-xs text-muted-foreground">
-                Choose a department and a person to do your {handoverRoles.map((r) => ROLE_LABELS[r as UserRole] ?? r.replaceAll("_", " ")).join(" / ")} work
-                while you are on leave. They get access only on your approved leave dates, and you keep your access too.
-              </p>
+              <Label>Assign In-charge</Label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Select value={roleDept || "NONE"} onValueChange={(v) => setRoleDept(v === "NONE" ? "" : v)}>
                   <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="NONE">No Role Adjustment Required</SelectItem>
+                    <SelectItem value="NONE">No Adjustment</SelectItem>
                     {handoverDepts.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>

@@ -469,7 +469,7 @@ export function RequestForm({
           </Label>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {[
-              { whole: true, title: "Whole day", hint: "Every period on the selected day(s)" },
+              { whole: true, title: "Whole day", hint: "All periods on the selected day(s)" },
               { whole: false, title: "Select periods", hint: "Only the periods I choose" },
             ].map((o) => {
               const active = allPeriods === o.whole;

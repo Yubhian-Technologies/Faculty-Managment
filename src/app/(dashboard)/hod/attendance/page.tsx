@@ -134,7 +134,7 @@ export default function HODAttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="My Attendance"
-        description="Monthly attendance records."
+        description="Staff monthly attendance record."
       />
 
       {isCurrentMonth && (

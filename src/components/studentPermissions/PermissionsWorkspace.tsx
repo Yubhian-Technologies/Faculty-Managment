@@ -49,9 +49,9 @@ type TabMeta = {
 
 const TABS: Record<PermissionTab, TabMeta> = {
   new: { label: "New Request", short: "New", icon: PlusCircle },
-  mine: { label: "My Requests", short: "Mine", icon: ListChecks },
+  mine: { label: "Requests Made", short: "Mine", icon: ListChecks },
   section: { label: "Section Feed", short: "Section", icon: Megaphone },
-  inbox: { label: "Waiting for Me", short: "Inbox", icon: Inbox },
+  inbox: { label: "Pending", short: "Inbox", icon: Inbox },
   oversight: { label: "All Requests", short: "All", icon: ShieldCheck },
   routing: { label: "Routing", short: "Routing", icon: Route },
 };

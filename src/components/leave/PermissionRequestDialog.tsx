@@ -82,7 +82,7 @@ export function PermissionRequestDialog({ onSubmitted, preset }: {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Apply for Permission</DialogTitle>
-            <DialogDescription>For arriving late or leaving for part of the day. The request is sent to your approver.</DialogDescription>
+            <DialogDescription>Request for short-duration permission.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -91,18 +91,19 @@ export function PermissionRequestDialog({ onSubmitted, preset }: {
               <Input id="perm-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <p className="text-sm font-medium">Time</p>
+            <div className="-mt-2 grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="perm-from">From Time *</Label>
+                <Label htmlFor="perm-from">From *</Label>
                 <Input id="perm-from" type="time" value={fromTime} onChange={(e) => setFromTime(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="perm-to">To Time *</Label>
+                <Label htmlFor="perm-to">To *</Label>
                 <Input id="perm-to" type="time" value={toTime} onChange={(e) => setToTime(e.target.value)} />
               </div>
             </div>
             {!!fromTime && !!toTime && !timesOrdered && (
-              <p className="text-sm text-destructive">To time must be after From time.</p>
+              <p className="text-sm text-destructive">The To time must be after the From time.</p>
             )}
 
             <div className="space-y-2">

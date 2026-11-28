@@ -271,7 +271,7 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
         <CardContent className="p-4">
           <div className="space-y-4">
             <div className="w-full">
-              <p className="text-sm text-muted-foreground mb-1">Leave used this year.</p>
+              <p className="text-sm text-muted-foreground mb-1">Leaves used this year.</p>
               <LeaveUsageBar
                 order={usageOrder}
                 segments={usageSegments}
@@ -281,7 +281,7 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
             <div className="grid grid-cols-2 gap-3 border-t pt-4 sm:grid-cols-4">
               <div>
                 <p className="text-xl font-semibold">{statCounts.total}</p>
-                <p className="text-xs text-muted-foreground">Requests this year</p>
+                <p className="text-xs text-muted-foreground">Requests</p>
               </div>
               <div>
                 <p className="text-xl font-semibold">{statCounts.approved}</p>
@@ -289,7 +289,7 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
               </div>
               <div>
                 <p className="text-xl font-semibold">{statCounts.pending}</p>
-                <p className="text-xs text-muted-foreground">Awaiting decision</p>
+                <p className="text-xs text-muted-foreground">Pending</p>
               </div>
               <div>
                 <p className="text-xl font-semibold">{statCounts.rejected}</p>
@@ -384,8 +384,7 @@ export function LeaveProfileView({ uid, applyHref, historyBaseHref }: LeaveProfi
             <div className="flex items-center gap-3">
               <History className="h-5 w-5 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium">View Full Leave History</p>
-                <p className="text-xs text-muted-foreground">All your leave requests across all leave types, latest first.</p>
+                <p className="text-sm font-medium">Overall Leave History</p>
               </div>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />

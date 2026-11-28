@@ -39,7 +39,7 @@ export default function MidMarksListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Mid Marks" description="Enter each section's Mid marks question by question, against the paper the Exam Cell printed. Submit them to the Exam Cell; once frozen, a change needs a request." />
+      <PageHeader title="Mid Marks" description="Enter section-wise Mid examination marks question-wise, as per the question paper provided by the Exam Cell. Submit marks to the Exam Cell. Changes after freezing require a formal request." />
       {q.isLoading && <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((i) => <div key={i} className="h-40 animate-pulse rounded-xl bg-muted" />)}</div>}
       {q.isError && <p className="text-sm text-destructive">{(q.error as Error).message}</p>}
       {q.data && rows.length === 0 && (

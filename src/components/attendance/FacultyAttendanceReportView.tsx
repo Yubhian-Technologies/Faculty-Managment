@@ -195,7 +195,7 @@ export function FacultyAttendanceReportView({ sections }: { sections: FacultySec
     <div className="space-y-6">
       <PageHeader
         title="Attendance Report"
-        description="Select a section and a view, then choose Load to see attendance and class work for your subjects."
+        description="Select a section and a view, then click Load for subject-wise attendance and classwork details."
       />
 
       <Card>

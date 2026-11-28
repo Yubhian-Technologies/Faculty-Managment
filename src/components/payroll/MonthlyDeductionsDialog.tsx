@@ -97,7 +97,7 @@ export function MonthlyDeductionsDialog({ collegeId, run, lines, onClose, onDone
         </DialogHeader>
         {monthly.length === 0 && (
           <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-            No monthly deduction is set up for this month. Accounts can add one in Pay Parts and Rules (for example, MediClaim, entered each month). If it was added after this month was prepared, choose Recalculate first.
+            No monthly deduction is set up for this month. Accounts can add one in Pay Scales & HR Policy (for example, MediClaim, entered each month). If it was added after this month was prepared, choose Recalculate first.
           </p>
         )}
         <div className="flex flex-wrap items-end gap-3">

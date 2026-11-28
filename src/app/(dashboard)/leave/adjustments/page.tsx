@@ -128,7 +128,7 @@ export default function LeaveAdjustmentsPage() {
       <PageHeader
         title="Work Adjustments"
         description={teaches
-          ? "Adjust or swap a class with a colleague, and answer requests to cover a class or act as a point of contact during leave."
+          ? "Manage class adjustments and swaps with colleagues, respond to requests for class coverage, and coordinate as a point of contact during colleagues' leave."
           : "Requests from colleagues to cover a class or act as their point of contact while they are on leave."}
       />
       {teaches && <ClassAdjustmentsPanel />}

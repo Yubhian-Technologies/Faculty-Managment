@@ -50,7 +50,7 @@ export function MissedClassesCard() {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base"><AlarmClock className="h-4 w-4" />Missed Classes</CardTitle>
         <CardDescription>
-          Classes from the last {q.data.days} day{q.data.days === 1 ? "" : "s"} whose attendance was not posted. Mark each one late with a reason - your HOD is told.
+          View classes from the last {q.data.days} day{q.data.days === 1 ? "" : "s"} for which attendance was not recorded. Submit attendance late with a reason, and your HOD will be notified.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">

@@ -131,7 +131,7 @@ export default function FacultyAttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Attendance"
-        description="Your monthly attendance record."
+        description="Staff monthly attendance record."
       />
 
       {isCurrentMonth && !readOnly && (

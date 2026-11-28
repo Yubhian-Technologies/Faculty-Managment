@@ -19,7 +19,7 @@ import type { LeaveRequest, LeaveTypeCode, OtherLeaveCategory } from "@/types/le
 // "OTHER" isn't a real LeaveTypeCode (see types/leave.ts) - it's the catch-all
 // bucket for isOtherRequest submissions, which never get a leaveTypeCode.
 // "ALL" isn't a leave type either - it's the unfiltered, every-type view
-// reached from the "View Full Leave History" entry on LeaveProfileView.
+// reached from the "Overall Leave History" entry on LeaveProfileView.
 export type LeaveHistoryFilter = LeaveTypeCode | "OTHER" | "ALL";
 
 const DESCRIPTIONS: Record<LeaveHistoryFilter, string> = {
@@ -148,8 +148,8 @@ export function LeaveTypeHistoryView({ uid, backHref, type, showOtherLeaveCatego
   return (
     <div className="space-y-6">
       <PageHeader
-        title={type === "ALL" ? "Full Leave History" : `${label} History`}
-        description={DESCRIPTIONS[type]}
+        title={type === "ALL" ? "Complete Leave History" : `${label} History`}
+        description={type === "ALL" ? undefined : DESCRIPTIONS[type]}
         actions={
           <Button asChild variant="outline" size="sm">
             <Link href={backHref}>

@@ -222,7 +222,7 @@ function RunView({ collegeId, month, onBack }: { collegeId?: string; month: stri
         <details className="rounded-md border px-3 py-2 text-sm">
           <summary className="cursor-pointer font-medium"><AlertTriangle className="mr-1 inline h-4 w-4 text-amber-600" />{run.excluded.length} not in this month</summary>
           <ul className="mt-2 space-y-1 text-xs">{run.excluded.map((x) => <li key={x.employeeKey}><span className="font-mono">{x.employeeCode || "-"}</span> {x.name} - {x.reason}</li>)}</ul>
-          <p className="mt-2 text-xs text-muted-foreground">Accounts set pay in Pay Structures; then choose Recalculate.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Accounts set pay in Pay Structure; then choose Recalculate.</p>
         </details>
       )}
 

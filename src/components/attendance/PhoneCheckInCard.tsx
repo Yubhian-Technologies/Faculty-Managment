@@ -52,9 +52,7 @@ export function PhoneCheckInCard({ onChanged }: { onChanged?: () => void }) {
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2"><Fingerprint className="h-4 w-4" />Phone Check-In</CardTitle>
         <p className="text-sm text-muted-foreground">
-          {method === "PASSKEY"
-            ? "Your college checks in with your phone's own fingerprint or face unlock. Register the phone you carry every day."
-            : "You can check in with your phone's own fingerprint or face unlock instead of the face scan. Register the phone you carry every day."}
+          Mark attendance using your phone&apos;s fingerprint or face unlock after registering your device.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -79,7 +77,7 @@ export function PhoneCheckInCard({ onChanged }: { onChanged?: () => void }) {
           </Button>
         ) : (
           <p className="text-xs text-muted-foreground">
-            One phone per person. To change it (new or lost phone), ask your HOD to reset your check-in registration; the Principal does this for an HOD.
+            Only one phone can be registered per person. For a new or lost phone, request your HOD to reset registration. HODs must contact the Principal.
           </p>
         )}
       </CardContent>

@@ -755,7 +755,7 @@ export default function MarkAttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Mark Attendance"
-        description="Classes assigned to you today in the published timetable. Consecutive lab periods are grouped into one slot, with attendance for each period."
+        description="View your assigned classes from the published timetable and mark attendance. Consecutive lab periods are grouped into one slot, with attendance recorded for each period."
       />
 
       {!viewDate && <MissedClassesCard />}

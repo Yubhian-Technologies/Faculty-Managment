@@ -9,7 +9,7 @@
 // redoing the check.
 import { istMidnightUTC } from "./istTime";
 
-export const MISSED_CHECKOUT_REMARK = "Attendance portal closed — checked in but not checked out, so marked absent";
+export const MISSED_CHECKOUT_REMARK = "Attendance portal closed — checked in but not checked out, so marked as absent";
 
 // Firestore Timestamp (has .toDate) or a plain ISO/date string, depending on
 // how the record was written - every attendance route resolves this the same
