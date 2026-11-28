@@ -30,13 +30,15 @@ import {
   ClassesTodayDetail, FacultyTodayDetail, KpiDetailDialog, ShortageDetail, StudentsTodayDetail,
   type AbsenteeRow, type BelowRow, type KpiDetailKey, type SectionTodayRow,
 } from "@/components/dashboard/KpiDetails";
+import { useWorkContext } from "@/hooks/useWorkContext";
 import type { ClassCell } from "@/lib/dashboard/hodDashboard";
 
 // Shared home dashboard for /principal and /vice-principal (and the College Admin, who signs in as Principal):
 // the whole college, with departments where the HOD dashboard has sections. Key numbers -> what is waiting for you
 // -> today (departments board, not posted yet, on leave) -> this semester (trend, shortage by department, Mid papers,
 // exams, results, strength, faculty attendance this month). Each card loads and fails on its own (Retry); cards
-// whose page is hidden by Nav Visibility are left out. Figures: GET /api/college/principal/dashboard (same counting
+// whose page is hidden by Nav Visibility are left out (student strength stays - its API allows the VP - just without the
+// link to Students). Figures: GET /api/college/principal/dashboard (same counting
 // as the HOD dashboard and the reports) and the same APIs the linked pages use.
 
 interface TodayData {
@@ -75,12 +77,15 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
   const todayLabel = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
   const hour = Number(new Date().toLocaleString("en-IN", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const roleLabel = user?.realRole === "COLLEGE_ADMIN" ? "College Admin" : user?.role === "VICE_PRINCIPAL" ? "Vice Principal" : "Principal";
+  // Same label as the sidebar's "Working As" (a Principal login working as Vice Principal shows Vice Principal).
+  const { active: activeContext, contexts } = useWorkContext();
+  const roleLabel = contexts.find((c) => c.key === activeContext && c.key !== "ME")?.label
+    ?? (user?.realRole === "COLLEGE_ADMIN" ? "College Admin" : user?.role === "VICE_PRINCIPAL" ? "Vice Principal" : "Principal");
 
   const day = useQuery({ queryKey: ["pdash2", "today", today], queryFn: () => getJson<TodayData>("/api/college/principal/dashboard?part=today"), staleTime: 60_000, refetchInterval: 5 * 60_000 });
   const sem = useQuery({ queryKey: ["pdash2", "semester"], queryFn: () => getJson<SemesterData>("/api/college/principal/dashboard?part=semester"), staleTime: 10 * 60_000 });
   const month = useQuery({ queryKey: ["pdash2", "month"], queryFn: () => getJson<FacultyMonth>("/api/college/principal/dashboard?part=facultyMonth"), staleTime: 10 * 60_000, enabled: shown("/principal/attendance-report") });
-  const strength = useQuery({ queryKey: ["pdash2", "strength"], queryFn: () => getJson<StrengthPayload>("/api/college/student-strength"), staleTime: 10 * 60_000, enabled: shown("/principal/students") });
+  const strength = useQuery({ queryKey: ["pdash2", "strength"], queryFn: () => getJson<StrengthPayload>("/api/college/student-strength"), staleTime: 10 * 60_000 });
   const roster = useQuery({ queryKey: ["pdash2", "roster", today], queryFn: () => getJson<{ roster: Roster }>(`/api/college/attendance/report?date=${today}`).then((d) => d.roster ?? []), staleTime: 2 * 60_000 });
 
   // Waiting for you - each count from the list its own page shows.
@@ -245,7 +250,7 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
 
       {/* Key numbers */}
       <section aria-label="Key numbers" className="relative z-10 -mt-12 grid grid-cols-2 gap-3 sm:px-2 md:grid-cols-3 xl:grid-cols-6">
-        <Kpi icon={GraduationCap} label="Total Student Strength" href="/principal/students?tab=strength" loading={strength.isLoading} error={strength.isError || !shown("/principal/students")}
+        <Kpi icon={GraduationCap} label="Total Student Strength" href={shown("/principal/students") ? "/principal/students?tab=strength" : undefined} loading={strength.isLoading} error={strength.isError}
           value={students ? students.total.toLocaleString("en-IN") : "-"}
           sub={students ? (students.years.length > 1 ? students.years.map((y) => `${roman(y.year)} ${y.count.toLocaleString("en-IN")}`).join(" · ") : `${students.sections} section${students.sections === 1 ? "" : "s"}`) : undefined} />
         <Kpi icon={ClipboardCheck} label="Today's Student Attendance" onOpen={() => setDetail("students")} loading={day.isLoading} error={day.isError}
@@ -519,8 +524,8 @@ export function PrincipalDashboardHome({ fallbackName }: { fallbackName: string 
         </div>
 
         <div className="grid gap-3.5 md:grid-cols-2">
-          {shown("/principal/students") && (
-            <Panel title="Student Strength" sub="Enrolled, by year of study" href="/principal/students?tab=strength" linkLabel="Students"
+          {(
+            <Panel title="Student Strength" sub="Enrolled, by year of study" href={shown("/principal/students") ? "/principal/students?tab=strength" : undefined} linkLabel="Students"
               loading={strength.isLoading} error={strength.isError} onRetry={() => void strength.refetch()}>
               {students && (
                 <div className="space-y-2">
