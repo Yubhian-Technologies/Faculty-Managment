@@ -42,7 +42,7 @@ export function RaiseFees({ collegeId, options, academicYear, setAcademicYear }:
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Raise Fees</CardTitle>
-        <CardDescription>Gives every current student of a course and batch the year&apos;s fee from the published fee structure of their category - or, with a Regd. No, only that student (a late admission). Check first; nothing is saved until you raise.</CardDescription>
+        <CardDescription>Assigns the annual fee to all current students of a selected course and batch based on the published fee structure for their admission category. Alternatively, fees can be assigned to an individual student using their Registration Number (for late admissions). Review and verify the details before raising fees; no changes are saved until the action is confirmed.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-[8rem_1fr_10rem_10rem_auto]">

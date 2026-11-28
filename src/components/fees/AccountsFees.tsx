@@ -19,9 +19,9 @@ import { FeeImportPrevious } from "./FeeImportPrevious";
 
 const TABS = [
   { key: "dashboard", label: "Dashboard" },
-  { key: "collect", label: "Collect" },
+  { key: "collect", label: "Search by Student" },
   { key: "dues", label: "Dues" },
-  { key: "daybook", label: "Day Book" },
+  { key: "daybook", label: "Day-wise Collection" },
   { key: "structures", label: "Fee Structures" },
   { key: "setup", label: "Setup" },
   { key: "raise", label: "Raise Fees" },
@@ -54,9 +54,9 @@ export function AccountsFees() {
   const ready = collegeId && options && options.academicYear;
   return (
     <div className="space-y-6">
-      <PageHeader title="Fees" description="Student tuition and college fees by category (A - FR / NFR, Spot, B): fee structures, raising each class's fees, collecting at the counter with receipts split by bank account, and dues." />
+      <PageHeader title="College Fees" description="Overview of fees" />
       <div className="max-w-md space-y-1.5">
-        <Label htmlFor="fee-college">College</Label>
+        <Label htmlFor="fee-college">Select Institute</Label>
         <select id="fee-college" className={selectClass} value={collegeId} onChange={(e) => { setOptions(null); setCollegeId(e.target.value); }}>
           <option value="">{colleges === null ? "Loading..." : colleges.length ? "Select a college" : "No colleges in your location"}</option>
           {(colleges ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
