@@ -118,9 +118,9 @@ export function FeeDashboard({ collegeId, options, academicYear, setAcademicYear
               </div>
               <BalanceList d={d} pick={pick} setPick={setPick} code={code} academicYear={academicYear} />
 
-              <SectionTitle title="Money In" sub={`${d.collections.year.count.toLocaleString("en-IN")} receipts in ${academicYear}, ${lakh(d.collections.year.amount)}`} />
+              <SectionTitle title="Fee Collected Details" sub={`${d.collections.year.count.toLocaleString("en-IN")} receipts in ${academicYear}, ${lakh(d.collections.year.amount)}`} />
               <div className="grid gap-4 xl:grid-cols-3">
-                <Panel title="Daily Collection" sub="Last 30 days, receipts not cancelled" className="xl:col-span-2">
+                <Panel title="Daily Fee Collection" sub="Last 30 Days (Excluding Cancelled Receipts)" className="xl:col-span-2">
                   <DailyBars days={d.collections.daily} />
                 </Panel>
                 <Panel title="How It Was Paid" sub={d.collections.cancelled.count ? `${d.collections.cancelled.count} cancelled receipts (${rupee(d.collections.cancelled.amount)}) not counted` : "Counter and online, by mode"}>
@@ -140,12 +140,12 @@ export function FeeDashboard({ collegeId, options, academicYear, setAcademicYear
                 </Panel>
               </div>
 
-              <SectionTitle title="Where the Money Goes" />
+              <SectionTitle title="Expenditure Breakdown" sub="Allocation and Utilisation of Funds" />
               <div className="grid gap-4 xl:grid-cols-2">
-                <Panel title="By Bank Account" sub="Each fee head is credited to its bank account (Setup)">
+                <Panel title="Bank Account-wise Fee Collection" sub="Each Fee Head is Mapped to Its Designated Bank Account (As Configured in Setup).">
                   <MoneyTable rows={d.byBank} first="Bank Account" />
                 </Panel>
-                <Panel title="By Fee Head" sub="What students pay of each head, after FR and concessions">
+                <Panel title="By Fee Head" sub="Actual Amount Payable by Students under Each Fee Head, After Adjusting Fee Reimbursements (FR) and Concessions.">
                   <MoneyTable rows={d.byHead} first="Fee Head" />
                 </Panel>
               </div>
@@ -208,20 +208,21 @@ function CategoryCards({ rows }: { rows: CategoryRow[] }) {
             {r ? (
               <>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[13px]">
-                  {line("Total Fee", lakh(r.raised))}
+                  {line(fr ? "Total Fee to be Received from Govt." : "Total Fee to be Collected", lakh(fr ? r.govtShare : r.raised))}
                   {fr ? (
                     <>
-                      {line("Government Pays", lakh(r.govtShare))}
-                      {line("Government Received", lakh(r.govtReceived))}
-                      {line("Student Pays", lakh(r.payable))}
-                      {line("Paid Extra (to refund)", r.paidExtra ? `${lakh(r.paidExtra)} · ${r.paidExtraStudents}` : "-", r.paidExtra ? "text-amber-700" : undefined)}
+                      {line("Reimbursement Received", lakh(r.govtReceived))}
+                      {line("Reimbursement to be Received", lakh(Math.max(0, r.govtShare - r.govtReceived)))}
+                      {line("Paid by Students", lakh(r.collected))}
+                      {line("Refundable to Students", r.paidExtra ? `${lakh(r.paidExtra)} · ${r.paidExtraStudents}` : "-", r.paidExtra ? "text-amber-700" : undefined)}
                     </>
                   ) : (
                     <>
-                      {line("Collected", lakh(r.collected))}
-                      {line("Balance", lakh(r.balance))}
-                      {line("Overdue", lakh(r.overdue), r.overdue ? "text-destructive" : undefined)}
-                      {line("Paid Full · Part · None", `${r.full} · ${r.part} · ${r.none}`)}
+                      {line("Collected as of Now", lakh(r.collected))}
+                      {line("Outstanding Fee", lakh(r.balance))}
+                      {line("Overdue Fee", lakh(r.overdue), r.overdue ? "text-destructive" : undefined)}
+                      {line("Refundable to Students", r.paidExtra ? `${lakh(r.paidExtra)} · ${r.paidExtraStudents}` : "-", r.paidExtra ? "text-amber-700" : undefined)}
+                      {line("Fully · Partly · Not Paid", `${r.full} · ${r.part} · ${r.none}`)}
                     </>
                   )}
                 </div>
@@ -241,10 +242,10 @@ function CategorySummary({ d }: { d: DashData }) {
   const sum = (f: (r: CategoryRow) => number) => d.byCategory.reduce((n, r) => n + f(r), 0);
   const cell = "px-3 py-2 text-right tabular-nums whitespace-nowrap";
   return (
-    <Panel title="Category Summary" sub="Student pays = fee less the government's FR share and concessions">
+    <Panel title="Category Summary">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-xs text-muted-foreground"><tr>{["Category", "Students", "Total Fee", "Government (FR)", "Student Pays", "Fee Paid", "Balance", "Overdue", "Collected %", "Paid Full", "Part", "Nothing"].map((h, i) => <th key={h} className={cn("px-3 py-2 font-medium whitespace-nowrap", i ? "text-right" : "text-left")}>{h}</th>)}</tr></thead>
+          <thead className="text-xs text-muted-foreground"><tr>{["Category", "Students", "Total Fee", "Government (FR)", "To be Paid by Student", "Fee Paid", "Balance", "Overdue", "Collected %", "Fully Paid", "Partly Paid", "Not Paid"].map((h, i) => <th key={h} className={cn("px-3 py-2 font-medium whitespace-nowrap", i ? "text-right" : "text-left")}>{h}</th>)}</tr></thead>
           <tbody className="divide-y">
             {d.byCategory.map((r) => (
               <tr key={r.key}>
@@ -303,7 +304,7 @@ function BranchMatrix({ d, code, onPick }: { d: DashData; code: (dept: string) =
   const totals = { cats: Object.fromEntries(cats.map((k) => [k, d.byBranch.reduce<BranchCell>((n, b) => { const c = b.cats[k]; if (c) { n.students += c.students; n.payable += c.payable; n.collected += c.collected; n.balance += c.balance; n.govt += c.govt; } return n; }, { students: 0, payable: 0, collected: 0, balance: 0, govt: 0 })])) as Record<CategoryKey, BranchCell>,
     total: d.byBranch.reduce<BranchCell>((n, b) => ({ students: n.students + b.total.students, payable: n.payable + b.total.payable, collected: n.collected + b.total.collected, balance: n.balance + b.total.balance, govt: n.govt + b.total.govt }), { students: 0, payable: 0, collected: 0, balance: 0, govt: 0 }) };
   return (
-    <Panel title="Branch × Category" sub="Each branch's collected and balance in each category. Click a balance to list those students.">
+    <Panel title="Branch × Category" sub="Branch-wise fee collected and balance fee details of each category. Click BALANCE to get the list.">
       <div className="mb-3 flex flex-wrap gap-1">
         {([["money", "Collected / Balance"], ["students", "Students"], ["pct", "Collected %"]] as const).map(([v, l]) => (
           <Button key={v} size="sm" variant={view === v ? "default" : "outline"} onClick={() => setView(v)}>{l}</Button>
@@ -348,7 +349,7 @@ function BranchMatrix({ d, code, onPick }: { d: DashData; code: (dept: string) =
 function WhoHasPaid({ rows }: { rows: CategoryRow[] }) {
   const shown = rows.filter((r) => r.payable > 0);
   return (
-    <Panel title="Who Has Paid" sub="Students by how much of their own share is paid (FR students owe nothing)">
+    <Panel title="Who Has Paid" sub="How much student share has been paid as of now.">
       <div className="space-y-3">
         {shown.length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">No student has a share to pay.</p>}
         {shown.map((r) => {
@@ -366,7 +367,7 @@ function WhoHasPaid({ rows }: { rows: CategoryRow[] }) {
           );
         })}
       </div>
-      <Legend items={[{ color: "#15803d", label: "Paid in full" }, { color: "#d97706", label: "Paid part" }, { color: "#cbd5e1", label: "Paid nothing" }]} />
+      <Legend items={[{ color: "#15803d", label: "Fully Paid" }, { color: "#d97706", label: "Partly Paid" }, { color: "#cbd5e1", label: "Not Paid" }]} />
     </Panel>
   );
 }
@@ -376,7 +377,7 @@ function OverdueByCategory({ d }: { d: DashData }) {
   const noDates = d.instalments.some((i) => !i.dueDate) && d.totals.overdue === 0;
   const cell = "px-3 py-2 text-right tabular-nums";
   return (
-    <Panel id="fee-overdue-cat" title="Overdue by Category" sub="Days past the oldest unpaid due date">
+    <Panel id="fee-overdue-cat" title="Overdue by Category" sub="Number of Days Past the Oldest Outstanding Due Date">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="text-xs text-muted-foreground"><tr>{["Category", "Up to 30 days", "31-60", "61-90", "Over 90", "Students"].map((h, i) => <th key={h} className={cn("px-3 py-2 font-medium whitespace-nowrap", i ? "text-right" : "text-left")}>{h}</th>)}</tr></thead>
@@ -409,7 +410,7 @@ function BalanceList({ d, pick, setPick, code, academicYear }: { d: DashData; pi
     { key: "fee", header: "Fee" }, { key: "payable", header: "Student Pays" }, { key: "paid", header: "Paid" }, { key: "balance", header: "Balance" }, { key: "lastPaid", header: "Last Paid" },
   ]);
   return (
-    <Panel id="fee-balances" title="Students With a Balance" sub="Largest balance first">
+    <Panel id="fee-balances" title="Students with Outstanding Balances" sub="Sorted by Highest Outstanding Balance">
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <button type="button" className={chip(!pick.cat)} onClick={() => setPick({ ...pick, cat: "" })}>All ({inBranch.length.toLocaleString("en-IN")})</button>
         {cats.map((k) => <button key={k} type="button" className={chip(pick.cat === k)} onClick={() => setPick({ ...pick, cat: k })}>{CATEGORY_GROUP[k]} ({count(k).toLocaleString("en-IN")})</button>)}
@@ -451,7 +452,7 @@ async function downloadExcel(d: DashData, academicYear: string, code: (dept: str
   const wb = new ExcelJS.Workbook();
   const bold = (ws: import("exceljs").Worksheet) => { ws.getRow(1).font = { bold: true }; ws.columns.forEach((c) => { c.width = Math.max(12, String(c.header ?? "").length + 2); }); };
   const s1 = wb.addWorksheet("Category Summary");
-  s1.columns = ["Category", "Students", "Total Fee", "Government (FR)", "Student Pays", "Fee Paid", "Balance", "Overdue", "Collected %", "Paid Full", "Part", "Nothing"].map((h) => ({ header: h }));
+  s1.columns = ["Category", "Students", "Total Fee", "Government (FR)", "To be Paid by Student", "Fee Paid", "Balance", "Overdue", "Collected %", "Fully Paid", "Partly Paid", "Not Paid"].map((h) => ({ header: h }));
   for (const r of d.byCategory) s1.addRow([r.label, r.students, r.raised, r.govtShare, r.payable, r.collected, r.balance, r.overdue, r.payable ? pct(r.collected, r.payable) : null, r.full, r.part, r.none]);
   const t = d.totals;
   s1.addRow(["Total", t.students, t.raised, t.govtShare, t.payable, t.collected, t.balance, t.overdue, t.payable ? pct(t.collected, t.payable) : null]).font = { bold: true };
@@ -461,7 +462,7 @@ async function downloadExcel(d: DashData, academicYear: string, code: (dept: str
   s2.columns = ["Branch", ...cats.flatMap((k) => (k === "A-FR" ? [`${CATEGORY_GROUP[k]} Students`, `${CATEGORY_GROUP[k]} Govt Due`] : [`${CATEGORY_GROUP[k]} Collected`, `${CATEGORY_GROUP[k]} Balance`])), "Total Collected", "Total Balance"].map((h) => ({ header: h }));
   for (const b of d.byBranch) s2.addRow([code(b.label), ...cats.flatMap((k) => { const c = b.cats[k]; return k === "A-FR" ? [c?.students ?? 0, c?.govt ?? 0] : [c?.collected ?? 0, c?.balance ?? 0]; }), b.total.collected, b.total.balance]);
   bold(s2);
-  const s3 = wb.addWorksheet("Students With a Balance");
+  const s3 = wb.addWorksheet("Outstanding Balances");
   s3.columns = ["Regd. No", "Name", "Branch", "Section", "Category", "Fee", "Student Pays", "Paid", "Balance", "Last Paid"].map((h) => ({ header: h }));
   for (const r of d.balances) s3.addRow([r.rollNumber, r.name, code(r.department), r.section, CATEGORY_GROUP[r.category], r.fee, r.payable, r.paid, r.balance, r.lastPaid ? dmy(r.lastPaid) : ""]);
   bold(s3);
@@ -551,7 +552,7 @@ function ClassAndDepartment({ d, academicYear }: { d: Dash; academicYear: string
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1">
           {(["class", "department"] as const).map((v) => (
-            <Button key={v} size="sm" variant={view === v ? "default" : "outline"} onClick={() => setView(v)}>{v === "class" ? "By Class" : "By Department"}</Button>
+            <Button key={v} size="sm" variant={view === v ? "default" : "outline"} onClick={() => setView(v)}>{v === "class" ? "By Academic Year" : "By Department"}</Button>
           ))}
         </div>
         <Button size="sm" variant="outline" onClick={() => exportToCSV(rows as unknown as Record<string, unknown>[], `fee-${view}-${academicYear}.csv`, GROUP_COLUMNS)}><Download className="mr-1 h-3.5 w-3.5" />CSV</Button>
