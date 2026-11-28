@@ -624,6 +624,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                   disabled={!assignForm.subjectId}
                   placeholder={availableFacultyForAssign.length ? "Select faculty" : "No faculty in your department"}
                   className="w-full"
+                  showLoad
                 />
 
                 {/* More faculty for the same subject in this section - each picks from
@@ -638,6 +639,7 @@ export function TeachingAssignmentsEditor({ courseId, year, backHref }: Teaching
                         onValueChange={(v) => setExtraFacultyIds((ids) => ids.map((x, j) => (j === i ? v : x)))}
                         placeholder="Select faculty"
                         className="w-full"
+                        showLoad
                       />
                       <Button type="button" size="icon" variant="ghost" title="Remove this faculty" onClick={() => setExtraFacultyIds((ids) => ids.filter((_, j) => j !== i))}>
                         <X className="h-4 w-4" />

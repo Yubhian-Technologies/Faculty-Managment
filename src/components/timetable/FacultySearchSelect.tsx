@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -22,7 +23,7 @@ export interface FacultySearchOption {
 // well as a name fragment. Keeps the same value/onValueChange shape as
 // Select so call sites barely change.
 export function FacultySearchSelect({
-  faculty, value, onValueChange, placeholder = "Select faculty", disabled, className,
+  faculty, value, onValueChange, placeholder = "Select faculty", disabled, className, showLoad,
 }: {
   faculty: FacultySearchOption[];
   value: string;
@@ -30,10 +31,24 @@ export function FacultySearchSelect({
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** Show each person's hours/week already assigned (list rows and the selected value). */
+  showLoad?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const selected = faculty.find((f) => f.id === value);
+  const idsKey = faculty.map((f) => f.id).sort().join(",");
+  const { data: loads } = useQuery({
+    queryKey: ["faculty-load", idsKey],
+    queryFn: () => fetch(`/api/college/faculty-load?ids=${encodeURIComponent(idsKey)}`)
+      .then((r) => (r.ok ? r.json() : { loads: {} })).then((d: { loads?: Record<string, { hours: number; subjects: number }> }) => d.loads ?? {}),
+    enabled: !!showLoad && !!idsKey && (open || !!value),
+    staleTime: 30_000,
+  });
+  const loadText = (id: string) => {
+    const l = loads?.[id];
+    return l ? `${l.hours} hrs/wk${l.subjects ? ` · ${l.subjects} subject${l.subjects > 1 ? "s" : ""}` : ""}` : "";
+  };
 
   const q = search.trim().toLowerCase();
   const visible = q
@@ -52,7 +67,7 @@ export function FacultySearchSelect({
           className={cn("w-64 justify-between font-normal", className)}
         >
           <span className={cn("truncate", !selected && "text-muted-foreground")}>
-            {selected ? `${facultyDisplayName(selected)}${selected.employeeId ? ` (${selected.employeeId})` : ""}` : placeholder}
+            {selected ? `${facultyDisplayName(selected)}${selected.employeeId ? ` (${selected.employeeId})` : ""}${showLoad && loadText(selected.id) ? ` - already ${loadText(selected.id)}` : ""}` : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -66,6 +81,7 @@ export function FacultySearchSelect({
               <CommandItem key={f.id} value={f.id} onSelect={() => { onValueChange(f.id); setOpen(false); setSearch(""); }}>
                 <Check className={cn("mr-2 h-4 w-4 shrink-0", f.id === value ? "opacity-100" : "opacity-0")} />
                 <span className="flex-1 truncate">{facultyDisplayName(f)}</span>
+                {showLoad && loads && <span className="ml-3 shrink-0 text-xs font-medium text-foreground">{loadText(f.id)}</span>}
                 {f.employeeId && <span className="ml-3 shrink-0 text-xs text-muted-foreground">{f.employeeId}</span>}
               </CommandItem>
             ))}
