@@ -43,12 +43,14 @@ export async function POST(request: Request, { params }: Params) {
         action: `PAYMENT_${p.status}`, performedBy: p.studentUid, performedByName: p.studentName, targetId: p.id,
         details: { amount: p.amount, trackingId: p.trackingId ?? "", bankRefNo: p.bankRefNo ?? "", purpose: p.purpose.label, gatewayStatus: r.orderStatus, ...(p.failureMessage ? { note: p.failureMessage } : {}) },
       });
-      if (settled.newlyPaid) {
+      if (settled.newlyPaid && p.studentUid) {
         await notify(db, collegeId, p.studentUid, "PAYMENT_RECEIVED", "Payment received",
           `₹${p.amount} paid for ${p.purpose.label} (CCAvenue ref ${p.trackingId}).`, `/student/payments/${encodeURIComponent(p.id)}`);
       }
       // Paid twice: the payment carries `needsRefund` - Accounts sees it flagged on their Payments page.
     }
+    // Paid from the fee counter's QR: back to that payment's own page (the phone may not be signed in).
+    if (p.counter?.token) return go(`/pay/${encodeURIComponent(collegeId)}/${encodeURIComponent(p.id)}?k=${p.counter.token}`);
     return go(`/student/payments/${encodeURIComponent(p.id)}`);
   } catch (err) {
     console.error("[public/ccavenue-response POST]", err);

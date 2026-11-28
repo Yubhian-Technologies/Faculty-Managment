@@ -364,6 +364,7 @@ export const NAV_ITEMS: NavItem[] = [
   // times over.
   { label: "Pay & Promotions", href: "/college-office/staff", iconName: "Wallet", roles: ["COLLEGE_OFFICE"] },
   { label: "Payroll", href: "/college-office/payroll", iconName: "Landmark", roles: ["COLLEGE_OFFICE"] },
+  { label: "Fees", href: "/college-office/fees", iconName: "IndianRupee", roles: ["COLLEGE_OFFICE"] },
   { label: "Fee Concession Requests", href: "/college-office/fees/concessions", iconName: "HandCoins", roles: ["COLLEGE_OFFICE"] },
   { label: "Hiring Pipeline", href: "/college-office/pipeline", iconName: "GitBranch", roles: ["COLLEGE_OFFICE"], section: "Hiring" },
   { label: "Candidates", href: "/college-office/candidates", iconName: "UserCog", roles: ["COLLEGE_OFFICE"] },

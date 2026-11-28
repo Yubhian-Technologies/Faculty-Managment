@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { paymentErrorResponse } from "@/lib/payments/server";
-import { requireFeesManager } from "@/lib/fees/http";
+import { requireFeesCollector } from "@/lib/fees/http";
 import { courseKeys, feeRefs } from "@/lib/fees/server";
 import { academicYearOf } from "@/lib/fees/rules";
 
@@ -13,7 +13,7 @@ import { academicYearOf } from "@/lib/fees/rules";
 export async function GET(request: Request) {
   try {
     const db = getAdminDb();
-    const session = await requireFeesManager(db, request);
+    const session = await requireFeesCollector(db, request);
     const refs = feeRefs(db, session.collegeId);
     const [keys, sections, types] = await Promise.all([
       courseKeys(db, session.collegeId),
