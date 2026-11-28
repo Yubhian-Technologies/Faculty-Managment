@@ -455,6 +455,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
                       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 p-3">
                         <FacultySearchSelect
                           faculty={pickable}
+                          showLoad
                           value={pickedFaculty[r.id] ?? ""}
                           onValueChange={(v) => setPickedFaculty((p) => ({ ...p, [r.id]: v }))}
                           placeholder={pickable.length ? "Select another faculty" : "No other faculty available"}
@@ -495,6 +496,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
                             <div className="flex flex-wrap items-center gap-2">
                               <FacultySearchSelect
                                 faculty={pickable}
+                                showLoad
                                 value={changePick[`${r.id}:${a.facultyId}`] ?? ""}
                                 onValueChange={(v) => setChangePick((p) => ({ ...p, [`${r.id}:${a.facultyId}`]: v }))}
                                 placeholder={pickable.length ? "Select the new faculty" : "No other faculty available"}
@@ -632,6 +634,7 @@ export function AssignmentRequestsPanel({ timetableHrefFor, title = "Assignment 
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     <FacultySearchSelect
                       faculty={facultyFor(r)}
+                      showLoad
                       value={pickedFaculty[r.id] ?? ""}
                       onValueChange={(v) => setPickedFaculty((p) => ({ ...p, [r.id]: v }))}
                       placeholder={facultyFor(r).length ? "Select faculty" : "No faculty in your department"}

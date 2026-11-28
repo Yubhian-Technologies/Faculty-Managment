@@ -1400,6 +1400,7 @@ const effectiveSemester = semesterOptions.length === 0
                   <Label>Faculty</Label>
                   <FacultySearchSelect
                     faculty={availableFacultyForAssign}
+                    showLoad
                     value={assignForm.facultyId}
                     onValueChange={(v) => { setAssignForm((f) => ({ ...f, facultyId: v })); setExtraFacultyIds((ids) => ids.filter((id) => id !== v)); }}
                     disabled={!assignForm.subjectId}
@@ -1415,6 +1416,7 @@ const effectiveSemester = semesterOptions.length === 0
                       <div key={i} className="flex items-center gap-2">
                         <FacultySearchSelect
                           faculty={availableFacultyForAssign.filter((f) => !chosenElsewhere.has(f.id))}
+                          showLoad
                           value={id}
                           onValueChange={(v) => setExtraFacultyIds((ids) => ids.map((x, j) => (j === i ? v : x)))}
                           placeholder="Select faculty"
