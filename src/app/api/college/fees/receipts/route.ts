@@ -6,7 +6,7 @@ import { readJsonBody } from "@/lib/http/readJsonBody";
 import { writeAuditLogSafe } from "@/lib/audit/safeAuditLog";
 import { notify } from "@/lib/notify";
 import { paymentErrorResponse } from "@/lib/payments/server";
-import { requireFeesManager } from "@/lib/fees/http";
+import { requireFeesCollector, requireFeesManager } from "@/lib/fees/http";
 import { FeeError, feeRefs, recordCounterPayment } from "@/lib/fees/server";
 import { DATE_RE } from "@/lib/fees/rules";
 import type { FeeReceipt } from "@/types/fees";
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const db = getAdminDb();
-    const session = await requireFeesManager(db, request);
+    const session = await requireFeesCollector(db, request);
     const body = (await readJsonBody(request)) as Record<string, unknown>;
     if (typeof body.accountId !== "string" || !body.accountId) throw new FeeError("Select the student.");
     const { receipt, account } = await recordCounterPayment(db, session.collegeId, {

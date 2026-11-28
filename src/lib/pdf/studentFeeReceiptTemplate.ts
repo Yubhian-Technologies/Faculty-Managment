@@ -16,6 +16,7 @@ export interface StudentFeeReceiptData {
     receiptNo: string; academicYear: string; amount: number; mode: string; reference: string; bank?: string; paidOn: string;
     allocation: { no: number; label: string; headName?: string; bankAccountName?: string; amount: number }[]; rollNumber: string; name: string; department: string; section: string; courseName: string;
     cancelled?: boolean | { reason: string } | null;
+    remarks?: string;
   };
   college: { name: string; place?: string; logoUrl?: string };
   copy?: string;
@@ -81,6 +82,8 @@ export function getStudentFeeReceiptHTML(d: StudentFeeReceiptData): string {
         <tr class="total"><td>Total</td><td class="amt">${money(r.amount)}</td></tr>
       </table>
       ${accounts.size ? `<p style="margin:3mm 0 1mm;font-weight:bold">Credited To</p><table>${[...accounts].map(([a, v]) => `<tr><td>${esc(a)}</td><td class="amt">${money(v)}</td></tr>`).join("")}</table>` : ""}
+      ${r.remarks && r.remarks !== "Imported from the previous system" ? `<p style="margin:3mm 0 0;font-size:11px">${esc(r.remarks)}</p>` : ""}
+      ${r.mode === "CHEQUE" || r.mode === "DD" ? `<p style="margin:2mm 0 0;font-size:11px;font-weight:bold">Subject to realisation of the ${r.mode === "DD" ? "Demand Draft" : "cheque"}.</p>` : ""}
       ${r.cancelled ? `<span class="stamp">CANCELLED</span>` : ""}
     </div>
     <div class="sign">

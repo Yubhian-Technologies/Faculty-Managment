@@ -10,6 +10,21 @@ export async function requireFeesManager(db: Firestore, request: Request) {
   return { ...session, byName };
 }
 
+/**
+ * Taking fees at the counter (Collect: find a student, see their fee, record a payment, start a CCAvenue payment):
+ * Accounts / Super Admin for any college of their location (as above), and the College Office for its OWN college
+ * only. `canCancel` is false for the College Office - cancelling a receipt and the Day Book stay with Accounts.
+ */
+export async function requireFeesCollector(db: Firestore, request: Request) {
+  const session = await requireRole("ACCOUNTS", "SUPER_ADMIN", "COLLEGE_OFFICE");
+  if (session.role === "COLLEGE_OFFICE") {
+    const asked = new URL(request.url).searchParams.get("collegeId");
+    if (!session.collegeId || (asked && asked !== session.collegeId)) throw new PaymentError("You can collect fees only for your own college.", 403);
+    return { ...session, collegeId: session.collegeId, byName: await actorName(db, session), canCancel: false };
+  }
+  return { ...(await requireFeesManager(db, request)), canCancel: true };
+}
+
 export async function actorName(db: Firestore, session: { uid: string; email?: string; collegeId?: string; locationId?: string }): Promise<string> {
   const tries = [
     session.collegeId ? db.collection("colleges").doc(session.collegeId).collection("users").doc(session.uid) : null,

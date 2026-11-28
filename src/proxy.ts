@@ -23,6 +23,8 @@ const PUBLIC_PATHS = [
   "/faculty-public",
   // The QR check printed on every issued certificate - opened by whoever holds the certificate.
   "/verify-certificate",
+  // The fee counter's QR (lib/fees/counterPay.ts): the student's phone opens one payment by its random token.
+  "/pay",
   "/about-team-illustration.png",
   // Letterhead logo for generated timetables (lib/timetable/logoAsset.ts) -
   // fetched by the PDF renderer and the spreadsheet export.

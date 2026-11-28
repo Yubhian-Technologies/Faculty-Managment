@@ -10,6 +10,9 @@ describe("debit notes (VWU's own sheet)", () => {
   it("reads category, FR / NFR and the government's part", () => {
     expect(checkDebitNote(dn({}))).toMatchObject({ ok: true, category: "A", funding: "FR", total: 105000, govt: 105000, student: 0 });
     expect(checkDebitNote(dn({ payment: "NFR", tuition: "105000", scholarship: "0" }))).toMatchObject({ ok: true, funding: "NFR", student: 105000, govt: 0 });
+    // VIT's sheet writes NF for NFR, and B as the admission type of management students.
+    expect(checkDebitNote(dn({ payment: "NF", tuition: "103000", scholarship: "0", total: "103000" }))).toMatchObject({ ok: true, funding: "NFR", student: 103000 });
+    expect(checkDebitNote(dn({ admissionType: "B", category: "B", payment: "NF", total: "206000", tuition: "206000", scholarship: "0" }))).toMatchObject({ ok: true, category: "B", funding: "NFR" });
     expect(checkDebitNote(dn({ admissionType: "Spot", payment: "NFR", tuition: "105000", scholarship: "0" }))).toMatchObject({ ok: true, category: "SPOT" });
     expect(checkDebitNote(dn({ admissionType: "Mgt", category: "B", payment: "NFR", total: "210000", tuition: "210000", scholarship: "0" }))).toMatchObject({ ok: true, category: "B", student: 210000 });
   });

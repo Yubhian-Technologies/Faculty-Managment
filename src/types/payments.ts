@@ -65,6 +65,11 @@ export interface Payment {
   needsRefund?: boolean;
   refunds?: PaymentRefund[];
   refundedAmount?: number;
+  /**
+   * Started at the fee counter (Accounts / College Office, lib/fees/counterPay.ts): the student scans a QR that opens
+   * /pay/<college>/<order>?k=<token> and pays there (UPI, card, net banking). `studentUid` may then be "" (no login).
+   */
+  counter?: { byUid: string; byName: string; token: string; expiresAt: string; cancelledAt?: string | null };
   createdAt: string;
   updatedAt: string;
 }

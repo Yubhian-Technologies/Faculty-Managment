@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { paymentErrorResponse } from "@/lib/payments/server";
-import { requireFeesManager } from "@/lib/fees/http";
+import { requireFeesCollector } from "@/lib/fees/http";
 import { FeeError, feeRefs } from "@/lib/fees/server";
 import { ACADEMIC_YEAR_RE, instalmentStates } from "@/lib/fees/rules";
 import type { StudentFeeAccount } from "@/types/fees";
@@ -14,7 +14,7 @@ import type { StudentFeeAccount } from "@/types/fees";
 export async function GET(request: Request) {
   try {
     const db = getAdminDb();
-    const session = await requireFeesManager(db, request);
+    const session = await requireFeesCollector(db, request);
     const sp = new URL(request.url).searchParams;
     const academicYear = sp.get("academicYear") ?? "";
     if (!ACADEMIC_YEAR_RE.test(academicYear)) throw new FeeError("Select the academic year.");
